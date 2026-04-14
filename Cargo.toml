@@ -1,3 +1,0 @@
-[workspace]
-members = ["iptrade-api"]
-resolver = "2"

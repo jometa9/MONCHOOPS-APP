@@ -2,21 +2,14 @@ import { BrowserWindow, app, ipcMain, shell, nativeImage, Tray, Menu, powerMonit
 import path from 'path';
 import fs from 'fs';
 
-import {
-  getServerUrl,
-  getApiKeys,
-  preemptSingleInstancePeers,
-  runLaunchCleanup,
-  startProductionServer,
-  stopProductionServer,
-  forceKillApiOnPort,
-  ensureServerRunning,
-  pingServerOnly,
-} from './serverProduction';
 import { BUILD_CONFIG } from './buildConfig';
 import { appendLogLineWithRetention, trimLogFileToRetention } from './logRetention';
+import { registerBackend, dispatchDeepLink } from './backend';
 
 const appRoot = path.resolve(__dirname, '..', '..');
+const PRODUCT_NAME = BUILD_CONFIG.PRODUCT_NAME;
+const PROTOCOL = BUILD_CONFIG.PROTOCOL;
+const PROTOCOL_PREFIX = `${PROTOCOL}://`;
 
 function getMainLogPath(): string {
   try {
@@ -27,6 +20,7 @@ function getMainLogPath(): string {
     return '';
   }
 }
+
 function logMain(message: string, isError = false): void {
   const line = `[${new Date().toISOString()}] ${message}`;
   if (app.isPackaged) {
@@ -38,7 +32,7 @@ function logMain(message: string, isError = false): void {
   else console.log(message);
 }
 
-const DEFAULT_WINDOW = { width: 800, height: 600, x: undefined as number | undefined, y: undefined as number | undefined };
+const DEFAULT_WINDOW = { width: 1100, height: 760, x: undefined as number | undefined, y: undefined as number | undefined };
 
 interface WindowState {
   width: number;
@@ -113,32 +107,27 @@ let pendingDeepLinkUrl: string | undefined;
 let trayMenuJustClosed = false;
 let trayMenuJustClosedTimer: ReturnType<typeof setTimeout> | null = null;
 
-const urlFromArgv = process.argv.find((arg) => arg.toLowerCase().startsWith('iptrade://'));
+const urlFromArgv = process.argv.find((arg) => arg.toLowerCase().startsWith(PROTOCOL_PREFIX));
 if (urlFromArgv) {
   deeplinkingUrl = urlFromArgv;
 }
 
-app.setName('IPTRADE');
+app.setName(PRODUCT_NAME);
 if (!app.isPackaged) {
-  app.setPath('userData', path.join(app.getPath('appData'), 'IPTRADE'));
-}
-
-if (app.isPackaged && process.platform === 'win32' && !urlFromArgv) {
-  preemptSingleInstancePeers();
+  app.setPath('userData', path.join(app.getPath('appData'), PRODUCT_NAME));
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  runLaunchCleanup();
   app.on('second-instance', (_event, commandLine) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
       mainWindow.show();
     }
-    const urlFromArgs = commandLine.find((arg) => arg.toLowerCase().startsWith('iptrade://'));
+    const urlFromArgs = commandLine.find((arg) => arg.toLowerCase().startsWith(PROTOCOL_PREFIX));
     if (urlFromArgs) {
       setTimeout(() => handleDeepLink(urlFromArgs), 200);
     }
@@ -154,58 +143,55 @@ if (!gotTheLock) {
       const mainLogPath = getMainLogPath();
       trimLogFileToRetention(mainLogPath, true);
       setInterval(() => trimLogFileToRetention(mainLogPath, true), 60 * 60 * 1000);
+      logMain(`[main] Packaged app started — logs also in: ${mainLogPath}`);
     }
-    if (app.isPackaged) {
-      logMain('[main] Packaged app started — logs also in: ' + getMainLogPath());
+
+    try {
+      await registerBackend({ onDeepLink: forwardDeepLinkToRenderer });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logMain(`[main] backend registration failed: ${msg}`, true);
     }
+
     setupPowerMonitor();
-    if (app.isPackaged) {
-      try {
-        await ensureServerRunning();
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logMain('[main] ensureServerRunning failed: ' + msg, true);
-      }
-    } else {
-      void ensureServerRunning().catch(() => {});
-    }
+
     if (!app.isPackaged && process.platform === 'darwin') {
       const dockIconPath = getWindowIconPath();
       if (dockIconPath && app.dock) {
         app.dock.setIcon(dockIconPath);
       }
     }
+
     if (process.platform === 'win32') {
-      app.setAsDefaultProtocolClient('iptrade', process.execPath, [appRoot]);
+      app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [appRoot]);
     } else {
-      app.setAsDefaultProtocolClient('iptrade');
+      app.setAsDefaultProtocolClient(PROTOCOL);
     }
+
     await createWindow();
+
     if (!app.isPackaged) {
-      console.log('[main] Dev: make sure "npm run dev" is running (Vite at http://localhost:7775)');
+      console.log(`[main] Dev: make sure "npm run dev" is running (Vite at http://localhost:${getFrontendPort()})`);
     }
+
     if (process.platform === 'darwin') {
       const trayIconPath = getTrayIconPath();
       if (trayIconPath) {
         const trayImage = nativeImage.createFromPath(trayIconPath);
         trayImage.setTemplateImage(true);
         tray = new Tray(trayImage);
-        tray.setToolTip('IPTRADE');
+        tray.setToolTip(PRODUCT_NAME);
         tray.on('click', () => {
           if (!tray) return;
           if (trayMenuJustClosed) {
             trayMenuJustClosed = false;
-            if (trayMenuJustClosedTimer) {
-              clearTimeout(trayMenuJustClosedTimer);
-            }
+            if (trayMenuJustClosedTimer) clearTimeout(trayMenuJustClosedTimer);
             return;
           }
           const menu = buildTrayMenu();
           menu.once('menu-will-close', () => {
             trayMenuJustClosed = true;
-            if (trayMenuJustClosedTimer) {
-              clearTimeout(trayMenuJustClosedTimer);
-            }
+            if (trayMenuJustClosedTimer) clearTimeout(trayMenuJustClosedTimer);
             trayMenuJustClosedTimer = setTimeout(() => {
               trayMenuJustClosed = false;
               trayMenuJustClosedTimer = null;
@@ -216,6 +202,7 @@ if (!gotTheLock) {
         });
       }
     }
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
@@ -228,6 +215,12 @@ if (!gotTheLock) {
 }
 
 function handleDeepLink(url: string) {
+  // Give the backend a chance to consume the URL (e.g. `b2dm://auth?apiKey=…`).
+  // The backend's fallback callback re-enters forwardDeepLinkToRenderer below.
+  void dispatchDeepLink(url);
+}
+
+function forwardDeepLinkToRenderer(url: string) {
   pendingDeepLinkUrl = url;
   if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -271,8 +264,6 @@ function buildTrayMenu(): Menu {
   return Menu.buildFromTemplate([
     { label: 'Settings', click: () => openSettingsInFrontend() },
     { type: 'separator' },
-    { label: '瞬写', enabled: false },
-    { type: 'separator' },
     { label: 'Quit', role: 'quit' },
   ]);
 }
@@ -286,11 +277,11 @@ async function createWindow() {
   const isWindows = process.platform === 'win32';
   mainWindow = new BrowserWindow({
     width: state.width,
-    minWidth: 800,
+    minWidth: 960,
     height: state.height,
-    minHeight: 700,
+    minHeight: 680,
     ...(state.x != null && state.y != null && { x: state.x, y: state.y }),
-    title: 'IPTRADE',
+    title: PRODUCT_NAME,
     show: false,
     alwaysOnTop: false,
     ...(iconPath && { icon: nativeImage.createFromPath(iconPath) }),
@@ -312,13 +303,14 @@ async function createWindow() {
       backgroundThrottling: false,
     },
   });
+
   const sendFullScreen = (isFullScreen: boolean) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('fullscreen-changed', isFullScreen);
     }
   };
   let shown = false;
-  const ensureShow = (from: string) => {
+  const ensureShow = () => {
     if (mainWindow && !mainWindow.isDestroyed() && !shown) {
       shown = true;
       mainWindow.show();
@@ -326,7 +318,7 @@ async function createWindow() {
     }
   };
   mainWindow.once('ready-to-show', () => {
-    ensureShow('ready-to-show');
+    ensureShow();
     sendFullScreen(mainWindow?.isFullScreen() ?? false);
   });
   mainWindow.on('enter-full-screen', () => sendFullScreen(true));
@@ -358,7 +350,7 @@ async function createWindow() {
   mainWindow.webContents.on('context-menu', (e) => e.preventDefault());
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (url.startsWith('iptrade://')) {
+    if (url.toLowerCase().startsWith(PROTOCOL_PREFIX)) {
       event.preventDefault();
       handleDeepLink(url);
       return;
@@ -366,14 +358,9 @@ async function createWindow() {
     const currentUrl = mainWindow?.webContents.getURL() ?? '';
     let allowed = false;
     try {
-      allowed =
-        !!currentUrl && new URL(url).origin === new URL(currentUrl).origin;
+      allowed = !!currentUrl && new URL(url).origin === new URL(currentUrl).origin;
     } catch {}
-    if (
-      !allowed &&
-      !url.startsWith('http://localhost') &&
-      !url.startsWith('http://127.0.0.1')
-    ) {
+    if (!allowed && !url.startsWith('http://localhost') && !url.startsWith('http://127.0.0.1')) {
       event.preventDefault();
       if (url.startsWith('http://') || url.startsWith('https://')) {
         shell.openExternal(url).catch(() => {});
@@ -382,7 +369,7 @@ async function createWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('iptrade://')) {
+    if (url.toLowerCase().startsWith(PROTOCOL_PREFIX)) {
       handleDeepLink(url);
     } else if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url).catch(() => {});
@@ -403,22 +390,22 @@ async function createWindow() {
     ? path.join(app.getAppPath(), 'dist', 'index.html')
     : path.join(appRoot, 'dist', 'index.html');
   if (frontendUrl) {
-    mainWindow.loadURL(frontendUrl).then(() => {
-      ensureShow('loadURL-ok');
-    }).catch((err) => {
-      logMain('[createWindow] loadURL failed: ' + String(err?.message ?? err) + ' url=' + frontendUrl, true);
-      ensureShow('loadURL-catch');
-    });
+    mainWindow.loadURL(frontendUrl)
+      .then(() => ensureShow())
+      .catch((err) => {
+        logMain(`[createWindow] loadURL failed: ${String(err?.message ?? err)} url=${frontendUrl}`, true);
+        ensureShow();
+      });
   } else {
     logMain('[main] Loading frontend from: ' + distPath);
-    mainWindow.loadFile(distPath).then(() => {
-      ensureShow('loadFile-ok');
-      logMain('[main] Frontend loaded OK');
-    }).catch((err) => {
-      logMain('[createWindow] loadFile failed: ' + String(err?.message ?? err) + ' path=' + distPath, true);
-      ensureShow('loadFile-catch');
-    });
+    mainWindow.loadFile(distPath)
+      .then(() => ensureShow())
+      .catch((err) => {
+        logMain(`[createWindow] loadFile failed: ${String(err?.message ?? err)} path=${distPath}`, true);
+        ensureShow();
+      });
   }
+
   if (deeplinkingUrl) {
     handleDeepLink(deeplinkingUrl);
     deeplinkingUrl = undefined;
@@ -434,6 +421,7 @@ async function createWindow() {
       }, 1500);
     }
   });
+
   const scheduleSaveState = () => {
     if (saveWindowStateTimer) clearTimeout(saveWindowStateTimer);
     saveWindowStateTimer = setTimeout(() => {
@@ -469,15 +457,11 @@ function setupPowerMonitor() {
 }
 
 app.on('window-all-closed', () => {
-  void stopProductionServer().then(() => app.quit());
-});
-
-app.on('will-quit', () => {
-  forceKillApiOnPort();
+  app.quit();
 });
 
 let isQuitting = false;
-const PREPARE_QUIT_TIMEOUT_MS = 10_000;
+const PREPARE_QUIT_TIMEOUT_MS = 5_000;
 
 app.on('before-quit', (event) => {
   if (isQuitting) return;
@@ -487,41 +471,19 @@ app.on('before-quit', (event) => {
   const doQuit = () => {
     if (quitDone) return;
     quitDone = true;
-    stopProductionServer().then(() => app.quit());
+    app.quit();
   };
   mainWindow?.webContents?.send('prepare-quit');
   ipcMain.once('quit-ready', doQuit);
   setTimeout(doQuit, PREPARE_QUIT_TIMEOUT_MS);
 });
 
-ipcMain.handle('get-pending-deep-link', () => {
-  const url = pendingDeepLinkUrl ?? null;
-  return url;
-});
+ipcMain.handle('get-pending-deep-link', () => pendingDeepLinkUrl ?? null);
 ipcMain.handle('clear-pending-deep-link', (_event, urlToClear: string) => {
   if (pendingDeepLinkUrl === urlToClear) pendingDeepLinkUrl = undefined;
 });
-ipcMain.handle('get-server-url', () => getServerUrl());
-ipcMain.handle('get-api-keys', () => getApiKeys());
 ipcMain.handle('get-platform', () => process.platform);
 ipcMain.handle('get-is-full-screen', () => (mainWindow ? mainWindow.isFullScreen() : false));
-ipcMain.handle('check-server-status', async () => {
-  try {
-    const ok = await ensureServerRunning();
-    return { ok, url: getServerUrl() };
-  } catch {
-    return { ok: false, url: getServerUrl() };
-  }
-});
-
-ipcMain.handle('ping-server', async () => {
-  try {
-    const ok = await pingServerOnly();
-    return { ok };
-  } catch {
-    return { ok: false };
-  }
-});
 ipcMain.handle('open-external-link', async (_event, url: string) => {
   const u = typeof url === 'string' ? url.trim() : '';
   if (!u || (!u.startsWith('http://') && !u.startsWith('https://'))) {

@@ -1,0 +1,19 @@
+import { Outlet } from 'react-router-dom';
+import { Sidebar } from './Sidebar';
+import { TitleBar } from './TitleBar';
+import { StatusStrip } from './StatusStrip';
+
+export function AppShell() {
+  return (
+    <div className="flex h-full flex-col">
+      <TitleBar />
+      <div className="flex min-h-0 flex-1">
+        <Sidebar />
+        <main className="flex-1 overflow-auto">
+          <Outlet />
+        </main>
+      </div>
+      <StatusStrip />
+    </div>
+  );
+}

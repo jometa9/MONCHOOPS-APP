@@ -1,5 +1,5 @@
 {
-  "name": "iptrade-electron",
+  "name": "b2dm-electron",
   "private": true,
   "type": "commonjs",
   "main": "dist/main.js"

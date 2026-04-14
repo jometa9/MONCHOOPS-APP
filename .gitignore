@@ -3,16 +3,13 @@ node_modules/
 
 # Environment & secrets
 .env
-.env.api
 .env.local
 .env.*.local
-iptrade-api/.env
 *.pem
 *.key
 
 # Build outputs — frontend / Vite
 dist/
-dist-mt5-bridge-win/
 *.tsbuildinfo
 
 # Electron
@@ -22,24 +19,8 @@ out/
 .cache/
 .electron-dev-data/
 
-# Rust
-target/
-**/*.rs.bk
-
-# .NET / Visual Studio / Rider
-**/bin/
-**/obj/
-**/[Bb]in/
-**/[Oo]bj/
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-.vs/
-.idea/
-*.DotSettings.user
-TestResults/
-**/PublishProfiles/*.pubxml.user
+# Local runtime state (SQLite, logs, cached cookies, scrape CSVs)
+userData/
 
 # Logs & temp
 *.log
@@ -53,6 +34,3 @@ logs_temp.txt
 .DS_Store
 Thumbs.db
 Desktop.ini
-
-# Misc
-iptrade-api/mt

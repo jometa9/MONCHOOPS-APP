@@ -1,13 +1,27 @@
-import pkg from '../../package.json';
+import fs from 'fs';
+import path from 'path';
+
+function readAppVersion(): string {
+  // Both dev (running from source) and packaged (running from asar) can reach
+  // the bundled package.json via a relative path from this file's compiled
+  // location at `electron/dist/buildConfig.js` or the asar equivalent.
+  try {
+    const p = path.resolve(__dirname, '..', '..', 'package.json');
+    if (fs.existsSync(p)) {
+      const pkg = JSON.parse(fs.readFileSync(p, 'utf8')) as { version?: string };
+      if (pkg.version) return pkg.version;
+    }
+  } catch {}
+  return '0.0.0';
+}
 
 export const BUILD_CONFIG = {
-  BASE_URL: 'https://iptradecopier.com',
-  APP_VERSION: pkg.version,
-  TCP_PORT: 7776,
+  APP_VERSION: readAppVersion(),
   FRONTEND_PORT: 7775,
-  API_PORT: 7777,
-  MT5_API_PORT: 7778,
-  MT5_TCP_PORT: 7779,
-  API_KEY: 'a7f3c9e2b1d84f6a5e8c0b3d7f2a9e1c4b6d8a0f3e5c7b9d1a2e4f6c8b0d2a4',
-  API_SECRET: '9e5b1c7d3a6f0e2d8b4a6c0e2f4a8b0d2c6e8a0b4d6f8c0e2a4b6d8f0c2e4a6',
+  PROTOCOL: 'b2dm',
+  PRODUCT_NAME: 'B2DM',
+  LICENSE_API_BASE: 'https://b2dm.app',
+  DASHBOARD_URL: 'https://b2dm.app/dashboard',
+  BILLING_URL: 'https://b2dm.app/dashboard/billing',
+  GOOGLE_LOGIN_URL: 'https://b2dm.app/login/google?callback=b2dm://auth',
 } as const;

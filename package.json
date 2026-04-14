@@ -1,0 +1,164 @@
+{
+  "name": "b2dm-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "B2DM — Instagram DM automation",
+  "author": "B2DM",
+  "type": "module",
+  "main": "electron/dist/main.js",
+  "scripts": {
+    "dev": "node scripts/kill-port.mjs 7775 && cross-env NO_PROXY=localhost,127.0.0.1,::1 vite",
+    "dev:frontend": "npm run dev",
+    "dev:electron": "node scripts/run-electron-dev.mjs",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:electron\" --names \"vite,electron\"",
+    "dev:fresh": "node scripts/kill-port.mjs 7775 && node -e \"try{require('fs').rmSync('node_modules/.vite',{recursive:true})}catch(e){}\" && cross-env NO_PROXY=localhost,127.0.0.1,::1 vite",
+    "build:frontend": "vite build --mode production",
+    "build:electron": "tsc -p electron/tsconfig.json && node -e \"require('fs').writeFileSync('electron/dist/package.json', JSON.stringify({type:'commonjs'}))\"",
+    "build": "node scripts/build.mjs",
+    "build:mac": "npm run build",
+    "build:win": "node scripts/build.mjs --win",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p electron/tsconfig.json",
+    "clean:electron": "rm -rf electron/dist",
+    "clean:release": "rm -rf release",
+    "clean": "npm run clean:electron && npm run clean:release && rm -rf dist"
+  },
+  "dependencies": {
+    "@radix-ui/react-icons": "^1.3.2",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-radio-group": "^1.3.7",
+    "@radix-ui/react-select": "^2.2.5",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.2.5",
+    "better-sqlite3": "^11.3.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.511.0",
+    "papaparse": "^5.4.1",
+    "playwright-core": "^1.49.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.13.0",
+    "tailwind-merge": "^2.5.4",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@playwright/browser-chromium": "^1.49.0",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^18.19.130",
+    "@types/papaparse": "^5.3.15",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
+    "electron": "^28.0.0",
+    "electron-builder": "^26.8.1",
+    "postcss": "^8.4.49",
+    "rcedit": "^4.0.1",
+    "sharp": "^0.33.5",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.3"
+  },
+  "build": {
+    "appId": "com.b2dm.app",
+    "productName": "B2DM",
+    "protocols": {
+      "name": "B2DM URL",
+      "schemes": [
+        "b2dm"
+      ]
+    },
+    "directories": {
+      "output": "release",
+      "buildResources": "public"
+    },
+    "files": [
+      "electron/dist/**/*",
+      "dist/**/*",
+      "public/icon.png",
+      "public/icon.ico",
+      "public/iconTrayTemplate.png",
+      "public/iconTrayTemplate@2x.png",
+      "public/installer-sidebar.bmp",
+      "public/installer-sidebar.png",
+      "public/sidebar.png",
+      "public/welcome.txt",
+      "public/conclusion.txt"
+    ],
+    "asarUnpack": [
+      "public/iconTrayTemplate.png",
+      "public/iconTrayTemplate@2x.png",
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/playwright-core/**/*",
+      "node_modules/@playwright/browser-chromium/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "target": [
+        {
+          "target": "pkg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "B2DM-Setup.${ext}",
+      "icon": "public/icon.png",
+      "hardenedRuntime": true,
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.plist",
+      "extendInfo": {
+        "CFBundleDisplayName": "B2DM",
+        "CFBundleName": "B2DM"
+      }
+    },
+    "pkg": {
+      "installLocation": "/Applications",
+      "allowAnywhere": false,
+      "allowCurrentUserHome": false,
+      "allowRootDirectory": true,
+      "isRelocatable": false,
+      "welcome": "public/welcome.txt",
+      "conclusion": "public/conclusion.txt"
+    },
+    "win": {
+      "icon": "public/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "B2DM.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "artifactName": "${productName}-Setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "B2DM",
+      "include": "build/installer.nsh",
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "installerHeaderIcon": "public/icon.ico",
+      "installerSidebar": "public/installer-sidebar.bmp",
+      "uninstallerSidebar": "public/installer-sidebar.bmp"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "public/icon.png"
+    },
+    "afterPack": "electron/dist/afterPack.js"
+  }
+}

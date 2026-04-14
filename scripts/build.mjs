@@ -1,0 +1,45 @@
+#!/usr/bin/env node
+// Full release build: frontend → electron TS → electron-builder.
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '..');
+
+const args = process.argv.slice(2);
+const wantWin = args.includes('--win');
+const wantMac = args.includes('--mac') || (!wantWin && process.platform === 'darwin');
+
+function run(bin, argv, opts = {}) {
+  const result = spawnSync(bin, argv, { stdio: 'inherit', cwd: repoRoot, ...opts });
+  if (result.status !== 0) {
+    console.error('[build] step failed:', bin, argv.join(' '));
+    process.exit(result.status ?? 1);
+  }
+}
+
+const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+
+console.log('[build] vite build');
+run(npxBin, ['vite', 'build', '--mode', 'production']);
+
+console.log('[build] tsc -p electron/tsconfig.json');
+run(npxBin, ['tsc', '-p', path.join('electron', 'tsconfig.json')]);
+
+console.log('[build] writing electron/dist/package.json');
+import('node:fs').then(({ writeFileSync, mkdirSync }) => {
+  const outDir = path.join(repoRoot, 'electron', 'dist');
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(path.join(outDir, 'package.json'), JSON.stringify({ type: 'commonjs' }));
+});
+
+const builderArgs = ['electron-builder'];
+if (wantMac) builderArgs.push('--mac');
+if (wantWin) builderArgs.push('--win');
+builderArgs.push('--publish', 'never');
+
+console.log('[build]', builderArgs.join(' '));
+run(npxBin, builderArgs);
+
+console.log('[build] done. Output in ./release/');

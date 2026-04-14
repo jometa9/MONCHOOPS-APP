@@ -1,0 +1,42 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { b2dm } from '@/lib/b2dm';
+import type { AccountPublic } from '@/types/domain';
+
+interface AccountsContextValue {
+  accounts: AccountPublic[];
+  loading: boolean;
+  refresh: () => Promise<void>;
+}
+
+const AccountsContext = createContext<AccountsContextValue | null>(null);
+
+export function AccountsProvider({ children }: { children: ReactNode }) {
+  const [accounts, setAccounts] = useState<AccountPublic[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    try {
+      const list = await b2dm.accounts.list();
+      setAccounts(list);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const off = b2dm.accounts.onChange(() => {
+      void refresh();
+    });
+    return () => off();
+  }, [refresh]);
+
+  const value = useMemo<AccountsContextValue>(() => ({ accounts, loading, refresh }), [accounts, loading, refresh]);
+  return <AccountsContext.Provider value={value}>{children}</AccountsContext.Provider>;
+}
+
+export function useAccounts(): AccountsContextValue {
+  const ctx = useContext(AccountsContext);
+  if (!ctx) throw new Error('useAccounts must be used within <AccountsProvider>');
+  return ctx;
+}

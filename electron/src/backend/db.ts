@@ -1,0 +1,154 @@
+import { app } from 'electron';
+import path from 'path';
+import fs from 'fs';
+import type { Database } from 'better-sqlite3';
+
+let cached: Database | null = null;
+
+function dbPath(): string {
+  const dir = app.getPath('userData');
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, 'b2dm.sqlite');
+}
+
+// better-sqlite3 is a native addon and must only be required at runtime inside
+// Electron's main process. Lazy-require it here so that the TypeScript module
+// graph can still be analysed on platforms where the binary isn't installed.
+function loadDriver(): typeof import('better-sqlite3') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const mod = require('better-sqlite3') as typeof import('better-sqlite3');
+  return mod;
+}
+
+export function getDb(): Database {
+  if (cached) return cached;
+  const DriverCtor = loadDriver();
+  const db = new DriverCtor(dbPath());
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  migrate(db);
+  cached = db;
+  return cached;
+}
+
+function migrate(db: Database): void {
+  const current = (db.pragma('user_version', { simple: true }) as number) ?? 0;
+
+  if (current < 1) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+  }
+
+  if (current < 2) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        display_name TEXT,
+        profile_pic_url TEXT,
+        cookies_encrypted BLOB NOT NULL,
+        user_agent TEXT NOT NULL,
+        proxy_url TEXT,
+        proxy_username TEXT,
+        proxy_password_encrypted BLOB,
+        status TEXT NOT NULL DEFAULT 'idle',
+        last_error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts(status);
+    `);
+  }
+
+  if (current < 3) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS jobs (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        params_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER,
+        progress_done INTEGER NOT NULL DEFAULT 0,
+        progress_total INTEGER,
+        error TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_jobs_account ON jobs(account_id);
+      CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+
+      CREATE TABLE IF NOT EXISTS scrape_results (
+        job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        username_count INTEGER NOT NULL,
+        csv_path TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        completed_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_scrape_results_completed ON scrape_results(completed_at DESC);
+    `);
+  }
+
+  if (current < 4) {
+    // Login jobs run before an account exists, so account_id must be nullable.
+    // SQLite can't drop NOT NULL in place — rebuild the table.
+    db.exec(`
+      CREATE TABLE jobs_new (
+        id TEXT PRIMARY KEY,
+        account_id TEXT REFERENCES accounts(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        params_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER,
+        progress_done INTEGER NOT NULL DEFAULT 0,
+        progress_total INTEGER,
+        error TEXT
+      );
+      INSERT INTO jobs_new SELECT * FROM jobs;
+      DROP TABLE jobs;
+      ALTER TABLE jobs_new RENAME TO jobs;
+      CREATE INDEX IF NOT EXISTS idx_jobs_account ON jobs(account_id);
+      CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+    `);
+  }
+
+  db.pragma('user_version = 4');
+}
+
+// meta helpers — used by license.ts for ad-hoc key/value state.
+export function metaGet(key: string): string | null {
+  const row = getDb()
+    .prepare<[string], { value: string }>('SELECT value FROM meta WHERE key = ?')
+    .get(key);
+  return row?.value ?? null;
+}
+
+export function metaSet(key: string, value: string | null): void {
+  if (value === null) {
+    getDb().prepare('DELETE FROM meta WHERE key = ?').run(key);
+    return;
+  }
+  getDb()
+    .prepare('INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(key, value);
+}
+
+export function metaGetJson<T>(key: string): T | null {
+  const raw = metaGet(key);
+  if (raw == null) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export function metaSetJson(key: string, value: unknown): void {
+  metaSet(key, JSON.stringify(value));
+}
