@@ -124,6 +124,12 @@ export async function validateLicense(licenseKey: string): Promise<SessionSnapsh
   return { hasLicense: true, profile, subscription };
 }
 
+export async function refreshSession(): Promise<SessionSnapshot> {
+  const key = loadLicenseKey();
+  if (!key) return EMPTY_SESSION;
+  return validateLicense(key);
+}
+
 export function logout(): void {
   metaSet(LICENSE_KEY_META, null);
   metaSet(PROFILE_META, null);

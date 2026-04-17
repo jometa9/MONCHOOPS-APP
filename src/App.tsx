@@ -2,6 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { SessionProvider, useSession } from '@/context/SessionContext';
 import { AccountsProvider } from '@/context/AccountsContext';
 import { JobsProvider } from '@/context/JobsContext';
+import { ThemeProvider } from '@/context/ThemeContext';
+import { PreferencesProvider } from '@/context/PreferencesContext';
 import { AppShell } from '@/components/layout/AppShell';
 import { Login } from '@/screens/Login';
 import { NoSubscription } from '@/screens/NoSubscription';
@@ -10,6 +12,8 @@ import { InstagramAccounts } from '@/screens/InstagramAccounts';
 import { MassDMs } from '@/screens/MassDMs';
 import { Scrape } from '@/screens/Scrape';
 import { Data } from '@/screens/Data';
+import { Settings } from '@/screens/Settings';
+import { Logs } from '@/screens/Logs';
 import { Spinner } from '@/components/common/Spinner';
 
 function Gate() {
@@ -36,6 +40,8 @@ function Gate() {
             <Route path="cold-dm" element={<MassDMs />} />
             <Route path="scrape" element={<Scrape />} />
             <Route path="data" element={<Data />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="logs" element={<Logs />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
@@ -46,10 +52,14 @@ function Gate() {
 
 export default function App() {
   return (
-    <SessionProvider>
-      <BrowserRouter>
-        <Gate />
-      </BrowserRouter>
-    </SessionProvider>
+    <ThemeProvider>
+      <PreferencesProvider>
+        <SessionProvider>
+          <BrowserRouter>
+            <Gate />
+          </BrowserRouter>
+        </SessionProvider>
+      </PreferencesProvider>
+    </ThemeProvider>
   );
 }

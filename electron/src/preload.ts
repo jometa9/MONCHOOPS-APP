@@ -89,6 +89,17 @@ const csvApi = {
   pickAndPersist: () => invoke<{ path: string; count: number } | null>('csv:pickAndPersist'),
 };
 
+const settingsApi = {
+  refreshSession: () => invoke<import('./backend/types').SessionSnapshot>('session:refresh'),
+  deleteAllAccounts: () => invoke<void>('accounts:deleteAll'),
+  deleteAllScrapes: () => invoke<void>('scrapes:deleteAll'),
+  getLogs: () => invoke<string>('logs:get'),
+  clearLogs: () => invoke<void>('logs:clear'),
+  selectDirectory: () => invoke<string | null>('app:selectDirectory'),
+  getScrapeExportDir: () => invoke<string>('settings:getScrapeExportDir'),
+  setScrapeExportDir: (dir: string) => invoke<void>('settings:setScrapeExportDir', dir),
+};
+
 contextBridge.exposeInMainWorld('b2dm', {
   ...platformApi,
   ...sessionApi,
@@ -96,6 +107,7 @@ contextBridge.exposeInMainWorld('b2dm', {
   jobs: jobsApi,
   scrapes: scrapesApi,
   csv: csvApi,
+  settings: settingsApi,
 });
 
 contextBridge.exposeInMainWorld('electronAPI', platformApi);

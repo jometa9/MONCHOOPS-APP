@@ -64,6 +64,17 @@ export interface CsvApi {
   pickAndPersist(): Promise<{ path: string; count: number } | null>;
 }
 
+export interface SettingsApi {
+  refreshSession(): Promise<import('@/types/session').SessionSnapshot>;
+  deleteAllAccounts(): Promise<void>;
+  deleteAllScrapes(): Promise<void>;
+  getLogs(): Promise<string>;
+  clearLogs(): Promise<void>;
+  selectDirectory(): Promise<string | null>;
+  getScrapeExportDir(): Promise<string>;
+  setScrapeExportDir(dir: string): Promise<void>;
+}
+
 export interface B2dmApi {
   // Platform
   getPlatform(): Promise<NodeJS.Platform>;
@@ -90,6 +101,7 @@ export interface B2dmApi {
   jobs: JobsApi;
   scrapes: ScrapesApi;
   csv: CsvApi;
+  settings: SettingsApi;
 }
 
 declare global {

@@ -8,7 +8,6 @@
     - headless boolean
     - theme toggle
     - plan data and management
-    - theme toggle
     - logs
     - logout
     - clean all accounts

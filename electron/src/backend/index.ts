@@ -1,8 +1,8 @@
 import { BrowserWindow, ipcMain, dialog, shell, app } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { getDb } from './db';
-import { getSession, logout, validateLicense } from './license';
+import { getDb, metaGet, metaSet } from './db';
+import { getSession, logout, validateLicense, refreshSession } from './license';
 import { handleAuthDeepLink } from './oauth';
 import {
   listAccounts,
@@ -215,6 +215,57 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       .map((l) => l.trim())
       .filter((l) => l.length > 0 && l.toLowerCase() !== 'username').length;
     return { path: dest, count };
+  });
+
+  // Settings
+  ipcMain.handle('session:refresh', async () => {
+    const snapshot = await refreshSession();
+    broadcastSessionChange(snapshot);
+    return snapshot;
+  });
+
+  ipcMain.handle('accounts:deleteAll', async () => {
+    // Cancel all running jobs first
+    const running = listRunningJobs();
+    for (const job of running) cancelJob(job.id);
+    getDb().prepare('DELETE FROM accounts').run();
+    broadcast('accounts:changed');
+  });
+
+  ipcMain.handle('scrapes:deleteAll', async () => {
+    const rows = listScrapeResults();
+    for (const row of rows) {
+      try { fs.unlinkSync(row.csvPath); } catch {}
+    }
+    getDb().prepare('DELETE FROM scrape_results').run();
+  });
+
+  ipcMain.handle('logs:get', () => {
+    try {
+      const logPath = path.join(app.getPath('userData'), 'logs', 'main.log');
+      if (!fs.existsSync(logPath)) return '';
+      return fs.readFileSync(logPath, 'utf8');
+    } catch {
+      return '';
+    }
+  });
+
+  ipcMain.handle('logs:clear', () => {
+    try {
+      const logPath = path.join(app.getPath('userData'), 'logs', 'main.log');
+      fs.writeFileSync(logPath, '', 'utf8');
+    } catch {}
+  });
+
+  ipcMain.handle('app:selectDirectory', async () => {
+    const res = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
+    if (res.canceled || res.filePaths.length === 0) return null;
+    return res.filePaths[0] ?? null;
+  });
+
+  ipcMain.handle('settings:getScrapeExportDir', () => metaGet('scrape_export_dir') ?? '');
+  ipcMain.handle('settings:setScrapeExportDir', (_e, dir: string) => {
+    metaSet('scrape_export_dir', dir || null);
   });
 
   app.on('before-quit', () => {
