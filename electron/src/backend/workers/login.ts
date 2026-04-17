@@ -45,15 +45,15 @@ onInit<LoginInit>(async (init) => {
     return;
   }
 
-  // Go home so the nav bar is rendered with the user's avatar link.
+  // Go to settings/edit to read the actual username from the account form
   try {
-    await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await page.goto('https://www.instagram.com/accounts/edit/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
   } catch {}
   await waitFor(2500);
 
-  const username = await readUsernameFromNav(page);
+  const username = await readUsernameFromEdit(page);
   if (!username) {
-    sendError('Logged in, but could not read your username from the page. Try again.');
+    sendError('Logged in, but could not read your username from settings. Try again.');
     try { await browser.close(); } catch {}
     return;
   }
@@ -98,24 +98,24 @@ onInit<LoginInit>(async (init) => {
   process.exit(0);
 });
 
-// Reads the current user's handle by finding the avatar link in the nav.
-// That link always points to "/<username>/" for the logged-in account.
-async function readUsernameFromNav(page: any): Promise<string | null> {
-  // Give the nav a few attempts — IG sometimes ships a "one-tap" intermediate.
+// Reads the username from the account edit/settings page
+async function readUsernameFromEdit(page: any): Promise<string | null> {
   for (let i = 0; i < 5; i++) {
-    const found = await page.evaluate((reservedList: string[]) => {
-      const reserved = new Set(reservedList);
-      // Prefer anchors that wrap an <img> (the nav avatar).
-      const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="/"]'));
-      for (const a of links) {
-        const href = a.getAttribute('href') || '';
-        const m = href.match(/^\/([A-Za-z0-9._]+)\/?$/);
-        if (!m || !m[1]) continue;
-        if (reserved.has(m[1])) continue;
-        if (a.querySelector('img')) return m[1];
+    const found = await page.evaluate(() => {
+      // Look for the username input field on /accounts/edit/
+      const input = document.querySelector<HTMLInputElement>('input[name="username"]');
+      if (input && input.value) return input.value;
+
+      // Alternative: look for username in any input field with username-like attributes
+      const allInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input'));
+      for (const inp of allInputs) {
+        if ((inp.name === 'username' || inp.placeholder?.toLowerCase().includes('username')) && inp.value) {
+          return inp.value;
+        }
       }
+
       return null;
-    }, Array.from(RESERVED));
+    });
 
     if (typeof found === 'string' && found.length > 0) return found;
     await waitFor(1500);
