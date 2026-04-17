@@ -198,10 +198,33 @@ export function startLogin(_args: StartLoginArgs = {}): string {
     }
   }
   const jobId = insertJob('login', null, {});
-  const scriptPath = workerForKind('login');
+  const scriptPath = workerScriptPath('login');
   const child = spawnWorker(scriptPath, jobId, {
     type: 'init',
     payload: { jobId },
+  });
+  runningChildren.set(jobId, child);
+  runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });
+  emit({ type: 'jobs:changed' });
+  return jobId;
+}
+
+export interface StartAutoLoginArgs {
+  username: string;
+  password: string;
+}
+
+export function startAutoLogin(args: StartAutoLoginArgs): string {
+  for (const [, meta] of runningMeta) {
+    if (meta.kind === 'login') {
+      throw new Error('A login window is already open. Complete or close it first.');
+    }
+  }
+  const jobId = insertJob('login', null, { type: 'auto' });
+  const scriptPath = workerScriptPath('autoLogin');
+  const child = spawnWorker(scriptPath, jobId, {
+    type: 'init',
+    payload: { jobId, username: args.username, password: args.password },
   });
   runningChildren.set(jobId, child);
   runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });

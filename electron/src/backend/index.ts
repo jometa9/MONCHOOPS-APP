@@ -19,6 +19,7 @@ import {
   reconcileOnStartup,
   shutdownAllJobs,
   startLogin,
+  startAutoLogin,
   startMassDm,
   startScrape,
   subscribe as subscribeToJobs,
@@ -88,6 +89,10 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   ipcMain.handle('accounts:get', async (_e, id: string) => getAccount(id));
   ipcMain.handle('accounts:startLogin', async () => {
     const jobId = startLogin();
+    return { jobId };
+  });
+  ipcMain.handle('accounts:startAutoLogin', async (_e, username: string, password: string) => {
+    const jobId = startAutoLogin({ username, password });
     return { jobId };
   });
   ipcMain.handle('accounts:delete', async (_e, id: string) => {

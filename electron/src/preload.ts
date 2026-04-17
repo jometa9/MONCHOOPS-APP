@@ -42,6 +42,8 @@ const accountsApi = {
   list: () => invoke<import('./backend/accounts').AccountPublic[]>('accounts:list'),
   get: (id: string) => invoke<import('./backend/accounts').AccountPublic | null>('accounts:get', id),
   startLogin: () => invoke<{ jobId: string }>('accounts:startLogin'),
+  startAutoLogin: (username: string, password: string) =>
+    invoke<{ jobId: string }>('accounts:startAutoLogin', username, password),
   delete: (id: string) => invoke<void>('accounts:delete', id),
   updateProxy: (payload: {
     id: string;
