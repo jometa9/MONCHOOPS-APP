@@ -4,7 +4,14 @@ import fs from 'fs';
 import { ChildProcess, fork } from 'child_process';
 import { app } from 'electron';
 import { getDb } from './db';
-import { getAccount, getAccountSecrets, setAccountStatus } from './accounts';
+import {
+  createAccount,
+  getAccount,
+  getAccountSecrets,
+  setAccountStatus,
+  updateProxy,
+  type InstagramCookie,
+} from './accounts';
 
 export type JobKind =
   | 'login'
@@ -232,6 +239,35 @@ export function startAutoLogin(args: StartAutoLoginArgs): string {
   return jobId;
 }
 
+export interface BulkLoginRow {
+  username: string;
+  password: string;
+  proxyUrl?: string;
+  proxyUsername?: string;
+  proxyPassword?: string;
+}
+
+export function startBulkAutoLogin(rows: BulkLoginRow[]): string {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('Bulk login requires at least one row');
+  }
+  for (const [, meta] of runningMeta) {
+    if (meta.kind === 'login') {
+      throw new Error('A login is already running. Wait for it to finish first.');
+    }
+  }
+  const jobId = insertJob('login', null, { type: 'bulk', count: rows.length });
+  const scriptPath = workerScriptPath('bulkAutoLogin');
+  const child = spawnWorker(scriptPath, jobId, {
+    type: 'init',
+    payload: { jobId, rows },
+  });
+  runningChildren.set(jobId, child);
+  runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });
+  emit({ type: 'jobs:changed' });
+  return jobId;
+}
+
 export interface StartMassDmArgs {
   accountId: string;
   usernamesCsvPath: string;
@@ -361,6 +397,35 @@ function handleWorkerMessage(jobId: string, msg: any): void {
     stashResult(jobId, msg.payload);
   } else if (msg.type === 'error') {
     finaliseJob(jobId, 'failed', typeof msg.msg === 'string' ? msg.msg : 'Unknown worker error');
+  } else if (msg.type === 'bulk-account') {
+    persistBulkAccount(jobId, msg.payload);
+  }
+}
+
+function persistBulkAccount(jobId: string, payload: any): void {
+  if (!payload || typeof payload !== 'object') return;
+  try {
+    const acc = createAccount({
+      username: String(payload.username),
+      displayName: payload.displayName ?? null,
+      profilePicUrl: payload.profilePicUrl ?? null,
+      cookies: (payload.cookies ?? []) as InstagramCookie[],
+      userAgent: String(payload.userAgent || 'Mozilla/5.0'),
+    });
+    if (payload.proxy && typeof payload.proxy === 'object' && payload.proxy.url) {
+      try {
+        updateProxy(acc.id, {
+          url: payload.proxy.url,
+          username: payload.proxy.username ?? null,
+          password: payload.proxy.password ?? null,
+        });
+      } catch (err) {
+        console.error(`[jobs ${jobId}] failed to apply proxy for ${acc.username}:`, err);
+      }
+    }
+    emit({ type: 'jobs:changed' });
+  } catch (err) {
+    console.error(`[jobs ${jobId}] failed to persist bulk account:`, err);
   }
 }
 
@@ -399,9 +464,8 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
   // Persist scrape result row if present.
   if (meta && finalStatus === 'completed' && result && typeof result === 'object') {
     const r = result as any;
-    if (meta.kind === 'login') {
+    if (meta.kind === 'login' && r.type !== 'bulk-summary' && r.username) {
       try {
-        const { createAccount } = require('./accounts') as typeof import('./accounts');
         const acc = createAccount({
           username: r.username,
           displayName: r.displayName,

@@ -7,6 +7,16 @@
     height: 100%;
     margin: 0;
   }
+  * {
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
+  }
+  input, textarea, [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+  }
   body {
     @apply bg-background text-foreground antialiased;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, system-ui, sans-serif;
@@ -14,6 +24,10 @@
   }
   button {
     font-family: inherit;
+    cursor: pointer;
+  }
+  a {
+    cursor: pointer;
   }
 }
 

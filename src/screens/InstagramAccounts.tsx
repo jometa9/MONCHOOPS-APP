@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
-import { Globe, Instagram, Loader2, MoreVertical, Plus, Search, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Globe, Instagram, Loader2, MoreVertical, Plus, Search, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -377,6 +378,286 @@ function LoginMethodDialog({
   );
 }
 
+interface BulkRow {
+  username: string;
+  password: string;
+  proxyUrl?: string;
+  proxyUsername?: string;
+  proxyPassword?: string;
+}
+
+interface ParsedRow extends BulkRow {
+  rowNumber: number;
+  error?: string;
+}
+
+const BULK_TEMPLATE = 'username,password,proxy_url,proxy_username,proxy_password';
+
+// Minimal CSV splitter: handles commas + double-quoted values. Embedded
+// newlines inside quoted fields are not supported (we split by line first).
+function splitCsvLine(line: string, rowNumber: number): ParsedRow {
+  const fields: string[] = [];
+  let buf = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') {
+        buf += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        buf += ch;
+      }
+    } else if (ch === ',') {
+      fields.push(buf);
+      buf = '';
+    } else if (ch === '"' && buf.length === 0) {
+      inQuotes = true;
+    } else {
+      buf += ch;
+    }
+  }
+  fields.push(buf);
+
+  const [username, password, proxyUrl, proxyUsername, proxyPassword] = fields.map((f) => f.trim());
+
+  const row: ParsedRow = {
+    rowNumber,
+    username: username ?? '',
+    password: password ?? '',
+    proxyUrl: proxyUrl || undefined,
+    proxyUsername: proxyUsername || undefined,
+    proxyPassword: proxyPassword || undefined,
+  };
+
+  if (!row.username) row.error = 'Missing username';
+  else if (!row.password) row.error = 'Missing password';
+  else if (row.proxyUrl && !/^(https?|socks5):\/\/[^\s]+:\d+/.test(row.proxyUrl)) {
+    row.error = 'Bad proxy URL format';
+  }
+
+  return row;
+}
+
+function parseBulkText(raw: string): ParsedRow[] {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) return [];
+
+  const first = lines[0]!.toLowerCase();
+  const hasHeader = /username/.test(first) && /password/.test(first);
+  const dataLines = hasHeader ? lines.slice(1) : lines;
+
+  return dataLines.map((line, i) => splitCsvLine(line, hasHeader ? i + 2 : i + 1));
+}
+
+function BulkLoginDialog({
+  onClose,
+  onStart,
+}: {
+  onClose: () => void;
+  onStart: (rows: BulkRow[]) => Promise<void>;
+}) {
+  const [mode, setMode] = useState<'paste' | 'file'>('paste');
+  const [text, setText] = useState('');
+  const [parsed, setParsed] = useState<ParsedRow[]>([]);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setParsed(parseBulkText(text));
+  }, [text]);
+
+  async function handleFile(file: File) {
+    setError(null);
+    setFileName(file.name);
+    const lower = file.name.toLowerCase();
+    try {
+      if (lower.endsWith('.csv') || lower.endsWith('.txt')) {
+        setText(await file.text());
+        return;
+      }
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+        const buf = await file.arrayBuffer();
+        const XLSX = await import('xlsx');
+        const wb = XLSX.read(buf, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]!]!;
+        setText(XLSX.utils.sheet_to_csv(sheet));
+        return;
+      }
+      setError('Unsupported file type. Use .csv, .txt, .xlsx, or .xls');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read file');
+    }
+  }
+
+  const validRows = useMemo(() => parsed.filter((r) => !r.error), [parsed]);
+  const errorRows = useMemo(() => parsed.filter((r) => r.error), [parsed]);
+
+  async function start() {
+    if (validRows.length === 0) {
+      setError('No valid rows to import');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await onStart(
+        validRows.map((r) => ({
+          username: r.username,
+          password: r.password,
+          proxyUrl: r.proxyUrl,
+          proxyUsername: r.proxyUsername,
+          proxyPassword: r.proxyPassword,
+        }))
+      );
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start bulk login');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Bulk import accounts"
+      description="Sign in to multiple Instagram accounts. Each row is processed sequentially in a hidden browser."
+      className="max-w-2xl"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={start} disabled={busy || validRows.length === 0}>
+            {busy ? <Spinner /> : null}
+            {busy
+              ? 'Starting…'
+              : `Import ${validRows.length} ${validRows.length === 1 ? 'account' : 'accounts'}`}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="flex gap-2">
+          <Button
+            variant={mode === 'paste' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setMode('paste')}
+            disabled={busy}
+          >
+            Paste CSV
+          </Button>
+          <Button
+            variant={mode === 'file' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setMode('file')}
+            disabled={busy}
+          >
+            Upload .csv / .xlsx
+          </Button>
+        </div>
+
+        <div className="rounded-md border border-border bg-muted/30 p-3 text-xs">
+          <div className="mb-1 font-medium">Expected columns (header optional):</div>
+          <code className="block font-mono text-[11px] text-muted-foreground">{BULK_TEMPLATE}</code>
+          <div className="mt-1 text-muted-foreground">
+            Proxy fields are optional. Proxy URL must be{' '}
+            <code>http://host:port</code> or <code>socks5://host:port</code>.
+          </div>
+        </div>
+
+        {mode === 'paste' ? (
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`username,password,proxy_url,proxy_username,proxy_password\nalice,secret123,,,\nbob,hunter2,http://proxy.io:8080,bob,proxypass`}
+            rows={6}
+            disabled={busy}
+            className="font-mono text-xs"
+          />
+        ) : (
+          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-6 text-sm text-muted-foreground hover:bg-accent">
+            <Upload className="h-6 w-6" />
+            <span>
+              {fileName ? `Selected: ${fileName}` : 'Click to choose a .csv, .txt, .xlsx, or .xls file'}
+            </span>
+            <input
+              type="file"
+              accept=".csv,.txt,.xlsx,.xls"
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleFile(f);
+              }}
+            />
+          </label>
+        )}
+
+        {parsed.length > 0 ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>
+                <span className="font-medium text-foreground">{validRows.length}</span> valid
+              </span>
+              {errorRows.length > 0 ? (
+                <span>
+                  <span className="font-medium text-destructive">{errorRows.length}</span> invalid
+                </span>
+              ) : null}
+            </div>
+            <div className="max-h-40 overflow-auto rounded-md border border-border">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/40">
+                  <tr>
+                    <th className="px-2 py-1 text-left font-medium">#</th>
+                    <th className="px-2 py-1 text-left font-medium">Username</th>
+                    <th className="px-2 py-1 text-left font-medium">Proxy</th>
+                    <th className="px-2 py-1 text-left font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsed.slice(0, 50).map((r) => (
+                    <tr key={r.rowNumber} className="border-t border-border">
+                      <td className="px-2 py-1 text-muted-foreground">{r.rowNumber}</td>
+                      <td className="px-2 py-1 font-mono">{r.username || '—'}</td>
+                      <td className="px-2 py-1 font-mono text-muted-foreground">
+                        {r.proxyUrl ?? '—'}
+                      </td>
+                      <td className="px-2 py-1">
+                        {r.error ? (
+                          <span className="text-destructive">{r.error}</span>
+                        ) : (
+                          <span className="text-emerald-600">OK</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {parsed.length > 50 ? (
+                <div className="px-2 py-1 text-[11px] text-muted-foreground">
+                  …and {parsed.length - 50} more
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      </div>
+    </Dialog>
+  );
+}
+
 export function InstagramAccounts() {
   const { accounts, loading } = useAccounts();
   const [adding, setAdding] = useState(false);
@@ -384,6 +665,7 @@ export function InstagramAccounts() {
   const [proxyTarget, setProxyTarget] = useState<AccountPublic | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AccountPublic | null>(null);
   const [showLoginMethod, setShowLoginMethod] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
@@ -430,6 +712,19 @@ export function InstagramAccounts() {
     }
   }
 
+  async function handleStartBulk(rows: BulkRow[]) {
+    setAdding(true);
+    setAddError(null);
+    try {
+      await b2dm.accounts.startBulkAutoLogin(rows);
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Could not start bulk login');
+      throw err;
+    } finally {
+      setAdding(false);
+    }
+  }
+
   function openLoginMethod() {
     setShowLoginMethod(true);
   }
@@ -451,21 +746,30 @@ export function InstagramAccounts() {
           description="Link an Instagram account to start sending DMs or scraping usernames."
           action={
             <div className="flex flex-col items-center gap-2">
-              <Button onClick={openLoginMethod} disabled={adding}>
-                {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                {adding ? 'Signing in…' : 'Link Instagram account'}
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button onClick={openLoginMethod} disabled={adding}>
+                  {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  {adding ? 'Working…' : 'Link Instagram account'}
+                </Button>
+                <Button variant="outline" onClick={() => setShowBulk(true)} disabled={adding}>
+                  <Upload className="h-4 w-4" />
+                  Bulk import
+                </Button>
+              </div>
               {addError ? <p className="text-xs text-destructive">{addError}</p> : null}
             </div>
           }
         />
-        {showLoginMethod && (
+        {showLoginMethod ? (
           <LoginMethodDialog
             onClose={() => setShowLoginMethod(false)}
             onChooseManual={handleStartManualLogin}
             onChooseAuto={handleStartAutoLogin}
           />
-        )}
+        ) : null}
+        {showBulk ? (
+          <BulkLoginDialog onClose={() => setShowBulk(false)} onStart={handleStartBulk} />
+        ) : null}
       </div>
     );
   }
@@ -507,9 +811,13 @@ export function InstagramAccounts() {
             </button>
           ))}
         </div>
+        <Button variant="outline" onClick={() => setShowBulk(true)} disabled={adding} className="h-9">
+          <Upload className="h-4 w-4" />
+          Bulk import
+        </Button>
         <Button onClick={openLoginMethod} disabled={adding} className="h-9">
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          {adding ? 'Signing in…' : 'Add account'}
+          {adding ? 'Working…' : 'Add account'}
         </Button>
       </div>
 
@@ -571,6 +879,9 @@ export function InstagramAccounts() {
           onChooseManual={handleStartManualLogin}
           onChooseAuto={handleStartAutoLogin}
         />
+      ) : null}
+      {showBulk ? (
+        <BulkLoginDialog onClose={() => setShowBulk(false)} onStart={handleStartBulk} />
       ) : null}
     </div>
   );

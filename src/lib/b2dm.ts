@@ -8,10 +8,20 @@ import type {
 
 type Unsubscribe = () => void;
 
+export interface BulkLoginRow {
+  username: string;
+  password: string;
+  proxyUrl?: string;
+  proxyUsername?: string;
+  proxyPassword?: string;
+}
+
 export interface AccountsApi {
   list(): Promise<AccountPublic[]>;
   get(id: string): Promise<AccountPublic | null>;
   startLogin(): Promise<{ jobId: string }>;
+  startAutoLogin(username: string, password: string): Promise<{ jobId: string }>;
+  startBulkAutoLogin(rows: BulkLoginRow[]): Promise<{ jobId: string }>;
   delete(id: string): Promise<void>;
   updateProxy(payload: {
     id: string;

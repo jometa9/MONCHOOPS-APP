@@ -20,8 +20,10 @@ import {
   shutdownAllJobs,
   startLogin,
   startAutoLogin,
+  startBulkAutoLogin,
   startMassDm,
   startScrape,
+  type BulkLoginRow,
   subscribe as subscribeToJobs,
   type JobEvent,
   type JobKind,
@@ -93,6 +95,10 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   });
   ipcMain.handle('accounts:startAutoLogin', async (_e, username: string, password: string) => {
     const jobId = startAutoLogin({ username, password });
+    return { jobId };
+  });
+  ipcMain.handle('accounts:startBulkAutoLogin', async (_e, rows: BulkLoginRow[]) => {
+    const jobId = startBulkAutoLogin(rows);
     return { jobId };
   });
   ipcMain.handle('accounts:delete', async (_e, id: string) => {

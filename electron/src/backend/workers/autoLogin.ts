@@ -57,6 +57,7 @@ onInit<AutoLoginInit>(async (init) => {
       if (context.pages().length === 0 || page.isClosed()) {
         sendError('Login window was closed unexpectedly');
         try { await browser.close(); } catch {}
+        process.exit(1);
         return;
       }
 
@@ -76,15 +77,24 @@ onInit<AutoLoginInit>(async (init) => {
           .toLowerCase();
       });
 
-      if (errorText.includes('invalid') || errorText.includes('password') || errorText.includes('not found')) {
+      // Match a strong "wrong credentials" signal — avoid false positives from
+      // generic copy that contains the word "password" (e.g. the "Forgot password?" link).
+      if (
+        errorText.includes("password you entered is incorrect") ||
+        errorText.includes('username you entered') ||
+        errorText.includes("couldn't find an account") ||
+        errorText.includes('please wait a few minutes')
+      ) {
         sendError('Invalid username or password. Please check your credentials and try again.');
         try { await browser.close(); } catch {}
+        process.exit(1);
         return;
       }
 
-      if (errorText.includes('2fa') || errorText.includes('two-factor') || errorText.includes('security code')) {
-        sendError('Two-factor authentication detected. Please log in manually or disable 2FA temporarily.');
+      if (errorText.includes('two-factor') || errorText.includes('security code') || errorText.includes('confirm it')) {
+        sendError('Two-factor authentication or a checkpoint is required. Use manual login for this account.');
         try { await browser.close(); } catch {}
+        process.exit(1);
         return;
       }
 
@@ -94,6 +104,7 @@ onInit<AutoLoginInit>(async (init) => {
     if (!sessionFound) {
       sendError('Timed out waiting for Instagram login. Please check your credentials and try again.');
       try { await browser.close(); } catch {}
+      process.exit(1);
       return;
     }
 
@@ -107,6 +118,7 @@ onInit<AutoLoginInit>(async (init) => {
     if (!username) {
       sendError('Logged in, but could not read your username from settings. Try again.');
       try { await browser.close(); } catch {}
+      process.exit(1);
       return;
     }
 

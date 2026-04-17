@@ -7,7 +7,6 @@ import { Login } from '@/screens/Login';
 import { NoSubscription } from '@/screens/NoSubscription';
 import { Home } from '@/screens/Home';
 import { InstagramAccounts } from '@/screens/InstagramAccounts';
-import { Actions } from '@/screens/Actions';
 import { MassDMs } from '@/screens/MassDMs';
 import { Scrape } from '@/screens/Scrape';
 import { Data } from '@/screens/Data';
@@ -34,9 +33,8 @@ function Gate() {
           <Route element={<AppShell />}>
             <Route index element={<Home />} />
             <Route path="accounts" element={<InstagramAccounts />} />
-            <Route path="actions" element={<Actions />} />
-            <Route path="actions/mass-dms" element={<MassDMs />} />
-            <Route path="actions/scrape" element={<Scrape />} />
+            <Route path="cold-dm" element={<MassDMs />} />
+            <Route path="scrape" element={<Scrape />} />
             <Route path="data" element={<Data />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

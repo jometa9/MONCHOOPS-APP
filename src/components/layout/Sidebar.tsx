@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Database, Home, Instagram, LogOut, Zap } from 'lucide-react';
+import { Database, Home, Instagram, LogOut, Send, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/context/SessionContext';
 
@@ -12,7 +12,8 @@ interface Item {
 const items: Item[] = [
   { to: '/', label: 'Home', icon: Home },
   { to: '/accounts', label: 'Instagram Accounts', icon: Instagram },
-  { to: '/actions', label: 'Actions', icon: Zap },
+  { to: '/cold-dm', label: 'Cold DM', icon: Send },
+  { to: '/scrape', label: 'Scrape Leads', icon: Users },
   { to: '/data', label: 'Data', icon: Database },
 ];
 

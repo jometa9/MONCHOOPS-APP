@@ -44,6 +44,8 @@ const accountsApi = {
   startLogin: () => invoke<{ jobId: string }>('accounts:startLogin'),
   startAutoLogin: (username: string, password: string) =>
     invoke<{ jobId: string }>('accounts:startAutoLogin', username, password),
+  startBulkAutoLogin: (rows: import('./backend/jobs').BulkLoginRow[]) =>
+    invoke<{ jobId: string }>('accounts:startBulkAutoLogin', rows),
   delete: (id: string) => invoke<void>('accounts:delete', id),
   updateProxy: (payload: {
     id: string;
