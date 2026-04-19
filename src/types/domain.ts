@@ -51,4 +51,26 @@ export interface ScrapeResultPublic {
   csvPath: string;
   durationMs: number;
   completedAt: number;
+  categoryId: string | null;
+  categoryName: string | null;
+}
+
+export interface LeadCategoryPublic {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  leadCount: number;
+  scrapeCount: number;
+  lastActivityAt: number | null;
+}
+
+export interface LeadPublic {
+  id: number;
+  categoryId: string;
+  username: string;
+  sourceKind: string;
+  sourceJobId: string | null;
+  sourceDetail: string | null;
+  scrapedAt: number;
 }

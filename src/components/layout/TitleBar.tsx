@@ -18,11 +18,13 @@ export function TitleBar({ title = 'B2DM' }: { title?: string }) {
 
   const isMac = platform === 'darwin';
 
+  if (fullScreen) return null;
+
   return (
     <div
       className={cn(
         'titlebar flex items-center justify-center border-b border-border bg-background/90 backdrop-blur',
-        isMac && !fullScreen ? 'pl-20' : ''
+        isMac ? 'pl-20' : ''
       )}
     >
       <span className="text-xs font-medium text-muted-foreground">{title}</span>

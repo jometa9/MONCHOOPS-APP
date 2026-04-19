@@ -12,6 +12,7 @@ import {
   updateProxy,
   type InstagramCookie,
 } from './accounts';
+import { ingestLeadsFromCsv, resolveCategoryRef } from './leads';
 
 export type JobKind =
   | 'login'
@@ -44,6 +45,8 @@ export interface ScrapeResultPublic {
   csvPath: string;
   durationMs: number;
   completedAt: number;
+  categoryId: string | null;
+  categoryName: string | null;
 }
 
 interface JobRow {
@@ -67,6 +70,8 @@ interface ScrapeResultRow {
   csv_path: string;
   duration_ms: number;
   completed_at: number;
+  category_id: string | null;
+  category_name: string | null;
 }
 
 type Listener = (event: JobEvent) => void;
@@ -79,6 +84,13 @@ export type JobEvent =
 const listeners = new Set<Listener>();
 const runningChildren = new Map<string, ChildProcess>();
 const runningMeta = new Map<string, { startedAt: number; accountId: string | null; kind: JobKind }>();
+// Jobs the user asked to cancel. Used so handleWorkerExit knows to flag the
+// job as 'cancelled' regardless of exit code, and so partial-result
+// persistence in handleWorkerExit can apply the same path used for success.
+const cancellingJobs = new Set<string>();
+
+const CANCEL_GRACE_MS = 15_000;
+const TERM_GRACE_MS = 5_000;
 
 export function subscribe(cb: Listener): () => void {
   listeners.add(cb);
@@ -117,8 +129,21 @@ function scrapeRowToPublic(row: ScrapeResultRow): ScrapeResultPublic {
     csvPath: row.csv_path,
     durationMs: row.duration_ms,
     completedAt: row.completed_at,
+    categoryId: row.category_id,
+    categoryName: row.category_name,
   };
 }
+
+const SCRAPE_RESULT_SELECT = `
+  SELECT
+    sr.*,
+    lc.id   AS category_id,
+    lc.name AS category_name
+  FROM scrape_results sr
+  LEFT JOIN jobs j ON j.id = sr.job_id
+  LEFT JOIN lead_categories lc
+    ON lc.id = json_extract(j.params_json, '$.categoryId')
+`;
 
 export function listJobs(): JobPublic[] {
   const rows = getDb()
@@ -131,10 +156,29 @@ export function listRunningJobs(): JobPublic[] {
   return listJobs().filter((j) => j.status === 'running');
 }
 
+export interface StatsPublic {
+  totalJobs: number;
+  totalLeads: number;
+}
+
+export function getStats(): StatsPublic {
+  const db = getDb();
+  const jobsRow = db
+    .prepare<[], { c: number }>('SELECT COUNT(*) AS c FROM jobs')
+    .get();
+  const leadsRow = db
+    .prepare<[], { c: number }>('SELECT COUNT(*) AS c FROM leads')
+    .get();
+  return {
+    totalJobs: Number(jobsRow?.c) || 0,
+    totalLeads: Number(leadsRow?.c) || 0,
+  };
+}
+
 export function listScrapeResults(): ScrapeResultPublic[] {
   const rows = getDb()
     .prepare<[], ScrapeResultRow>(
-      'SELECT * FROM scrape_results ORDER BY completed_at DESC'
+      `${SCRAPE_RESULT_SELECT} ORDER BY sr.completed_at DESC`
     )
     .all();
   return rows.map(scrapeRowToPublic);
@@ -142,7 +186,9 @@ export function listScrapeResults(): ScrapeResultPublic[] {
 
 export function getScrapeResult(jobId: string): ScrapeResultPublic | null {
   const row = getDb()
-    .prepare<[string], ScrapeResultRow>('SELECT * FROM scrape_results WHERE job_id = ?')
+    .prepare<[string], ScrapeResultRow>(
+      `${SCRAPE_RESULT_SELECT} WHERE sr.job_id = ?`
+    )
     .get(jobId);
   return row ? scrapeRowToPublic(row) : null;
 }
@@ -271,18 +317,26 @@ export function startBulkAutoLogin(rows: BulkLoginRow[]): string {
 export interface StartMassDmArgs {
   accountId: string;
   usernamesCsvPath: string;
-  message: string;
+  messages: string[];
   intervalMs: number;
 }
+
+const MAX_DM_VARIANTS = 20;
 
 export function startMassDm(args: StartMassDmArgs): string {
   ensureAccountIdle(args.accountId);
   const secrets = getAccountSecrets(args.accountId);
   if (!secrets) throw new Error('Account not found');
 
+  const messages = (args.messages ?? [])
+    .map((m) => m.trim())
+    .filter((m) => m.length > 0)
+    .slice(0, MAX_DM_VARIANTS);
+  if (messages.length === 0) throw new Error('At least one message variant is required');
+
   const jobId = insertJob('mass_dm', args.accountId, {
     intervalMs: args.intervalMs,
-    message: args.message,
+    messages,
     usernamesCsvPath: args.usernamesCsvPath,
   });
 
@@ -292,7 +346,7 @@ export function startMassDm(args: StartMassDmArgs): string {
       jobId,
       secrets,
       usernamesCsvPath: args.usernamesCsvPath,
-      message: args.message,
+      messages,
       intervalMs: args.intervalMs,
     },
   });
@@ -314,7 +368,20 @@ export function startScrape(args: StartScrapeArgs): string {
   const secrets = getAccountSecrets(args.accountId);
   if (!secrets) throw new Error('Account not found');
 
-  const jobId = insertJob(args.kind, args.accountId, args.params);
+  // Resolve category ref (existing id or new name) into a stable categoryId
+  // that we persist on the job params. null means "no category bucket".
+  const category = resolveCategoryRef({
+    categoryId: typeof args.params.categoryId === 'string' ? args.params.categoryId : null,
+    newCategoryName:
+      typeof args.params.newCategoryName === 'string' ? args.params.newCategoryName : null,
+  });
+  const paramsWithCategory = {
+    ...args.params,
+    categoryId: category?.id ?? null,
+    newCategoryName: undefined,
+  };
+
+  const jobId = insertJob(args.kind, args.accountId, paramsWithCategory);
   const csvPath = path.join(scrapesDir(), `${jobId}.csv`);
 
   const child = spawnWorker(workerForKind(args.kind), jobId, {
@@ -324,7 +391,7 @@ export function startScrape(args: StartScrapeArgs): string {
       kind: args.kind,
       secrets,
       csvPath,
-      params: args.params,
+      params: paramsWithCategory,
     },
   });
   runningChildren.set(jobId, child);
@@ -337,7 +404,21 @@ export function startScrape(args: StartScrapeArgs): string {
 export function cancelJob(jobId: string): void {
   const child = runningChildren.get(jobId);
   if (!child) return;
-  try { child.kill('SIGKILL'); } catch {}
+  if (cancellingJobs.has(jobId)) return;
+  cancellingJobs.add(jobId);
+
+  // Cooperative cancel: worker flushes partial state (CSV, result payload)
+  // then exits 0. Escalate to SIGTERM → SIGKILL if it doesn't respond in time.
+  try { child.send({ type: 'cancel' } as any); } catch {}
+
+  setTimeout(() => {
+    if (!runningChildren.has(jobId)) return;
+    try { child.kill('SIGTERM'); } catch {}
+    setTimeout(() => {
+      if (!runningChildren.has(jobId)) return;
+      try { child.kill('SIGKILL'); } catch {}
+    }, TERM_GRACE_MS);
+  }, CANCEL_GRACE_MS);
 }
 
 function ensureAccountIdle(accountId: string): void {
@@ -443,13 +524,15 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
   const result = pendingResults.get(jobId);
   pendingResults.delete(jobId);
 
+  const wasCancelling = cancellingJobs.delete(jobId);
+
   const jobRow = getDb()
     .prepare<[string], JobRow>('SELECT * FROM jobs WHERE id = ?')
     .get(jobId);
   const currentStatus = jobRow?.status;
 
   let finalStatus: JobStatus;
-  if (signal === 'SIGKILL' || signal === 'SIGTERM') {
+  if (wasCancelling || signal === 'SIGKILL' || signal === 'SIGTERM') {
     finalStatus = 'cancelled';
   } else if (code === 0) {
     finalStatus = currentStatus === 'failed' ? 'failed' : 'completed';
@@ -461,8 +544,12 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
     finaliseJob(jobId, finalStatus, finalStatus === 'failed' ? (jobRow?.error ?? 'Worker exited unexpectedly') : null);
   }
 
-  // Persist scrape result row if present.
-  if (meta && finalStatus === 'completed' && result && typeof result === 'object') {
+  // Persist scrape result row if present. We treat 'cancelled' the same as
+  // 'completed' here — the worker has already flushed whatever partial state
+  // it had (CSV rows, result payload), so the user keeps what was scraped up
+  // to the cancel point.
+  const shouldPersistResult = finalStatus === 'completed' || finalStatus === 'cancelled';
+  if (meta && shouldPersistResult && result && typeof result === 'object') {
     const r = result as any;
     if (meta.kind === 'login' && r.type !== 'bulk-summary' && r.username) {
       try {
@@ -497,6 +584,16 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
             Date.now() - meta.startedAt,
             Date.now()
           );
+
+        // If the job was tagged with a category, ingest the CSV into that
+        // category's leads. Dedup happens at the DB layer via UNIQUE.
+        if (typeof params.categoryId === 'string' && params.categoryId) {
+          try {
+            ingestLeadsFromCsv(params.categoryId, meta.kind, jobId, r.csvPath);
+          } catch (err) {
+            console.error('[jobs] failed to ingest leads into category:', err);
+          }
+        }
       } catch (err) {
         console.error('[jobs] failed to persist scrape result:', err);
       }
@@ -513,29 +610,48 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
 }
 
 function buildScrapeSummary(kind: JobKind, params: any, _count: number): string {
-  const u = params?.username ? `@${params.username}` : '';
+  const max = typeof params?.max === 'number' && params.max > 0 ? params.max : null;
+  const fmtRange = (): string => {
+    const from = typeof params?.from === 'number' ? new Date(params.from).toISOString().slice(0, 10) : null;
+    const to = typeof params?.to === 'number' ? new Date(params.to).toISOString().slice(0, 10) : null;
+    if (from && to) return ` (${from} → ${to})`;
+    if (from) return ` (from ${from})`;
+    if (to) return ` (until ${to})`;
+    return '';
+  };
   switch (kind) {
-    case 'scrape_by_username':
-      if (params?.collectFollowers) return `Followers of ${u || '—'}`;
-      return `Commenters of ${u || '—'}'s last ${Number(params?.postsCount) || 10} posts`;
+    case 'scrape_by_username': {
+      const u = params?.username ? `@${params.username}` : '—';
+      return max ? `Leads from ${u} (max ${max})` : `Leads from ${u}`;
+    }
     case 'scrape_by_post':
-      return `Commenters of ${params?.postUrl ?? 'post'}`;
+      return `Engagers of ${params?.postUrl ?? 'post'}`;
     case 'scrape_by_hashtag':
-      return `Users engaged with #${params?.hashtag ?? ''} (top ${Number(params?.postsToCheck) || 20} posts)`;
+      return `Engagers of #${params?.hashtag ?? ''}${fmtRange()}`;
     case 'scrape_by_location':
-      return `Users engaged at location (top ${Number(params?.postsToCheck) || 20} posts)`;
+      return `Engagers at location${fmtRange()}`;
     default:
       return 'Scrape result';
   }
 }
 
-// Called from main on quit / before-close to stop any running children.
-export function shutdownAllJobs(): void {
+// Called from main on quit / before-close. Asks every running child to flush
+// its partial state (same path as a UI-initiated cancel), waits up to
+// `timeoutMs` for them to exit, then force-kills anything still running. The
+// caller is expected to await this before calling `app.exit()`.
+export async function shutdownAllJobs(timeoutMs = 15_000): Promise<void> {
+  if (runningChildren.size === 0) return;
+  for (const [jobId, child] of runningChildren) {
+    cancellingJobs.add(jobId);
+    try { child.send({ type: 'cancel' } as any); } catch {}
+  }
+  const deadline = Date.now() + timeoutMs;
+  while (runningChildren.size > 0 && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
   for (const [, child] of runningChildren) {
     try { child.kill('SIGKILL'); } catch {}
   }
-  runningChildren.clear();
-  runningMeta.clear();
 }
 
 // On app boot, mark any stranded 'running' rows as failed and flip busy

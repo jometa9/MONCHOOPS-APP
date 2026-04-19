@@ -63,7 +63,7 @@ const jobsApi = {
   startMassDm: (payload: {
     accountId: string;
     usernamesCsvPath: string;
-    message: string;
+    messages: string[];
     intervalMs: number;
   }) => invoke<string>('jobs:startMassDm', payload),
   startScrape: (payload: {
@@ -79,6 +79,10 @@ const jobsApi = {
     listen<{ jobId: string; status: string }>('jobs:done', cb),
 };
 
+const statsApi = {
+  get: () => invoke<{ totalJobs: number; totalLeads: number }>('stats:get'),
+};
+
 const scrapesApi = {
   list: () => invoke<import('./backend/jobs').ScrapeResultPublic[]>('scrapes:list'),
   download: (jobId: string) => invoke<string | null>('scrapes:download', jobId),
@@ -87,14 +91,31 @@ const scrapesApi = {
 
 const csvApi = {
   pickAndPersist: () => invoke<{ path: string; count: number } | null>('csv:pickAndPersist'),
+  persistFromPath: (srcPath: string) =>
+    invoke<{ path: string; count: number }>('csv:persistFromPath', srcPath),
+  persistFromCategory: (categoryId: string) =>
+    invoke<{ path: string; count: number }>('csv:persistFromCategory', categoryId),
+  persistFromScrape: (jobId: string) =>
+    invoke<{ path: string; count: number }>('csv:persistFromScrape', jobId),
+};
+
+const categoriesApi = {
+  list: () => invoke<import('./backend/leads').LeadCategoryPublic[]>('categories:list'),
+  create: (name: string) =>
+    invoke<import('./backend/leads').LeadCategoryPublic>('categories:create', name),
+  rename: (id: string, name: string) =>
+    invoke<import('./backend/leads').LeadCategoryPublic>('categories:rename', { id, name }),
+  delete: (id: string) => invoke<void>('categories:delete', id),
+  listLeads: (payload: { categoryId: string; limit?: number; offset?: number }) =>
+    invoke<import('./backend/leads').LeadPublic[]>('categories:listLeads', payload),
+  exportCsv: (categoryId: string) => invoke<string | null>('categories:exportCsv', categoryId),
+  onChange: (cb: () => void) => listen<void>('categories:changed', () => cb()),
 };
 
 const settingsApi = {
   refreshSession: () => invoke<import('./backend/types').SessionSnapshot>('session:refresh'),
   deleteAllAccounts: () => invoke<void>('accounts:deleteAll'),
   deleteAllScrapes: () => invoke<void>('scrapes:deleteAll'),
-  getLogs: () => invoke<string>('logs:get'),
-  clearLogs: () => invoke<void>('logs:clear'),
   selectDirectory: () => invoke<string | null>('app:selectDirectory'),
   getScrapeExportDir: () => invoke<string>('settings:getScrapeExportDir'),
   setScrapeExportDir: (dir: string) => invoke<void>('settings:setScrapeExportDir', dir),
@@ -106,8 +127,10 @@ contextBridge.exposeInMainWorld('b2dm', {
   accounts: accountsApi,
   jobs: jobsApi,
   scrapes: scrapesApi,
+  categories: categoriesApi,
   csv: csvApi,
   settings: settingsApi,
+  stats: statsApi,
 });
 
 contextBridge.exposeInMainWorld('electronAPI', platformApi);

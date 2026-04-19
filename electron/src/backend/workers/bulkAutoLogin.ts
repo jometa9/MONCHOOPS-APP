@@ -4,7 +4,7 @@
 // so the main process can persist the account immediately. The worker keeps
 // going past per-row failures (it just logs them and moves on).
 
-import { launchBrowser, onInit, sendError, sendLog, sendProgress, sendResult, waitFor } from './lib';
+import { isCancelled, launchBrowser, onInit, sendError, sendLog, sendProgress, sendResult, waitFor } from './lib';
 import type { InstagramCookie } from '../accounts';
 
 interface BulkRowInit {
@@ -41,6 +41,7 @@ onInit<BulkInit>(async (init) => {
   const results: RowResult[] = [];
 
   for (let i = 0; i < init.rows.length; i++) {
+    if (isCancelled()) break;
     const row = init.rows[i]!;
     const label = row.username || `row ${i + 1}`;
     sendLog('info', `[${i + 1}/${total}] Logging in ${label}…`);

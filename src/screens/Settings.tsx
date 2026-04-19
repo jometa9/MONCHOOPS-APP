@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Folder, Loader, RefreshCw, ScrollText, Trash2 } from 'lucide-react';
+import { Folder, Loader, RefreshCw, Trash2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useSession } from '@/context/SessionContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -236,19 +235,6 @@ export function Settings() {
                 Delete all scraped data
               </button>
             </div>
-          </div>
-        </Section>
-
-        {/* Logs shortcut */}
-        <Section title="Logs">
-          <div className="flex overflow-hidden rounded-lg border border-border bg-background self-start">
-            <Link
-              to="/logs"
-              className="inline-flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
-            >
-              <ScrollText className="h-4 w-4 shrink-0" />
-              View live logs
-            </Link>
           </div>
         </Section>
 

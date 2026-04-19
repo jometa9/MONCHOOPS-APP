@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
-import { Database, Download, FolderOpen, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useMemo, useState } from 'react';
+import { Database, Download, FolderOpen, Search, Tag } from 'lucide-react';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
 import { b2dm } from '@/lib/b2dm';
+import { formatDateTime } from '@/lib/format';
 import type { ScrapeResultPublic } from '@/types/domain';
 
 function formatDuration(ms: number): string {
@@ -15,13 +15,22 @@ function formatDuration(ms: number): string {
   return `${m}m ${rs}s`;
 }
 
-function formatDate(ts: number): string {
-  return new Date(ts).toLocaleString();
-}
-
 export function Data() {
   const [rows, setRows] = useState<ScrapeResultPublic[] | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+
+  const filteredRows = useMemo(() => {
+    if (!rows) return null;
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      return [row.summary, row.kind, row.categoryName ?? '']
+        .join(' ')
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [rows, query]);
 
   async function load() {
     const list = await b2dm.scrapes.list();
@@ -31,7 +40,11 @@ export function Data() {
   useEffect(() => {
     void load();
     const off = b2dm.jobs.onDone(() => void load());
-    return () => off();
+    const timer = setInterval(() => void load(), 5000);
+    return () => {
+      off();
+      clearInterval(timer);
+    };
   }, []);
 
   async function download(jobId: string) {
@@ -64,67 +77,82 @@ export function Data() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Data</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Scraped username lists. Download any row as a CSV.
-          </p>
+    <div className="bg-background">
+        <div className="sticky top-0 z-20 flex items-stretch bg-background">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by summary, kind or category…"
+              className="h-9 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
         </div>
-        <Button variant="outline" onClick={() => void load()}>
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
-      </div>
-
-      <div className="mt-6 overflow-hidden rounded-xl border border-border bg-background">
         <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+          <thead className="sticky top-9 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-4 py-2 text-left">Summary</th>
-              <th className="px-4 py-2 text-right">Usernames</th>
-              <th className="px-4 py-2 text-right">Duration</th>
-              <th className="px-4 py-2 text-left">Completed</th>
-              <th className="px-4 py-2 text-right">Actions</th>
+              <th className="px-3 py-1.5 text-left">Summary</th>
+              <th className="px-3 py-1.5 text-left">Category</th>
+              <th className="px-3 py-1.5 text-right">Usernames</th>
+              <th className="px-3 py-1.5 text-right">Duration</th>
+              <th className="px-3 py-1.5 text-left">Completed</th>
+              <th className="px-3 py-1.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {filteredRows!.length === 0 ? (
+              <tr className="border-t border-border">
+                <td colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                  No scrapes match your search.
+                </td>
+              </tr>
+            ) : filteredRows!.map((row) => (
               <tr key={row.jobId} className="border-t border-border">
-                <td className="px-4 py-3">
+                <td className="px-3 py-1.5">
                   <div className="font-medium">{row.summary}</div>
                   <div className="text-[11px] text-muted-foreground">{row.kind}</div>
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">{row.usernameCount}</td>
-                <td className="px-4 py-3 text-right text-muted-foreground">{formatDuration(row.durationMs)}</td>
-                <td className="px-4 py-3 text-muted-foreground">{formatDate(row.completedAt)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
+                <td className="px-3 py-1.5">
+                  {row.categoryName ? (
+                    <div className="inline-flex items-center gap-1.5 text-xs">
+                      <Tag className="h-3 w-3 text-muted-foreground" />
+                      <span>{row.categoryName}</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums">{row.usernameCount}</td>
+                <td className="px-3 py-1.5 text-right text-muted-foreground">{formatDuration(row.durationMs)}</td>
+                <td className="px-3 py-1.5 text-muted-foreground">{formatDateTime(row.completedAt)}</td>
+                <td className="px-2 py-1.5">
+                  <div className="flex items-center justify-end gap-0.5">
+                    <button
+                      type="button"
                       onClick={() => void download(row.jobId)}
                       disabled={downloading === row.jobId}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                      title="Download CSV"
+                      aria-label="Download CSV"
                     >
                       {downloading === row.jobId ? <Spinner /> : <Download className="h-3.5 w-3.5" />}
-                      CSV
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => void b2dm.scrapes.revealInFolder(row.jobId)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       title="Reveal file in folder"
+                      aria-label="Reveal file in folder"
                     >
                       <FolderOpen className="h-3.5 w-3.5" />
-                    </Button>
+                    </button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
     </div>
   );
 }

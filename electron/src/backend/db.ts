@@ -118,7 +118,43 @@ function migrate(db: Database): void {
     `);
   }
 
-  db.pragma('user_version = 4');
+  if (current < 5) {
+    // Lead categories: grouping layer on top of individual scrape jobs.
+    // A single scrape can contribute its leads to one category; the
+    // UNIQUE(category_id, username) constraint dedups when multiple
+    // scrapes target the same category.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS lead_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS leads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_id TEXT NOT NULL REFERENCES lead_categories(id) ON DELETE CASCADE,
+        username TEXT NOT NULL,
+        source_kind TEXT NOT NULL,
+        source_job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+        source_detail TEXT,
+        scraped_at INTEGER NOT NULL,
+        UNIQUE(category_id, username)
+      );
+      CREATE INDEX IF NOT EXISTS idx_leads_category ON leads(category_id);
+      CREATE INDEX IF NOT EXISTS idx_leads_job ON leads(source_job_id);
+
+      CREATE TABLE IF NOT EXISTS category_scrapes (
+        category_id TEXT NOT NULL REFERENCES lead_categories(id) ON DELETE CASCADE,
+        job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        added_count INTEGER NOT NULL DEFAULT 0,
+        added_at INTEGER NOT NULL,
+        PRIMARY KEY (category_id, job_id)
+      );
+    `);
+  }
+
+  db.pragma('user_version = 5');
 }
 
 // meta helpers — used by license.ts for ad-hoc key/value state.

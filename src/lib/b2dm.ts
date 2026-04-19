@@ -2,6 +2,8 @@ import type { SessionSnapshot } from '@/types/session';
 import type {
   AccountPublic,
   JobPublic,
+  LeadCategoryPublic,
+  LeadPublic,
   ScrapeKind,
   ScrapeResultPublic,
 } from '@/types/domain';
@@ -39,7 +41,7 @@ export interface JobsApi {
   startMassDm(payload: {
     accountId: string;
     usernamesCsvPath: string;
-    message: string;
+    messages: string[];
     intervalMs: number;
   }): Promise<string>;
   startScrape(payload: {
@@ -60,16 +62,31 @@ export interface ScrapesApi {
   revealInFolder(jobId: string): Promise<void>;
 }
 
+export interface CategoriesApi {
+  list(): Promise<LeadCategoryPublic[]>;
+  create(name: string): Promise<LeadCategoryPublic>;
+  rename(id: string, name: string): Promise<LeadCategoryPublic>;
+  delete(id: string): Promise<void>;
+  listLeads(payload: { categoryId: string; limit?: number; offset?: number }): Promise<LeadPublic[]>;
+  exportCsv(categoryId: string): Promise<string | null>;
+  onChange(cb: () => void): Unsubscribe;
+}
+
 export interface CsvApi {
   pickAndPersist(): Promise<{ path: string; count: number } | null>;
+  persistFromPath(srcPath: string): Promise<{ path: string; count: number }>;
+  persistFromCategory(categoryId: string): Promise<{ path: string; count: number }>;
+  persistFromScrape(jobId: string): Promise<{ path: string; count: number }>;
+}
+
+export interface StatsApi {
+  get(): Promise<{ totalJobs: number; totalLeads: number }>;
 }
 
 export interface SettingsApi {
   refreshSession(): Promise<import('@/types/session').SessionSnapshot>;
   deleteAllAccounts(): Promise<void>;
   deleteAllScrapes(): Promise<void>;
-  getLogs(): Promise<string>;
-  clearLogs(): Promise<void>;
   selectDirectory(): Promise<string | null>;
   getScrapeExportDir(): Promise<string>;
   setScrapeExportDir(dir: string): Promise<void>;
@@ -100,8 +117,10 @@ export interface B2dmApi {
   accounts: AccountsApi;
   jobs: JobsApi;
   scrapes: ScrapesApi;
+  categories: CategoriesApi;
   csv: CsvApi;
   settings: SettingsApi;
+  stats: StatsApi;
 }
 
 declare global {

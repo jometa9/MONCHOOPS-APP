@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Globe, Instagram, Loader2, MoreVertical, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { Globe, Instagram, Loader2, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,22 +30,20 @@ function AccountRow({
   onDelete: () => void;
   onConfigureProxy: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-
   return (
     <tr className="border-t border-border hover:bg-accent/40">
-      <td className="px-3 py-2">
+      <td className="px-3 py-1.5">
         <div className="flex items-center gap-2.5">
           {account.profilePicUrl ? (
             <img
               src={account.profilePicUrl}
               alt={account.username}
-              className="h-7 w-7 flex-none rounded-full object-cover"
+              className="h-6 w-6 flex-none rounded-full object-cover"
               referrerPolicy="no-referrer"
             />
           ) : (
-            <div className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <Instagram className="h-3.5 w-3.5" />
+            <div className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Instagram className="h-3 w-3" />
             </div>
           )}
           <div className="min-w-0">
@@ -57,10 +56,10 @@ function AccountRow({
           </div>
         </div>
       </td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-1.5">
         <StatusBadge status={account.status} />
       </td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-1.5">
         {account.proxyUrl ? (
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-xs">
@@ -78,48 +77,30 @@ function AccountRow({
           <span className="text-xs text-muted-foreground">Direct connection</span>
         )}
       </td>
-      <td className="px-3 py-2 text-right text-[11px] text-muted-foreground">
+      <td className="px-3 py-1.5 text-right text-[11px] text-muted-foreground">
         {new Date(account.updatedAt).toLocaleDateString()}
       </td>
-      <td className="px-2 py-2 text-right">
-        <div className="relative inline-block">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setMenuOpen((o) => !o)}
-            aria-label="More"
+      <td className="px-2 py-1.5">
+        <div className="flex items-center justify-end gap-0.5">
+          <button
+            type="button"
+            onClick={onConfigureProxy}
+            className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            title="Configure proxy"
+            aria-label="Configure proxy"
           >
-            <MoreVertical className="h-4 w-4" />
-          </Button>
-          {menuOpen ? (
-            <>
-              <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-md border border-border bg-background p-1 shadow-md">
-                <button
-                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onConfigureProxy();
-                  }}
-                >
-                  <Globe className="h-4 w-4" />
-                  Configure proxy
-                </button>
-                <button
-                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
-                  disabled={account.status === 'busy'}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onDelete();
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete account
-                </button>
-              </div>
-            </>
-          ) : null}
+            <Globe className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={account.status === 'busy'}
+            className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+            title="Delete account"
+            aria-label="Delete account"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         </div>
       </td>
     </tr>
@@ -775,70 +756,67 @@ export function InstagramAccounts() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Instagram accounts</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Link multiple accounts and run actions from any of them.
-        </p>
-      </div>
-
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by username, name or proxy…"
-            className="h-9 pl-9"
-          />
-        </div>
-        <div className="flex overflow-hidden rounded-lg border border-border">
-          {STATUS_FILTERS.map((option, index) => (
+    <div className="bg-background">
+        <div className="sticky top-0 z-20 flex items-stretch bg-background">
+          <div className="relative min-w-0 flex-1 border-r border-border">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by username, name or proxy…"
+              className="h-9 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          {STATUS_FILTERS.map((option) => (
             <button
               key={option.value}
               type="button"
               onClick={() => setStatusFilter(option.value)}
-              className={
-                'h-9 px-3 text-xs font-medium transition-colors ' +
-                (statusFilter === option.value
+              className={cn(
+                'h-9 border-r border-border px-3 text-xs font-medium transition-colors',
+                statusFilter === option.value
                   ? 'bg-accent text-accent-foreground'
-                  : 'bg-background text-muted-foreground hover:bg-accent/50') +
-                (index > 0 ? ' border-l border-border' : '')
-              }
+                  : 'bg-background text-muted-foreground hover:bg-accent/50'
+              )}
             >
               {option.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setShowBulk(true)}
+            disabled={adding}
+            className="inline-flex h-9 items-center gap-1.5 border-r border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Bulk import
+          </button>
+          <button
+            type="button"
+            onClick={openLoginMethod}
+            disabled={adding}
+            className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
+            {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            {adding ? 'Working…' : 'Add account'}
+          </button>
         </div>
-        <Button variant="outline" onClick={() => setShowBulk(true)} disabled={adding} className="h-9">
-          <Upload className="h-4 w-4" />
-          Bulk import
-        </Button>
-        <Button onClick={openLoginMethod} disabled={adding} className="h-9">
-          {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          {adding ? 'Working…' : 'Add account'}
-        </Button>
-      </div>
 
-      {addError ? <p className="mt-3 text-xs text-destructive">{addError}</p> : null}
-
-      <div className="mt-4 overflow-hidden rounded-xl border border-border bg-background">
         <table className="w-full table-fixed border-collapse text-left">
           <colgroup>
             <col />
             <col className="w-24" />
             <col className="w-[38%]" />
             <col className="w-28" />
-            <col className="w-12" />
+            <col className="w-24" />
           </colgroup>
-          <thead>
-            <tr className="bg-muted/40 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              <th className="px-3 py-2 text-left">Account</th>
-              <th className="px-3 py-2 text-left">Status</th>
-              <th className="px-3 py-2 text-left">Proxy</th>
-              <th className="px-3 py-2 text-right">Updated</th>
-              <th className="px-2 py-2" />
+          <thead className="sticky top-9 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className="px-3 py-1.5 text-left">Account</th>
+              <th className="px-3 py-1.5 text-left">Status</th>
+              <th className="px-3 py-1.5 text-left">Proxy</th>
+              <th className="px-3 py-1.5 text-right">Updated</th>
+              <th className="px-2 py-1.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -860,12 +838,6 @@ export function InstagramAccounts() {
             )}
           </tbody>
         </table>
-      </div>
-
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        {filteredAccounts.length} of {accounts.length}{' '}
-        {accounts.length === 1 ? 'account' : 'accounts'}
-      </p>
 
       {proxyTarget ? (
         <ProxyDialog account={proxyTarget} onClose={() => setProxyTarget(null)} />

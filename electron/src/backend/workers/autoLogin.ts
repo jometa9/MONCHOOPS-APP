@@ -1,6 +1,6 @@
 // Auto-login worker: uses provided credentials to log into Instagram automatically via Playwright
 
-import { launchBrowser, onInit, sendError, sendResult, waitFor } from './lib';
+import { isCancelled, launchBrowser, onInit, sendError, sendResult, waitFor } from './lib';
 import type { InstagramCookie } from '../accounts';
 
 interface AutoLoginInit {
@@ -54,6 +54,11 @@ onInit<AutoLoginInit>(async (init) => {
     let sessionFound = false;
 
     while (Date.now() < deadline) {
+      if (isCancelled()) {
+        try { await browser.close(); } catch {}
+        process.exit(0);
+        return;
+      }
       if (context.pages().length === 0 || page.isClosed()) {
         sendError('Login window was closed unexpectedly');
         try { await browser.close(); } catch {}

@@ -11,9 +11,10 @@ import { Home } from '@/screens/Home';
 import { InstagramAccounts } from '@/screens/InstagramAccounts';
 import { MassDMs } from '@/screens/MassDMs';
 import { Scrape } from '@/screens/Scrape';
+import { Queue } from '@/screens/Queue';
 import { Data } from '@/screens/Data';
+import { Categories } from '@/screens/Categories';
 import { Settings } from '@/screens/Settings';
-import { Logs } from '@/screens/Logs';
 import { Spinner } from '@/components/common/Spinner';
 
 function Gate() {
@@ -39,9 +40,10 @@ function Gate() {
             <Route path="accounts" element={<InstagramAccounts />} />
             <Route path="cold-dm" element={<MassDMs />} />
             <Route path="scrape" element={<Scrape />} />
+            <Route path="queue" element={<Queue />} />
             <Route path="data" element={<Data />} />
+            <Route path="categories" element={<Categories />} />
             <Route path="settings" element={<Settings />} />
-            <Route path="logs" element={<Logs />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -172,6 +172,22 @@ export function sendError(msg: string): void {
   }
 }
 
+// Cooperative cancellation: the main process sends `{type:'cancel'}` over IPC
+// when the user hits Cancel in the UI. Workers check `isCancelled()` at their
+// natural yield points and return early so they can flush partial state (CSVs,
+// result payloads) before exiting with code 0. Main escalates to SIGTERM /
+// SIGKILL if the worker doesn't exit within its grace window.
+let cancelled = false;
+const cancelCallbacks = new Set<() => void | Promise<void>>();
+
+export function isCancelled(): boolean {
+  return cancelled;
+}
+
+export function onCancel(cb: () => void | Promise<void>): void {
+  cancelCallbacks.add(cb);
+}
+
 export function onInit<T>(cb: (init: T) => Promise<void> | void): void {
   process.on('message', async (msg: any) => {
     if (msg && msg.type === 'init') {
@@ -182,7 +198,10 @@ export function onInit<T>(cb: (init: T) => Promise<void> | void): void {
         process.exit(1);
       }
     } else if (msg && msg.type === 'cancel') {
-      process.exit(0);
+      cancelled = true;
+      for (const cb of cancelCallbacks) {
+        try { await cb(); } catch {}
+      }
     }
   });
 }

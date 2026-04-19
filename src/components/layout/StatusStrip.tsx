@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Spinner } from '@/components/common/Spinner';
 import { useJobs } from '@/context/JobsContext';
@@ -19,22 +20,35 @@ function jobTitle(kind: string): string {
 export function StatusStrip() {
   const { running, progressByJob } = useJobs();
   const { accounts } = useAccounts();
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
 
   if (running.length === 0) return null;
 
+  function cancel(jobId: string) {
+    setCancellingIds((prev) => {
+      if (prev.has(jobId)) return prev;
+      const next = new Set(prev);
+      next.add(jobId);
+      return next;
+    });
+    // Partial results are persisted on the backend side; see jobs.ts cancelJob.
+    void b2dm.jobs.cancel(jobId);
+  }
+
   return (
     <div className="border-t border-border bg-muted/30 px-4 py-2">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-nowrap items-center gap-3 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {running.map((job) => {
           const progress = progressByJob[job.id];
           const account = job.accountId ? accounts.find((a) => a.id === job.accountId) : null;
           const done = progress?.done ?? job.progressDone;
           const total = progress?.total ?? job.progressTotal;
           const label = total ? `${done} / ${total}` : `${done}`;
+          const cancelling = cancellingIds.has(job.id);
           return (
             <div
               key={job.id}
-              className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs"
+              className="flex shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs"
             >
               <Spinner className="h-3 w-3 text-muted-foreground" />
               <span className="font-medium">{jobTitle(job.kind)}</span>
@@ -46,11 +60,12 @@ export function StatusStrip() {
                 <span className="max-w-[140px] truncate text-muted-foreground">{progress.lastItem}</span>
               ) : null}
               <button
-                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-destructive"
-                onClick={() => void b2dm.jobs.cancel(job.id)}
-                title="Cancel job"
+                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => cancel(job.id)}
+                disabled={cancelling}
+                title={cancelling ? 'Cancelling — saving partial results…' : 'Cancel and keep partial results'}
               >
-                <X className="h-3 w-3" />
+                {cancelling ? <Spinner className="h-3 w-3" /> : <X className="h-3 w-3" />}
               </button>
             </div>
           );

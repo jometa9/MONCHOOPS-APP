@@ -4,6 +4,9 @@
 - instagram link full
 - data screen
 
+- scrape leads functions alls
+- queue process all
+
 - config
     - headless boolean
     - theme toggle

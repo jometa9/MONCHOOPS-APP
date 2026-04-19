@@ -3,7 +3,7 @@
 // never by hitting Instagram's internal JSON endpoints. That's friendlier to
 // IG's bot detection and avoids the schema drift we'd get from private APIs.
 
-import { launchBrowser, onInit, sendError, sendResult, waitFor } from './lib';
+import { isCancelled, launchBrowser, onInit, sendError, sendResult, waitFor } from './lib';
 import type { InstagramCookie } from '../accounts';
 
 interface LoginInit {
@@ -25,6 +25,11 @@ onInit<LoginInit>(async (init) => {
   let sessionFound = false;
 
   while (Date.now() < deadline) {
+    if (isCancelled()) {
+      try { await browser.close(); } catch {}
+      process.exit(0);
+      return;
+    }
     if (context.pages().length === 0 || page.isClosed()) {
       sendError('Login window was closed before completing');
       try { await browser.close(); } catch {}

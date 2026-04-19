@@ -2,15 +2,19 @@
 // one at a time, with a configurable interval + jitter between sends.
 
 import fs from 'fs';
-import { launchBrowser, jitter, onInit, safeGoto, sendError, sendLog, sendProgress, sendResult, waitFor } from './lib';
+import { isCancelled, launchBrowser, jitter, onInit, safeGoto, sendError, sendLog, sendProgress, sendResult, waitFor } from './lib';
 import type { AccountSecrets } from '../accounts';
 
 interface MassDmInit {
   jobId: string;
   secrets: AccountSecrets;
   usernamesCsvPath: string;
-  message: string;
+  messages: string[];
   intervalMs: number;
+}
+
+function pickVariant(messages: string[]): string {
+  return messages[Math.floor(Math.random() * messages.length)]!;
 }
 
 function parseUsernamesCsv(csvPath: string): string[] {
@@ -31,6 +35,11 @@ onInit<MassDmInit>(async (init) => {
     sendError('The username list is empty');
     return;
   }
+  const variants = (init.messages ?? []).map((m) => m.trim()).filter(Boolean);
+  if (variants.length === 0) {
+    sendError('No message variants provided');
+    return;
+  }
 
   sendProgress(0, usernames.length);
   const { browser, context } = await launchBrowser({ headless: false, secrets: init.secrets });
@@ -47,8 +56,9 @@ onInit<MassDmInit>(async (init) => {
   }
 
   for (let i = 0; i < usernames.length; i++) {
+    if (isCancelled()) break;
     const username = usernames[i]!;
-    const personalised = init.message.replace(/\{\{username\}\}/g, username);
+    const personalised = pickVariant(variants).replace(/\{\{username\}\}/g, username);
     try {
       await safeGoto(page, 'https://www.instagram.com/direct/new/');
       await waitFor(1500);

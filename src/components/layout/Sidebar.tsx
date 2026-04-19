@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Database, Home, Instagram, LogOut, ScrollText, Send, Settings, Users } from 'lucide-react';
+import { Database, FolderTree, Home, Instagram, ListTodo, LogOut, Send, Settings, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/context/SessionContext';
 
@@ -11,14 +11,15 @@ interface Item {
 
 const items: Item[] = [
   { to: '/', label: 'Home', icon: Home },
-  { to: '/accounts', label: 'Instagram Accounts', icon: Instagram },
+  { to: '/accounts', label: 'Accounts', icon: Instagram },
   { to: '/cold-dm', label: 'Cold DM', icon: Send },
   { to: '/scrape', label: 'Scrape Leads', icon: Users },
+  { to: '/queue', label: 'Queue', icon: ListTodo },
   { to: '/data', label: 'Data', icon: Database },
+  { to: '/categories', label: 'Categories', icon: FolderTree },
 ];
 
 const bottomItems: Item[] = [
-  { to: '/logs', label: 'Logs', icon: ScrollText },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
