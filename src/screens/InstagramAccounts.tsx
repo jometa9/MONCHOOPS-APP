@@ -31,7 +31,7 @@ function AccountRow({
   onConfigureProxy: () => void;
 }) {
   return (
-    <tr className="border-t border-border hover:bg-accent/40">
+    <tr className="border-t border-border even:bg-muted/30 last:border-b hover:bg-accent/40">
       <td className="px-3 py-1.5">
         <div className="flex items-center gap-2.5">
           {account.profilePicUrl ? (
@@ -607,7 +607,7 @@ function BulkLoginDialog({
                 </thead>
                 <tbody>
                   {parsed.slice(0, 50).map((r) => (
-                    <tr key={r.rowNumber} className="border-t border-border">
+                    <tr key={r.rowNumber} className="border-t border-border even:bg-muted/30 last:border-b">
                       <td className="px-2 py-1 text-muted-foreground">{r.rowNumber}</td>
                       <td className="px-2 py-1 font-mono">{r.username || '—'}</td>
                       <td className="px-2 py-1 font-mono text-muted-foreground">
@@ -821,7 +821,7 @@ export function InstagramAccounts() {
           </thead>
           <tbody>
             {filteredAccounts.length === 0 ? (
-              <tr className="border-t border-border">
+              <tr className="border-t border-border last:border-b">
                 <td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">
                   No accounts match your filters.
                 </td>

@@ -472,7 +472,7 @@ function JobsPanel({
             </thead>
             <tbody>
               {filtered!.length === 0 ? (
-                <tr className="border-t border-border">
+                <tr className="border-t border-border last:border-b">
                   <td colSpan={3} className="px-3 py-10 text-center text-sm text-muted-foreground">
                     No scrapes match your search.
                   </td>
@@ -485,7 +485,7 @@ function JobsPanel({
                       key={row.jobId}
                       onClick={() => void select(row)}
                       className={cn(
-                        'cursor-pointer border-t border-border transition-colors hover:bg-accent/40',
+                        'cursor-pointer border-t border-border transition-colors even:bg-muted/30 last:border-b hover:bg-accent/40',
                         selected && 'bg-primary/5 hover:bg-primary/10',
                         busyId === row.jobId && 'opacity-60'
                       )}
@@ -612,7 +612,7 @@ function CategoryPanel({
             </thead>
             <tbody>
               {filtered!.length === 0 ? (
-                <tr className="border-t border-border">
+                <tr className="border-t border-border last:border-b">
                   <td colSpan={3} className="px-3 py-10 text-center text-sm text-muted-foreground">
                     No categories match your search.
                   </td>
@@ -626,7 +626,7 @@ function CategoryPanel({
                       key={row.id}
                       onClick={() => !disabled && void select(row)}
                       className={cn(
-                        'border-t border-border transition-colors',
+                        'border-t border-border transition-colors even:bg-muted/30 last:border-b',
                         !disabled && 'cursor-pointer hover:bg-accent/40',
                         selected && 'bg-primary/5 hover:bg-primary/10',
                         disabled && 'cursor-not-allowed opacity-50',

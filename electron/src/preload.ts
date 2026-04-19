@@ -91,6 +91,10 @@ const statsApi = {
 
 const scrapesApi = {
   list: () => invoke<import('./backend/jobs').ScrapeResultPublic[]>('scrapes:list'),
+  get: (jobId: string) =>
+    invoke<import('./backend/jobs').ScrapeResultPublic | null>('scrapes:get', jobId),
+  listUsernames: (jobId: string) =>
+    invoke<import('./backend/jobs').ScrapeUsernameRow[]>('scrapes:listUsernames', jobId),
   download: (jobId: string) => invoke<string | null>('scrapes:download', jobId),
   revealInFolder: (jobId: string) => invoke<void>('scrapes:revealInFolder', jobId),
 };

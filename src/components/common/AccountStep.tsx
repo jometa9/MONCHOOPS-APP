@@ -54,7 +54,7 @@ export function AccountStep({ accounts, value, onChange }: Props) {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr className="border-t border-border">
+              <tr className="border-t border-border last:border-b">
                 <td colSpan={2} className="px-3 py-10 text-center text-sm text-muted-foreground">
                   No accounts match your search.
                 </td>
@@ -68,7 +68,7 @@ export function AccountStep({ accounts, value, onChange }: Props) {
                     key={acc.id}
                     onClick={() => !busy && onChange(acc.id)}
                     className={cn(
-                      'cursor-pointer border-t border-border transition-colors hover:bg-accent/40',
+                      'cursor-pointer border-t border-border transition-colors even:bg-muted/30 last:border-b hover:bg-accent/40',
                       selected && 'bg-primary/5 hover:bg-primary/10',
                       busy && 'cursor-not-allowed opacity-60'
                     )}

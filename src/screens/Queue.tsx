@@ -107,7 +107,7 @@ function QueueRow({ job, accountUsername, progress, cancelling, onCancel }: Queu
   const pct = total && total > 0 ? Math.min(100, Math.round((done / total) * 100)) : null;
 
   return (
-    <tr className="border-t border-border">
+    <tr className="border-t border-border even:bg-muted/30 last:border-b">
       <td className="px-3 py-1.5">
         <div className="font-medium">{KIND_LABEL[job.kind] ?? job.kind}</div>
         {progress?.lastItem ? (

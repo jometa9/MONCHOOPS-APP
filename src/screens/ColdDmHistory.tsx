@@ -92,14 +92,14 @@ export function ColdDmHistory() {
         </thead>
         <tbody>
           {filteredRows!.length === 0 ? (
-            <tr className="border-t border-border">
+            <tr className="border-t border-border last:border-b">
               <td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">
                 No runs match your search.
               </td>
             </tr>
           ) : (
             filteredRows!.map((row) => (
-              <tr key={row.jobId} className="border-t border-border">
+              <tr key={row.jobId} className="border-t border-border even:bg-muted/30 last:border-b">
                 <td className="px-3 py-1.5">
                   <div className="flex items-center gap-2">
                     <div className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-muted text-muted-foreground">

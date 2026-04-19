@@ -18,6 +18,7 @@ import {
   listRunningJobs,
   listScrapeResults,
   getScrapeResult,
+  readScrapeUsernames,
   reconcileOnStartup,
   shutdownAllJobs,
   startLogin,
@@ -184,6 +185,10 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     if (!row) return;
     shell.showItemInFolder(row.csvPath);
   });
+  ipcMain.handle('scrapes:listUsernames', async (_e, jobId: string) =>
+    readScrapeUsernames(jobId)
+  );
+  ipcMain.handle('scrapes:get', async (_e, jobId: string) => getScrapeResult(jobId));
 
   // CSV upload (for Mass DM source). Returns the absolute temp path so the
   // renderer can pass it back when starting the job.

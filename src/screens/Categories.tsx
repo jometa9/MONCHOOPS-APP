@@ -172,7 +172,7 @@ export function Categories() {
             </thead>
             <tbody>
               {filteredRows!.length === 0 ? (
-                <tr className="border-t border-border">
+                <tr className="border-t border-border last:border-b">
                   <td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">
                     {rows.length === 0 ? 'No categories yet.' : 'No categories match your search.'}
                   </td>
@@ -181,7 +181,7 @@ export function Categories() {
                 filteredRows!.map((row) => (
                   <tr
                     key={row.id}
-                    className="cursor-pointer border-t border-border hover:bg-accent/40"
+                    className="cursor-pointer border-t border-border even:bg-muted/30 last:border-b hover:bg-accent/40"
                     onClick={() => setSelected(row)}
                   >
                     <td className="px-3 py-1.5">
@@ -274,7 +274,7 @@ function CategoryDetail({ category, onClose }: { category: LeadCategoryPublic; o
             </thead>
             <tbody>
               {leads.map((lead) => (
-                <tr key={lead.id} className="border-t border-border">
+                <tr key={lead.id} className="border-t border-border even:bg-muted/30 last:border-b">
                   <td className="px-4 py-2 font-medium">@{lead.username}</td>
                   <td className="px-4 py-2 text-xs text-muted-foreground">
                     {lead.sourceDetail ?? lead.sourceKind}

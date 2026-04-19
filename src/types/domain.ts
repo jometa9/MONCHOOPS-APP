@@ -55,6 +55,12 @@ export interface ScrapeResultPublic {
   categoryName: string | null;
 }
 
+export interface ScrapeUsernameRow {
+  username: string;
+  source: string | null;
+  sourceRef: string | null;
+}
+
 export interface MassDmResultPublic {
   jobId: string;
   accountId: string | null;

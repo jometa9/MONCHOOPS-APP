@@ -226,6 +226,54 @@ export function getScrapeResult(jobId: string): ScrapeResultPublic | null {
   return row ? scrapeRowToPublic(row) : null;
 }
 
+export interface ScrapeUsernameRow {
+  username: string;
+  source: string | null;
+  sourceRef: string | null;
+}
+
+export function readScrapeUsernames(jobId: string): ScrapeUsernameRow[] {
+  const result = getScrapeResult(jobId);
+  if (!result) return [];
+  if (!fs.existsSync(result.csvPath)) return [];
+  const raw = fs.readFileSync(result.csvPath, 'utf8');
+  const lines = raw.split(/\r?\n/);
+  const out: ScrapeUsernameRow[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line || !line.trim()) continue;
+    const parts = parseCsvLine(line);
+    const username = parts[0]?.trim();
+    if (!username) continue;
+    out.push({
+      username,
+      source: parts[1]?.trim() || null,
+      sourceRef: parts[2]?.trim() || null,
+    });
+  }
+  return out;
+}
+
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i += 1; continue; }
+      if (ch === '"') { inQuotes = false; continue; }
+      cur += ch;
+    } else {
+      if (ch === '"') { inQuotes = true; continue; }
+      if (ch === ',') { out.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
 interface MassDmResultRow {
   job_id: string;
   account_id: string | null;

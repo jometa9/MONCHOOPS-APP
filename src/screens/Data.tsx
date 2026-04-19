@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Database, Download, FolderOpen, Search, Tag } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Database, Download, Eye, FolderOpen, Search, Tag } from 'lucide-react';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
 import { b2dm } from '@/lib/b2dm';
@@ -16,6 +17,7 @@ function formatDuration(ms: number): string {
 }
 
 export function Data() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<ScrapeResultPublic[] | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -102,13 +104,13 @@ export function Data() {
           </thead>
           <tbody>
             {filteredRows!.length === 0 ? (
-              <tr className="border-t border-border">
+              <tr className="border-t border-border last:border-b">
                 <td colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">
                   No scrapes match your search.
                 </td>
               </tr>
             ) : filteredRows!.map((row) => (
-              <tr key={row.jobId} className="border-t border-border">
+              <tr key={row.jobId} className="border-t border-border even:bg-muted/30 last:border-b">
                 <td className="px-3 py-1.5">
                   <div className="font-medium">{row.summary}</div>
                   <div className="text-[11px] text-muted-foreground">{row.kind}</div>
@@ -128,6 +130,15 @@ export function Data() {
                 <td className="px-3 py-1.5 text-muted-foreground">{formatDateTime(row.completedAt)}</td>
                 <td className="px-2 py-1.5">
                   <div className="flex items-center justify-end gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/data/${row.jobId}`)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      title="View usernames"
+                      aria-label="View usernames"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => void download(row.jobId)}

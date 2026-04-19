@@ -7,6 +7,7 @@ import type {
   MassDmResultPublic,
   ScrapeKind,
   ScrapeResultPublic,
+  ScrapeUsernameRow,
 } from '@/types/domain';
 
 type Unsubscribe = () => void;
@@ -59,6 +60,8 @@ export interface JobsApi {
 
 export interface ScrapesApi {
   list(): Promise<ScrapeResultPublic[]>;
+  get(jobId: string): Promise<ScrapeResultPublic | null>;
+  listUsernames(jobId: string): Promise<ScrapeUsernameRow[]>;
   download(jobId: string): Promise<string | null>;
   revealInFolder(jobId: string): Promise<void>;
 }

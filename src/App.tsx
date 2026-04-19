@@ -14,6 +14,7 @@ import { ColdDmHistory } from '@/screens/ColdDmHistory';
 import { Scrape } from '@/screens/Scrape';
 import { Queue } from '@/screens/Queue';
 import { Data } from '@/screens/Data';
+import { LeadsDetail } from '@/screens/LeadsDetail';
 import { Categories } from '@/screens/Categories';
 import { Settings } from '@/screens/Settings';
 import { Spinner } from '@/components/common/Spinner';
@@ -44,6 +45,7 @@ function Gate() {
             <Route path="scrape" element={<Scrape />} />
             <Route path="queue" element={<Queue />} />
             <Route path="data" element={<Data />} />
+            <Route path="data/:jobId" element={<LeadsDetail />} />
             <Route path="categories" element={<Categories />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
