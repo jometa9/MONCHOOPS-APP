@@ -32,7 +32,7 @@ export function AccountStep({ accounts, value, onChange }: Props) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-border bg-background">
       <div className="sticky top-0 z-10 flex items-stretch border-b border-border bg-background">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

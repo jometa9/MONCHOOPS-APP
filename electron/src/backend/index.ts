@@ -14,6 +14,7 @@ import {
   cancelJob,
   getStats,
   listJobs,
+  listMassDmResults,
   listRunningJobs,
   listScrapeResults,
   getScrapeResult,
@@ -162,6 +163,9 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     }
   );
 
+  // Mass DM history
+  ipcMain.handle('massDms:list', async () => listMassDmResults());
+
   // Scrape results
   ipcMain.handle('scrapes:list', async () => listScrapeResults());
   ipcMain.handle('scrapes:download', async (_e, jobId: string) => {
@@ -252,6 +256,11 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   ipcMain.handle('settings:getScrapeExportDir', () => metaGet('scrape_export_dir') ?? '');
   ipcMain.handle('settings:setScrapeExportDir', (_e, dir: string) => {
     metaSet('scrape_export_dir', dir || null);
+  });
+
+  ipcMain.handle('settings:getHeadless', () => metaGet('headless') !== 'false');
+  ipcMain.handle('settings:setHeadless', (_e, headless: boolean) => {
+    metaSet('headless', headless ? 'true' : 'false');
   });
 
   // Lead categories

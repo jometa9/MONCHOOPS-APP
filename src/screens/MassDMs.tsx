@@ -15,7 +15,6 @@ import {
   Play,
   X,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -119,14 +118,25 @@ export function MassDMs() {
 
   if (startedJobId) {
     return (
-      <div className="mx-auto max-w-2xl p-6">
-        <div className="rounded-xl border border-border bg-background p-5">
-          <div className="flex items-center gap-2 text-sm">
-            <Spinner className="h-4 w-4" />
-            <span>Job started. Watch progress in the bottom status bar.</span>
+      <div className="mx-auto max-w-2xl p-4">
+        <div className="border border-border bg-background">
+          <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Cold DM started
           </div>
-          <div className="mt-3 flex gap-2">
-            <Button variant="outline" onClick={resetAll}>Queue another</Button>
+          <div className="p-4">
+            <div className="flex items-center gap-2 text-sm">
+              <Spinner className="h-4 w-4" />
+              <span>Watch progress in the bottom status bar.</span>
+            </div>
+          </div>
+          <div className="flex items-stretch border-t border-border">
+            <button
+              type="button"
+              onClick={resetAll}
+              className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              Queue another
+            </button>
           </div>
         </div>
       </div>
@@ -134,12 +144,14 @@ export function MassDMs() {
   }
 
   return (
-    <div className="flex h-full flex-col pb-[8vh]">
+    <div className="flex h-full flex-col">
       <div className="mx-auto w-full max-w-2xl px-4 pt-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Cold DM</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Four quick steps: pick the account, the leads, write your message, review and send.
-        </p>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Cold DM</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Four quick steps: pick the account, the leads, write your message, review and send.
+          </p>
+        </div>
         <Stepper
           labels={STEP_LABELS}
           current={step}
@@ -148,7 +160,7 @@ export function MassDMs() {
         />
       </div>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4 pt-4">
+      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4 py-4">
         {step === 1 ? (
           <AccountStep
             accounts={accounts}
@@ -186,16 +198,27 @@ export function MassDMs() {
         ) : null}
       </div>
 
-      <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-2 px-4 pt-3">
-        <Button variant="ghost" onClick={back} disabled={step === 1}>
-          <ArrowLeft className="h-4 w-4" />
+      <div className="mx-auto flex w-full max-w-2xl items-stretch border-t border-border">
+        <button
+          type="button"
+          onClick={back}
+          disabled={step === 1}
+          className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
           Back
-        </Button>
+        </button>
+        <div className="flex-1" />
         {step < 4 ? (
-          <Button onClick={next} disabled={!canContinue[step]}>
+          <button
+            type="button"
+            onClick={next}
+            disabled={!canContinue[step]}
+            className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
             Continue
-            <ArrowRight className="h-4 w-4" />
-          </Button>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
         ) : null}
       </div>
     </div>
@@ -224,20 +247,22 @@ function LeadsStep({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/40 p-1">
-        {LEADS_TABS.map((t) => {
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-border bg-background">
+      <div className="flex items-stretch border-b border-border">
+        {LEADS_TABS.map((t, idx) => {
           const Icon = t.icon;
+          const active = tab === t.id;
           return (
             <button
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
               className={cn(
-                'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-colors',
-                tab === t.id
-                  ? 'bg-background shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                'inline-flex h-9 flex-1 items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
+                idx !== LEADS_TABS.length - 1 && 'border-r border-border',
+                active
+                  ? 'bg-accent text-accent-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-accent/50 hover:text-foreground'
               )}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -247,7 +272,7 @@ function LeadsStep({
         })}
       </div>
 
-      <div className="mt-3 flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col">
         {tab === 'file' ? <FilePanel value={value} onChange={onChange} /> : null}
         {tab === 'job' ? <JobsPanel value={value} onChange={onChange} /> : null}
         {tab === 'category' ? <CategoryPanel value={value} onChange={onChange} /> : null}
@@ -309,47 +334,50 @@ function FilePanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-        className={cn(
-          'flex min-h-0 flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed text-center transition-colors',
-          dragOver ? 'border-primary bg-primary/5' : 'border-border bg-background'
-        )}
-      >
-        <UploadCloud className="h-8 w-8 text-muted-foreground" />
-        <div className="mt-2 text-sm font-medium">Drop a usernames file here</div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
-          CSV, TXT, XLSX or XLS — first column is the username.
-        </div>
-        <div className="mt-4">
-          <Button variant="outline" onClick={pickDialog} disabled={loading}>
-            {loading ? <Spinner /> : <FileUp className="h-4 w-4" />}
-            Browse files
-          </Button>
-        </div>
-        {active ? (
-          <div className="mt-4 flex items-center gap-2 rounded-md bg-muted px-3 py-1.5 text-xs">
-            <Check className="h-3.5 w-3.5 text-primary" />
-            <span className="font-medium">{active.label}</span>
-            <span className="text-muted-foreground">· {active.count} usernames</span>
-            <button
-              type="button"
-              onClick={() => onChange(null)}
-              className="ml-1 text-muted-foreground hover:text-foreground"
-              aria-label="Clear file"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : null}
-        {err ? <p className="mt-3 text-xs text-destructive">{err}</p> : null}
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+      className={cn(
+        'flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center transition-colors',
+        dragOver ? 'bg-primary/5' : 'bg-background'
+      )}
+    >
+      <UploadCloud className="h-8 w-8 text-muted-foreground" />
+      <div className="mt-2 text-sm font-medium">Drop a usernames file here</div>
+      <div className="mt-0.5 text-xs text-muted-foreground">
+        CSV, TXT, XLSX or XLS — first column is the username.
       </div>
+      <div className="mt-4">
+        <button
+          type="button"
+          onClick={pickDialog}
+          disabled={loading}
+          className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
+        >
+          {loading ? <Spinner /> : <FileUp className="h-3.5 w-3.5" />}
+          Browse files
+        </button>
+      </div>
+      {active ? (
+        <div className="mt-4 flex items-center gap-2 border border-border bg-muted px-3 py-1.5 text-xs">
+          <Check className="h-3.5 w-3.5 text-primary" />
+          <span className="font-medium">{active.label}</span>
+          <span className="text-muted-foreground">· {active.count} usernames</span>
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="ml-1 text-muted-foreground hover:text-foreground"
+            aria-label="Clear file"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : null}
+      {err ? <p className="mt-3 text-xs text-destructive">{err}</p> : null}
     </div>
   );
 }
@@ -410,7 +438,7 @@ function JobsPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex items-stretch border-b border-border bg-background">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -550,7 +578,7 @@ function CategoryPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex items-stretch border-b border-border bg-background">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -664,13 +692,13 @@ function MessageStep({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-background">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <Label className="text-sm">Message variants</Label>
-          <span className="text-[11px] text-muted-foreground">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col border border-border bg-background">
+        <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <span>Message variants</span>
+          <span className="normal-case font-normal">
             {nonEmpty}/{MAX_VARIANTS} · one picked at random per DM ·{' '}
-            <code className="rounded bg-muted px-1 py-0.5 text-[10px]">{'{{username}}'}</code>
+            <code className="rounded bg-background px-1 py-0.5 text-[10px]">{'{{username}}'}</code>
           </span>
         </div>
         <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-auto p-3">
@@ -682,48 +710,51 @@ function MessageStep({
                 value={value}
                 onChange={(e) => updateVariant(i, e.target.value)}
               />
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="icon"
                 onClick={() => removeVariant(i)}
                 disabled={variants.length <= 1}
                 aria-label={`Remove variant ${i + 1}`}
+                className="inline-flex h-9 w-9 flex-none items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
               >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </div>
           ))}
         </div>
-        <div className="border-t border-border p-3">
-          <Button
+        <div className="border-t border-border p-2">
+          <button
             type="button"
-            variant="outline"
-            size="sm"
             onClick={addVariant}
             disabled={variants.length >= MAX_VARIANTS}
+            className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" />
             Add variant
-          </Button>
+          </button>
         </div>
       </div>
 
-      <div className="space-y-1 rounded-lg border border-border bg-background p-3">
-        <Label htmlFor="dm-interval">Interval between DMs (seconds)</Label>
-        <Input
-          id="dm-interval"
-          type="number"
-          min={3}
-          max={600}
-          value={intervalSec}
-          onChange={(e) =>
-            onIntervalChange(Math.max(3, Math.min(600, Number(e.target.value) || 12)))
-          }
-        />
-        <p className="text-[11px] text-muted-foreground">
-          Minimum 3s. Jitter ±25% is applied automatically.
-        </p>
+      <div className="border border-border bg-background">
+        <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          Pace
+        </div>
+        <div className="space-y-1 p-3">
+          <Label htmlFor="dm-interval">Interval between DMs (seconds)</Label>
+          <Input
+            id="dm-interval"
+            type="number"
+            min={3}
+            max={600}
+            value={intervalSec}
+            onChange={(e) =>
+              onIntervalChange(Math.max(3, Math.min(600, Number(e.target.value) || 12)))
+            }
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Minimum 3s. Jitter ±25% is applied automatically.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -812,7 +843,7 @@ function ReviewStep({
             variants.map((v, i) => (
               <div
                 key={i}
-                className="rounded border border-border bg-muted/30 px-2 py-1.5 text-xs"
+                className="border border-border bg-muted/30 px-2 py-1.5 text-xs"
               >
                 {v}
               </div>
@@ -831,12 +862,16 @@ function ReviewStep({
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       <div>
-        <Button onClick={onConfirm} disabled={submitting}>
-          {submitting ? <Spinner /> : <Play className="h-4 w-4" />}
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={submitting}
+          className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+        >
+          {submitting ? <Spinner /> : <Play className="h-3.5 w-3.5" />}
           {submitting ? 'Starting…' : 'Start Cold DM job'}
-        </Button>
+        </button>
       </div>
     </div>
   );
 }
-

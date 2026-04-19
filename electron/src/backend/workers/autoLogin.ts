@@ -7,13 +7,14 @@ interface AutoLoginInit {
   jobId: string;
   username: string;
   password: string;
+  headless: boolean;
   proxy?: { server: string; username?: string; password?: string };
 }
 
 const LOGIN_DEADLINE_MS = 10 * 60_000;
 
 onInit<AutoLoginInit>(async (init) => {
-  const { browser, context } = await launchBrowser({ headless: true, proxy: init.proxy });
+  const { browser, context } = await launchBrowser({ headless: init.headless, proxy: init.proxy });
 
   const page = await context.newPage();
 

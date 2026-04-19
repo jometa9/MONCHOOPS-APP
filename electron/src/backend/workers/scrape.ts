@@ -31,6 +31,7 @@ interface ScrapeInit {
   secrets: AccountSecrets;
   csvPath: string;
   params: Record<string, unknown>;
+  headless: boolean;
 }
 
 interface CsvSink {
@@ -309,7 +310,7 @@ async function walkPosts(page: any, urls: string[], sink: CsvSink, refTag: strin
 
 onInit<ScrapeInit>(async (init) => {
   const sink = openCsv(init.csvPath);
-  const { browser, context } = await launchBrowser({ headless: false, secrets: init.secrets });
+  const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets });
   const page = await context.newPage();
   sendProgress(0);
 

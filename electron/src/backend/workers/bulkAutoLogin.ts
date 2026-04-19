@@ -18,6 +18,7 @@ interface BulkRowInit {
 interface BulkInit {
   jobId: string;
   rows: BulkRowInit[];
+  headless: boolean;
 }
 
 const PER_ROW_DEADLINE_MS = 90_000;
@@ -47,7 +48,7 @@ onInit<BulkInit>(async (init) => {
     sendLog('info', `[${i + 1}/${total}] Logging in ${label}…`);
 
     try {
-      await processRow(row);
+      await processRow(row, init.headless);
       results.push({ username: row.username, success: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -72,7 +73,7 @@ onInit<BulkInit>(async (init) => {
   process.exit(0);
 });
 
-async function processRow(row: BulkRowInit): Promise<void> {
+async function processRow(row: BulkRowInit, headless: boolean): Promise<void> {
   const proxy = row.proxyUrl
     ? {
         server: row.proxyUrl,
@@ -81,7 +82,7 @@ async function processRow(row: BulkRowInit): Promise<void> {
       }
     : undefined;
 
-  const { browser, context } = await launchBrowser({ headless: true, proxy });
+  const { browser, context } = await launchBrowser({ headless, proxy });
   const page = await context.newPage();
 
   try {

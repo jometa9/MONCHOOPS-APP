@@ -80,13 +80,23 @@ const jobsApi = {
 };
 
 const statsApi = {
-  get: () => invoke<{ totalJobs: number; totalLeads: number }>('stats:get'),
+  get: () =>
+    invoke<{
+      totalJobs: number;
+      totalLeads: number;
+      totalMessages: number;
+      timeSavedMs: number;
+    }>('stats:get'),
 };
 
 const scrapesApi = {
   list: () => invoke<import('./backend/jobs').ScrapeResultPublic[]>('scrapes:list'),
   download: (jobId: string) => invoke<string | null>('scrapes:download', jobId),
   revealInFolder: (jobId: string) => invoke<void>('scrapes:revealInFolder', jobId),
+};
+
+const massDmsApi = {
+  list: () => invoke<import('./backend/jobs').MassDmResultPublic[]>('massDms:list'),
 };
 
 const csvApi = {
@@ -119,6 +129,8 @@ const settingsApi = {
   selectDirectory: () => invoke<string | null>('app:selectDirectory'),
   getScrapeExportDir: () => invoke<string>('settings:getScrapeExportDir'),
   setScrapeExportDir: (dir: string) => invoke<void>('settings:setScrapeExportDir', dir),
+  getHeadless: () => invoke<boolean>('settings:getHeadless'),
+  setHeadless: (headless: boolean) => invoke<void>('settings:setHeadless', headless),
 };
 
 contextBridge.exposeInMainWorld('b2dm', {
@@ -127,6 +139,7 @@ contextBridge.exposeInMainWorld('b2dm', {
   accounts: accountsApi,
   jobs: jobsApi,
   scrapes: scrapesApi,
+  massDms: massDmsApi,
   categories: categoriesApi,
   csv: csvApi,
   settings: settingsApi,

@@ -11,7 +11,6 @@ import {
   Play,
   Tag,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/common/Spinner';
@@ -180,22 +179,37 @@ export function Scrape() {
 
   if (startedJobId) {
     return (
-      <div className="mx-auto max-w-2xl p-6">
-        <div className="rounded-xl border border-border bg-background p-5">
-          <div className="flex items-center gap-2 text-sm">
-            <Spinner className="h-4 w-4" />
-            <span>Scrape started. Watch the status bar for progress.</span>
+      <div className="mx-auto max-w-2xl p-4">
+        <div className="border border-border bg-background">
+          <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Scrape started
           </div>
-          <div className="mt-3 flex gap-2">
-            <Link to="/data">
-              <Button variant="outline">View data</Button>
+          <div className="p-4">
+            <div className="flex items-center gap-2 text-sm">
+              <Spinner className="h-4 w-4" />
+              <span>Watch the status bar for progress.</span>
+            </div>
+          </div>
+          <div className="flex items-stretch border-t border-border">
+            <Link
+              to="/data"
+              className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              View data
             </Link>
-            <Link to="/categories">
-              <Button variant="outline">View categories</Button>
+            <Link
+              to="/categories"
+              className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              View categories
             </Link>
-            <Button variant="ghost" onClick={resetAll}>
+            <button
+              type="button"
+              onClick={resetAll}
+              className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
               Queue another
-            </Button>
+            </button>
           </div>
         </div>
       </div>
@@ -203,7 +217,7 @@ export function Scrape() {
   }
 
   return (
-    <div className="flex h-full flex-col pb-[8vh]">
+    <div className="flex h-full flex-col">
       <div className="mx-auto w-full max-w-2xl px-4 pt-4">
         <h1 className="text-2xl font-semibold tracking-tight">Scrape leads</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -217,7 +231,7 @@ export function Scrape() {
         />
       </div>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4 pt-4">
+      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4 py-4">
         {step === 1 ? (
           <AccountStep accounts={accounts} value={accountId} onChange={setAccountId} />
         ) : null}
@@ -255,16 +269,27 @@ export function Scrape() {
         ) : null}
       </div>
 
-      <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-2 px-4 pt-3">
-        <Button variant="ghost" onClick={back} disabled={step === 1}>
-          <ArrowLeft className="h-4 w-4" />
+      <div className="mx-auto flex w-full max-w-2xl items-stretch border-t border-border">
+        <button
+          type="button"
+          onClick={back}
+          disabled={step === 1}
+          className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
           Back
-        </Button>
+        </button>
+        <div className="flex-1" />
         {step < 3 ? (
-          <Button onClick={next} disabled={!canContinue[step]}>
+          <button
+            type="button"
+            onClick={next}
+            disabled={!canContinue[step]}
+            className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
             Continue
-            <ArrowRight className="h-4 w-4" />
-          </Button>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
         ) : null}
       </div>
     </div>
@@ -314,13 +339,13 @@ function ScrapeConfigStep({
 }) {
   const activeHint = MODES.find((m) => m.id === mode)?.hint;
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
-      <div className="space-y-2">
-        <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+      <div className="border border-border bg-background">
+        <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           Method
-        </Label>
-        <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted/40 p-1 sm:grid-cols-4">
-          {MODES.map((m) => {
+        </div>
+        <div className="flex items-stretch border-b border-border">
+          {MODES.map((m, idx) => {
             const Icon = m.icon;
             const active = m.id === mode;
             return (
@@ -329,10 +354,11 @@ function ScrapeConfigStep({
                 type="button"
                 onClick={() => onModeChange(m.id)}
                 className={cn(
-                  'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-colors',
+                  'inline-flex h-9 flex-1 items-center justify-center gap-1.5 px-2 text-xs font-medium transition-colors',
+                  idx !== MODES.length - 1 && 'border-r border-border',
                   active
-                    ? 'bg-background shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'bg-accent text-accent-foreground'
+                    : 'bg-background text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -342,103 +368,109 @@ function ScrapeConfigStep({
           })}
         </div>
         {activeHint ? (
-          <p className="text-[11px] text-muted-foreground">{activeHint}</p>
+          <div className="border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+            {activeHint}
+          </div>
         ) : null}
+
+        <div className="p-3">
+          {mode === 'scrape_by_username' ? (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="sc-user">Target username</Label>
+                <Input
+                  id="sc-user"
+                  value={config.username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="@nike"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="sc-max">Max leads (blank = all)</Label>
+                <Input
+                  id="sc-max"
+                  type="number"
+                  min={1}
+                  value={config.maxInput}
+                  onChange={(e) => setMaxInput(e.target.value)}
+                  placeholder="e.g. 2000"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  We pull followers first, then post &amp; reel engagers, stopping once the
+                  cap is reached (or everything is exhausted).
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {mode === 'scrape_by_post' ? (
+            <div className="space-y-1">
+              <Label htmlFor="sc-post">Post or reel URL</Label>
+              <Input
+                id="sc-post"
+                value={config.postUrl}
+                onChange={(e) => setPostUrl(e.target.value)}
+                placeholder="https://www.instagram.com/p/… or /reel/…"
+              />
+            </div>
+          ) : null}
+
+          {mode === 'scrape_by_hashtag' ? (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="sc-tag">Hashtag (no #)</Label>
+                <Input
+                  id="sc-tag"
+                  value={config.hashtag}
+                  onChange={(e) => setHashtag(e.target.value)}
+                  placeholder="travel"
+                />
+              </div>
+              <DateRangeFields
+                from={config.fromDate}
+                to={config.toDate}
+                setFrom={setFromDate}
+                setTo={setToDate}
+              />
+            </div>
+          ) : null}
+
+          {mode === 'scrape_by_location' ? (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="sc-loc">Location URL or ID</Label>
+                <Input
+                  id="sc-loc"
+                  value={config.locationUrl}
+                  onChange={(e) => setLocationUrl(e.target.value)}
+                  placeholder="https://www.instagram.com/explore/locations/213385402/new-york-new-york/"
+                />
+              </div>
+              <DateRangeFields
+                from={config.fromDate}
+                to={config.toDate}
+                setFrom={setFromDate}
+                setTo={setToDate}
+              />
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-background p-4">
-        {mode === 'scrape_by_username' ? (
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="sc-user">Target username</Label>
-              <Input
-                id="sc-user"
-                value={config.username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="@nike"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="sc-max">Max leads (blank = all)</Label>
-              <Input
-                id="sc-max"
-                type="number"
-                min={1}
-                value={config.maxInput}
-                onChange={(e) => setMaxInput(e.target.value)}
-                placeholder="e.g. 2000"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                We pull followers first, then post &amp; reel engagers, stopping once the
-                cap is reached (or everything is exhausted).
-              </p>
-            </div>
-          </div>
-        ) : null}
-
-        {mode === 'scrape_by_post' ? (
-          <div className="space-y-1">
-            <Label htmlFor="sc-post">Post or reel URL</Label>
-            <Input
-              id="sc-post"
-              value={config.postUrl}
-              onChange={(e) => setPostUrl(e.target.value)}
-              placeholder="https://www.instagram.com/p/… or /reel/…"
-            />
-          </div>
-        ) : null}
-
-        {mode === 'scrape_by_hashtag' ? (
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="sc-tag">Hashtag (no #)</Label>
-              <Input
-                id="sc-tag"
-                value={config.hashtag}
-                onChange={(e) => setHashtag(e.target.value)}
-                placeholder="travel"
-              />
-            </div>
-            <DateRangeFields
-              from={config.fromDate}
-              to={config.toDate}
-              setFrom={setFromDate}
-              setTo={setToDate}
-            />
-          </div>
-        ) : null}
-
-        {mode === 'scrape_by_location' ? (
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="sc-loc">Location URL or ID</Label>
-              <Input
-                id="sc-loc"
-                value={config.locationUrl}
-                onChange={(e) => setLocationUrl(e.target.value)}
-                placeholder="https://www.instagram.com/explore/locations/213385402/new-york-new-york/"
-              />
-            </div>
-            <DateRangeFields
-              from={config.fromDate}
-              to={config.toDate}
-              setFrom={setFromDate}
-              setTo={setToDate}
-            />
-          </div>
-        ) : null}
-      </div>
-
-      <div className="space-y-2 rounded-lg border border-border bg-background p-4">
-        <Label>Category</Label>
-        <CategoryPicker
-          value={category}
-          onChange={onCategoryChange}
-          disabled={submitting}
-        />
-        <p className="text-[11px] text-muted-foreground">
-          Optional. Tagged scrapes get pooled into a deduplicated lead category.
-        </p>
+      <div className="border border-border bg-background">
+        <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          Category
+        </div>
+        <div className="space-y-2 p-3">
+          <CategoryPicker
+            value={category}
+            onChange={onCategoryChange}
+            disabled={submitting}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Optional. Tagged scrapes get pooled into a deduplicated lead category.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -552,10 +584,15 @@ function ReviewStep({
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       <div>
-        <Button onClick={onConfirm} disabled={submitting}>
-          {submitting ? <Spinner /> : <Play className="h-4 w-4" />}
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={submitting}
+          className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+        >
+          {submitting ? <Spinner /> : <Play className="h-3.5 w-3.5" />}
           {submitting ? 'Starting…' : 'Start scrape'}
-        </Button>
+        </button>
       </div>
     </div>
   );

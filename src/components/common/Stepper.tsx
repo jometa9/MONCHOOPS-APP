@@ -10,11 +10,12 @@ interface StepperProps {
 
 export function Stepper({ labels, current, onJump, canJump }: StepperProps) {
   return (
-    <div className="mt-4 flex items-center gap-2">
+    <div className="mt-4 flex items-stretch border-y border-border">
       {labels.map((label, i) => {
         const num = i + 1;
         const active = num === current;
         const done = num < current;
+        const isLast = i === labels.length - 1;
         const clickable = !!onJump && (num < current || (canJump?.(num) ?? true));
         return (
           <button
@@ -23,10 +24,11 @@ export function Stepper({ labels, current, onJump, canJump }: StepperProps) {
             onClick={() => clickable && onJump?.(num)}
             disabled={!clickable}
             className={cn(
-              'flex flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors',
-              active && 'border-primary bg-primary/10 text-foreground',
-              done && 'border-border bg-muted text-foreground hover:bg-accent',
-              !active && !done && 'border-border bg-background text-muted-foreground',
+              'inline-flex h-9 flex-1 items-center gap-2 px-3 text-xs font-medium transition-colors',
+              !isLast && 'border-r border-border',
+              active && 'bg-accent text-accent-foreground',
+              done && 'bg-background text-foreground hover:bg-accent/50',
+              !active && !done && 'bg-background text-muted-foreground',
               !clickable && 'cursor-not-allowed opacity-70'
             )}
           >

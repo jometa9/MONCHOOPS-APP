@@ -154,7 +154,26 @@ function migrate(db: Database): void {
     `);
   }
 
-  db.pragma('user_version = 5');
+  if (current < 6) {
+    // History of mass DM runs. One row per completed/cancelled mass_dm job,
+    // used both for the Cold DM history UI and for computing Time Saved /
+    // Messages Sent stats on Home.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS mass_dm_results (
+        job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+        sent_count INTEGER NOT NULL,
+        failed_count INTEGER NOT NULL,
+        total_count INTEGER NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        completed_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_mass_dm_results_completed
+        ON mass_dm_results(completed_at DESC);
+    `);
+  }
+
+  db.pragma('user_version = 6');
 }
 
 // meta helpers — used by license.ts for ad-hoc key/value state.

@@ -1,7 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
-import { StatusStrip } from './StatusStrip';
 
 export function AppShell() {
   return (
@@ -13,7 +12,6 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
-      <StatusStrip />
     </div>
   );
 }

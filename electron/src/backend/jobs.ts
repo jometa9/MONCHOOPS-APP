@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { ChildProcess, fork } from 'child_process';
 import { app } from 'electron';
-import { getDb } from './db';
+import { getDb, metaGet } from './db';
 import {
   createAccount,
   getAccount,
@@ -47,6 +47,17 @@ export interface ScrapeResultPublic {
   completedAt: number;
   categoryId: string | null;
   categoryName: string | null;
+}
+
+export interface MassDmResultPublic {
+  jobId: string;
+  accountId: string | null;
+  accountUsername: string | null;
+  sentCount: number;
+  failedCount: number;
+  totalCount: number;
+  durationMs: number;
+  completedAt: number;
 }
 
 interface JobRow {
@@ -159,6 +170,8 @@ export function listRunningJobs(): JobPublic[] {
 export interface StatsPublic {
   totalJobs: number;
   totalLeads: number;
+  totalMessages: number;
+  timeSavedMs: number;
 }
 
 export function getStats(): StatsPublic {
@@ -167,11 +180,31 @@ export function getStats(): StatsPublic {
     .prepare<[], { c: number }>('SELECT COUNT(*) AS c FROM jobs')
     .get();
   const leadsRow = db
-    .prepare<[], { c: number }>('SELECT COUNT(*) AS c FROM leads')
+    .prepare<[], { c: number | null }>(
+      'SELECT COALESCE(SUM(username_count), 0) AS c FROM scrape_results'
+    )
+    .get();
+  const messagesRow = db
+    .prepare<[], { c: number | null }>(
+      'SELECT COALESCE(SUM(sent_count), 0) AS c FROM mass_dm_results'
+    )
+    .get();
+  const scrapeTimeRow = db
+    .prepare<[], { c: number | null }>(
+      'SELECT COALESCE(SUM(duration_ms), 0) AS c FROM scrape_results'
+    )
+    .get();
+  const dmTimeRow = db
+    .prepare<[], { c: number | null }>(
+      'SELECT COALESCE(SUM(duration_ms), 0) AS c FROM mass_dm_results'
+    )
     .get();
   return {
     totalJobs: Number(jobsRow?.c) || 0,
     totalLeads: Number(leadsRow?.c) || 0,
+    totalMessages: Number(messagesRow?.c) || 0,
+    timeSavedMs:
+      (Number(scrapeTimeRow?.c) || 0) + (Number(dmTimeRow?.c) || 0),
   };
 }
 
@@ -193,6 +226,47 @@ export function getScrapeResult(jobId: string): ScrapeResultPublic | null {
   return row ? scrapeRowToPublic(row) : null;
 }
 
+interface MassDmResultRow {
+  job_id: string;
+  account_id: string | null;
+  account_username: string | null;
+  sent_count: number;
+  failed_count: number;
+  total_count: number;
+  duration_ms: number;
+  completed_at: number;
+}
+
+const MASS_DM_RESULT_SELECT = `
+  SELECT
+    mdr.*,
+    a.username AS account_username
+  FROM mass_dm_results mdr
+  LEFT JOIN accounts a ON a.id = mdr.account_id
+`;
+
+function massDmRowToPublic(row: MassDmResultRow): MassDmResultPublic {
+  return {
+    jobId: row.job_id,
+    accountId: row.account_id,
+    accountUsername: row.account_username,
+    sentCount: row.sent_count,
+    failedCount: row.failed_count,
+    totalCount: row.total_count,
+    durationMs: row.duration_ms,
+    completedAt: row.completed_at,
+  };
+}
+
+export function listMassDmResults(): MassDmResultPublic[] {
+  const rows = getDb()
+    .prepare<[], MassDmResultRow>(
+      `${MASS_DM_RESULT_SELECT} ORDER BY mdr.completed_at DESC`
+    )
+    .all();
+  return rows.map(massDmRowToPublic);
+}
+
 function scrapesDir(): string {
   const d = path.join(app.getPath('userData'), 'scrapes');
   fs.mkdirSync(d, { recursive: true });
@@ -202,6 +276,15 @@ function scrapesDir(): string {
 function workerScriptPath(name: string): string {
   // After tsc, this file lives at electron/dist/backend/jobs.js
   return path.join(__dirname, 'workers', `${name}.js`);
+}
+
+// Headless preference is persisted in the meta table so workers can read it
+// at job-start time. Defaults to true (browsers stay hidden) to match the
+// renderer's PreferencesContext default.
+function getHeadlessPref(): boolean {
+  const raw = metaGet('headless');
+  if (raw == null) return true;
+  return raw !== 'false';
 }
 
 function workerForKind(kind: JobKind): string {
@@ -277,7 +360,12 @@ export function startAutoLogin(args: StartAutoLoginArgs): string {
   const scriptPath = workerScriptPath('autoLogin');
   const child = spawnWorker(scriptPath, jobId, {
     type: 'init',
-    payload: { jobId, username: args.username, password: args.password },
+    payload: {
+      jobId,
+      username: args.username,
+      password: args.password,
+      headless: getHeadlessPref(),
+    },
   });
   runningChildren.set(jobId, child);
   runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });
@@ -306,7 +394,7 @@ export function startBulkAutoLogin(rows: BulkLoginRow[]): string {
   const scriptPath = workerScriptPath('bulkAutoLogin');
   const child = spawnWorker(scriptPath, jobId, {
     type: 'init',
-    payload: { jobId, rows },
+    payload: { jobId, rows, headless: getHeadlessPref() },
   });
   runningChildren.set(jobId, child);
   runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });
@@ -348,6 +436,7 @@ export function startMassDm(args: StartMassDmArgs): string {
       usernamesCsvPath: args.usernamesCsvPath,
       messages,
       intervalMs: args.intervalMs,
+      headless: getHeadlessPref(),
     },
   });
   runningChildren.set(jobId, child);
@@ -392,6 +481,7 @@ export function startScrape(args: StartScrapeArgs): string {
       secrets,
       csvPath,
       params: paramsWithCategory,
+      headless: getHeadlessPref(),
     },
   });
   runningChildren.set(jobId, child);
@@ -564,7 +654,33 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
       } catch (err) {
         console.error('[jobs] failed to persist login result:', err);
       }
-    } else if (meta.kind !== 'mass_dm' && r.csvPath) {
+    } else if (meta.kind === 'mass_dm') {
+      try {
+        const sent = Number(r.sent) || 0;
+        const failed = Array.isArray(r.failed)
+          ? r.failed.length
+          : Number(r.failed) || 0;
+        const total = Number(r.total) || sent + failed;
+        getDb()
+          .prepare(
+            `INSERT OR REPLACE INTO mass_dm_results(
+               job_id, account_id, sent_count, failed_count, total_count,
+               duration_ms, completed_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            jobId,
+            meta.accountId,
+            sent,
+            failed,
+            total,
+            Date.now() - meta.startedAt,
+            Date.now()
+          );
+      } catch (err) {
+        console.error('[jobs] failed to persist mass_dm result:', err);
+      }
+    } else if (r.csvPath) {
       try {
         const params = (() => {
           try { return JSON.parse(jobRow?.params_json ?? '{}'); } catch { return {}; }

@@ -4,6 +4,7 @@ import type {
   JobPublic,
   LeadCategoryPublic,
   LeadPublic,
+  MassDmResultPublic,
   ScrapeKind,
   ScrapeResultPublic,
 } from '@/types/domain';
@@ -62,6 +63,10 @@ export interface ScrapesApi {
   revealInFolder(jobId: string): Promise<void>;
 }
 
+export interface MassDmsApi {
+  list(): Promise<MassDmResultPublic[]>;
+}
+
 export interface CategoriesApi {
   list(): Promise<LeadCategoryPublic[]>;
   create(name: string): Promise<LeadCategoryPublic>;
@@ -80,7 +85,12 @@ export interface CsvApi {
 }
 
 export interface StatsApi {
-  get(): Promise<{ totalJobs: number; totalLeads: number }>;
+  get(): Promise<{
+    totalJobs: number;
+    totalLeads: number;
+    totalMessages: number;
+    timeSavedMs: number;
+  }>;
 }
 
 export interface SettingsApi {
@@ -90,6 +100,8 @@ export interface SettingsApi {
   selectDirectory(): Promise<string | null>;
   getScrapeExportDir(): Promise<string>;
   setScrapeExportDir(dir: string): Promise<void>;
+  getHeadless(): Promise<boolean>;
+  setHeadless(headless: boolean): Promise<void>;
 }
 
 export interface B2dmApi {
@@ -117,6 +129,7 @@ export interface B2dmApi {
   accounts: AccountsApi;
   jobs: JobsApi;
   scrapes: ScrapesApi;
+  massDms: MassDmsApi;
   categories: CategoriesApi;
   csv: CsvApi;
   settings: SettingsApi;

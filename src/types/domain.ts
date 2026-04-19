@@ -55,6 +55,17 @@ export interface ScrapeResultPublic {
   categoryName: string | null;
 }
 
+export interface MassDmResultPublic {
+  jobId: string;
+  accountId: string | null;
+  accountUsername: string | null;
+  sentCount: number;
+  failedCount: number;
+  totalCount: number;
+  durationMs: number;
+  completedAt: number;
+}
+
 export interface LeadCategoryPublic {
   id: string;
   name: string;

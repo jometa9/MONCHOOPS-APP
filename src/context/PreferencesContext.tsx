@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { b2dm } from '@/lib/b2dm';
 
 interface Preferences {
   headless: boolean;
@@ -15,6 +16,10 @@ interface PreferencesContextValue {
 
 const STORAGE_KEY = 'b2dm-prefs';
 
+// `headless` is authoritative in the backend meta table (workers read it at
+// job start). `soundsEnabled` and `scrapeExportDir` stay in localStorage /
+// their own IPC respectively — this cache exists only to keep the renderer's
+// initial paint from flashing stale values before the backend responds.
 function loadPrefs(): Preferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -39,6 +44,17 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
   const [prefs, setPrefs] = useState<Preferences>(loadPrefs);
 
+  useEffect(() => {
+    void b2dm.settings.getHeadless().then((headless) => {
+      setPrefs((prev) => {
+        if (prev.headless === headless) return prev;
+        const next = { ...prev, headless };
+        savePrefs(next);
+        return next;
+      });
+    });
+  }, []);
+
   const update = useCallback((patch: Partial<Preferences>) => {
     setPrefs((prev) => {
       const next = { ...prev, ...patch };
@@ -47,11 +63,19 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     });
   }, []);
 
+  const setHeadless = useCallback(
+    (v: boolean) => {
+      update({ headless: v });
+      void b2dm.settings.setHeadless(v);
+    },
+    [update]
+  );
+
   return (
     <PreferencesContext.Provider
       value={{
         prefs,
-        setHeadless: (v) => update({ headless: v }),
+        setHeadless,
         setSoundsEnabled: (v) => update({ soundsEnabled: v }),
         setScrapeExportDir: (v) => update({ scrapeExportDir: v }),
       }}

@@ -11,6 +11,7 @@ interface MassDmInit {
   usernamesCsvPath: string;
   messages: string[];
   intervalMs: number;
+  headless: boolean;
 }
 
 function pickVariant(messages: string[]): string {
@@ -42,7 +43,7 @@ onInit<MassDmInit>(async (init) => {
   }
 
   sendProgress(0, usernames.length);
-  const { browser, context } = await launchBrowser({ headless: false, secrets: init.secrets });
+  const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets });
 
   const page = await context.newPage();
   let sent = 0;

@@ -10,6 +10,7 @@ import { NoSubscription } from '@/screens/NoSubscription';
 import { Home } from '@/screens/Home';
 import { InstagramAccounts } from '@/screens/InstagramAccounts';
 import { MassDMs } from '@/screens/MassDMs';
+import { ColdDmHistory } from '@/screens/ColdDmHistory';
 import { Scrape } from '@/screens/Scrape';
 import { Queue } from '@/screens/Queue';
 import { Data } from '@/screens/Data';
@@ -39,6 +40,7 @@ function Gate() {
             <Route index element={<Home />} />
             <Route path="accounts" element={<InstagramAccounts />} />
             <Route path="cold-dm" element={<MassDMs />} />
+            <Route path="dm-history" element={<ColdDmHistory />} />
             <Route path="scrape" element={<Scrape />} />
             <Route path="queue" element={<Queue />} />
             <Route path="data" element={<Data />} />

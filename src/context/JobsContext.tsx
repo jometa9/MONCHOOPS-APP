@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { b2dm } from '@/lib/b2dm';
+import { playCompletionSound } from '@/lib/sound';
+import { usePreferences } from '@/context/PreferencesContext';
 import type { JobPublic } from '@/types/domain';
 
 interface JobProgress {
@@ -20,6 +22,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<JobPublic[]>([]);
   const [progressByJob, setProgressByJob] = useState<Record<string, JobProgress>>({});
   const mountedRef = useRef(true);
+  const { prefs } = usePreferences();
+  const soundsEnabledRef = useRef(prefs.soundsEnabled);
+  soundsEnabledRef.current = prefs.soundsEnabled;
 
   const refresh = useCallback(async () => {
     const list = await b2dm.jobs.listRunning();
@@ -45,6 +50,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         delete next[evt.jobId];
         return next;
       });
+      if (evt.status === 'completed' && soundsEnabledRef.current) {
+        playCompletionSound();
+      }
     });
     return () => {
       mountedRef.current = false;
