@@ -1,42 +1,21 @@
 // Profile-level primitives: enumerate a target user's posts, reels, and
 // followers. Each function navigates on its own so callers can compose them
-// freely. All accept an optional `max` cap; when omitted they scroll until
-// Instagram stops yielding new items.
+// freely. Post/reel iterators yield URLs lazily as the grid is scrolled.
 
 import { safeGoto, sendLog, waitFor } from '../lib';
 import { SELECTORS, RESERVED_PATHS } from './selectors';
-import { collectByScrolling, scrollDialog, scrollWindow } from './scroll';
+import { collectByScrolling, iterateByScrolling, scrollDialog, scrollWindow } from './scroll';
 
 type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
-
-export interface ProfileLinksResult {
-  /** Absolute URLs, in the order they appear on the grid. */
-  links: string[];
-  /** First link in the grid, or null if the profile has none. */
-  firstLink: string | null;
-  /** 1-based position of `firstLink` in the grid — always 1 when present. */
-  firstPosition: number;
-  count: number;
-}
 
 function sanitizeUsername(raw: string): string {
   return raw.replace(/^@+/, '').trim();
 }
 
-function buildResult(links: string[]): ProfileLinksResult {
-  return {
-    links,
-    firstLink: links[0] ?? null,
-    firstPosition: links.length > 0 ? 1 : 0,
-    count: links.length,
-  };
-}
-
-export async function getPostLinks(
+export async function* iterUserPosts(
   page: Page,
-  username: string,
-  max?: number
-): Promise<ProfileLinksResult> {
+  username: string
+): AsyncGenerator<string, void, void> {
   const clean = sanitizeUsername(username);
   if (!clean) throw new Error('username is required');
 
@@ -46,26 +25,19 @@ export async function getPostLinks(
 
   const state = await waitForProfileGrid(page, 'post');
   sendLog('info', `  [posts] grid state: ${state}`);
-  if (state === 'private' || state === 'empty') return buildResult([]);
+  if (state === 'private' || state === 'empty') return;
 
   await dumpGridDiagnostics(page, 'p');
-
-  const links = await collectByScrolling<string>({
-    max,
+  yield* iterateByScrolling<string>({
     scroll: () => scrollWindow(page),
     extract: () => extractMediaLinks(page, 'p'),
-    onBatch: (added) => sendLog('info', `  [posts] +${added.length} link(s)`),
   });
-
-  sendLog('info', `  [posts] collected ${links.length} URL(s)`);
-  return buildResult(links);
 }
 
-export async function getReelLinks(
+export async function* iterUserReels(
   page: Page,
-  username: string,
-  max?: number
-): Promise<ProfileLinksResult> {
+  username: string
+): AsyncGenerator<string, void, void> {
   const clean = sanitizeUsername(username);
   if (!clean) throw new Error('username is required');
 
@@ -75,19 +47,13 @@ export async function getReelLinks(
 
   const state = await waitForProfileGrid(page, 'reel');
   sendLog('info', `  [reels] grid state: ${state}`);
-  if (state === 'private' || state === 'empty') return buildResult([]);
+  if (state === 'private' || state === 'empty') return;
 
   await dumpGridDiagnostics(page, 'reel');
-
-  const links = await collectByScrolling<string>({
-    max,
+  yield* iterateByScrolling<string>({
     scroll: () => scrollWindow(page),
     extract: () => extractMediaLinks(page, 'reel'),
-    onBatch: (added) => sendLog('info', `  [reels] +${added.length} link(s)`),
   });
-
-  sendLog('info', `  [reels] collected ${links.length} URL(s)`);
-  return buildResult(links);
 }
 
 // Robust media-link extractor. Scans every anchor on the page, normalises
@@ -187,6 +153,7 @@ async function waitForProfileGrid(page: Page, kind: 'post' | 'reel'): Promise<Gr
 export interface FollowersOpts {
   max?: number;
   onBatch?: (added: string[]) => void;
+  shouldStop?: () => boolean;
 }
 
 export async function getFollowers(
@@ -207,6 +174,7 @@ export async function getFollowers(
 
   return collectByScrolling<string>({
     max: opts.max,
+    shouldStop: opts.shouldStop,
     onBatch: opts.onBatch,
     scroll: () => scrollDialog(page),
     extract: () => extractUsernamesFromDialog(page),

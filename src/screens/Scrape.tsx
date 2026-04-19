@@ -47,28 +47,16 @@ const MODES: { id: Mode; label: string; hint: string; icon: typeof AtSign }[] = 
   {
     id: 'scrape_by_hashtag',
     label: 'By hashtag',
-    hint: 'Engagers of every post that matches, within a date range',
+    hint: 'Commenters + likers of posts tagged with the hashtag',
     icon: Hash,
   },
   {
     id: 'scrape_by_location',
     label: 'By location',
-    hint: 'Engagers of every post tagged at the location, within a date range',
+    hint: 'Commenters + likers of posts tagged at the location',
     icon: MapPin,
   },
 ];
-
-function dateInputToEpoch(value: string): number | undefined {
-  if (!value) return undefined;
-  const t = Date.parse(`${value}T00:00:00`);
-  return Number.isFinite(t) ? t : undefined;
-}
-
-function dateInputToEndOfDay(value: string): number | undefined {
-  if (!value) return undefined;
-  const t = Date.parse(`${value}T23:59:59`);
-  return Number.isFinite(t) ? t : undefined;
-}
 
 export function Scrape() {
   const { accounts } = useAccounts();
@@ -82,13 +70,12 @@ export function Scrape() {
   const [postUrl, setPostUrl] = useState('');
   const [hashtag, setHashtag] = useState('');
   const [locationUrl, setLocationUrl] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
   const [category, setCategory] = useState<CategorySelection>({ mode: 'none' });
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startedJobId, setStartedJobId] = useState<string | null>(null);
+  const [wasEnqueued, setWasEnqueued] = useState(false);
 
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.id === accountId) ?? null,
@@ -96,8 +83,8 @@ export function Scrape() {
   );
 
   const config = useMemo(
-    () => ({ username, maxInput, postUrl, hashtag, locationUrl, fromDate, toDate }),
-    [username, maxInput, postUrl, hashtag, locationUrl, fromDate, toDate]
+    () => ({ username, maxInput, postUrl, hashtag, locationUrl }),
+    [username, maxInput, postUrl, hashtag, locationUrl]
   );
 
   const targetFilled =
@@ -127,32 +114,25 @@ export function Scrape() {
     if (!accountId || !targetFilled) return;
     setSubmitting(true);
     setError(null);
+    const enqueued = selectedAccount?.status === 'busy';
     try {
       const categoryPayload =
         category.mode === 'existing' ? { categoryId: category.categoryId } : {};
 
+      const max = parseMaxInput(maxInput);
+      const maxPayload = max != null ? { max } : {};
       let params: Record<string, unknown> = { ...categoryPayload };
       if (mode === 'scrape_by_username') {
-        const max = parseMaxInput(maxInput);
-        params = { ...params, username, ...(max != null ? { max } : {}) };
+        params = { ...params, username, ...maxPayload };
       } else if (mode === 'scrape_by_post') {
         params = { ...params, postUrl };
       } else if (mode === 'scrape_by_hashtag') {
-        params = {
-          ...params,
-          hashtag,
-          from: dateInputToEpoch(fromDate),
-          to: dateInputToEndOfDay(toDate),
-        };
+        params = { ...params, hashtag, ...maxPayload };
       } else if (mode === 'scrape_by_location') {
-        params = {
-          ...params,
-          locationUrl,
-          from: dateInputToEpoch(fromDate),
-          to: dateInputToEndOfDay(toDate),
-        };
+        params = { ...params, locationUrl, ...maxPayload };
       }
       const jobId = await b2dm.jobs.startScrape({ accountId, kind: mode, params });
+      setWasEnqueued(enqueued);
       setStartedJobId(jobId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start scrape');
@@ -170,11 +150,10 @@ export function Scrape() {
     setPostUrl('');
     setHashtag('');
     setLocationUrl('');
-    setFromDate('');
-    setToDate('');
     setCategory({ mode: 'none' });
     setError(null);
     setStartedJobId(null);
+    setWasEnqueued(false);
   }
 
   if (startedJobId) {
@@ -182,12 +161,16 @@ export function Scrape() {
       <div className="mx-auto max-w-2xl p-4">
         <div className="border border-border bg-background">
           <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Scrape started
+            {wasEnqueued ? 'Scrape queued' : 'Scrape started'}
           </div>
           <div className="p-4">
             <div className="flex items-center gap-2 text-sm">
               <Spinner className="h-4 w-4" />
-              <span>Watch the status bar for progress.</span>
+              <span>
+                {wasEnqueued
+                  ? 'The account is busy — this scrape will start once earlier jobs finish. Track it in the Queue.'
+                  : 'Watch the status bar for progress.'}
+              </span>
             </div>
           </div>
           <div className="flex items-stretch border-t border-border">
@@ -246,8 +229,6 @@ export function Scrape() {
             setPostUrl={setPostUrl}
             setHashtag={setHashtag}
             setLocationUrl={setLocationUrl}
-            setFromDate={setFromDate}
-            setToDate={setToDate}
             category={category}
             onCategoryChange={setCategory}
             submitting={submitting}
@@ -262,6 +243,7 @@ export function Scrape() {
             category={category}
             error={error}
             submitting={submitting}
+            willEnqueue={selectedAccount?.status === 'busy'}
             onEditAccount={() => setStep(1)}
             onEditScrape={() => setStep(2)}
             onConfirm={confirmAndStart}
@@ -304,8 +286,6 @@ interface ConfigState {
   postUrl: string;
   hashtag: string;
   locationUrl: string;
-  fromDate: string;
-  toDate: string;
 }
 
 function ScrapeConfigStep({
@@ -317,8 +297,6 @@ function ScrapeConfigStep({
   setPostUrl,
   setHashtag,
   setLocationUrl,
-  setFromDate,
-  setToDate,
   category,
   onCategoryChange,
   submitting,
@@ -331,8 +309,6 @@ function ScrapeConfigStep({
   setPostUrl: (v: string) => void;
   setHashtag: (v: string) => void;
   setLocationUrl: (v: string) => void;
-  setFromDate: (v: string) => void;
-  setToDate: (v: string) => void;
   category: CategorySelection;
   onCategoryChange: (c: CategorySelection) => void;
   submitting: boolean;
@@ -426,12 +402,7 @@ function ScrapeConfigStep({
                   placeholder="travel"
                 />
               </div>
-              <DateRangeFields
-                from={config.fromDate}
-                to={config.toDate}
-                setFrom={setFromDate}
-                setTo={setToDate}
-              />
+              <MaxLeadsField value={config.maxInput} onChange={setMaxInput} />
             </div>
           ) : null}
 
@@ -446,12 +417,7 @@ function ScrapeConfigStep({
                   placeholder="https://www.instagram.com/explore/locations/213385402/new-york-new-york/"
                 />
               </div>
-              <DateRangeFields
-                from={config.fromDate}
-                to={config.toDate}
-                setFrom={setFromDate}
-                setTo={setToDate}
-              />
+              <MaxLeadsField value={config.maxInput} onChange={setMaxInput} />
             </div>
           ) : null}
         </div>
@@ -476,40 +442,26 @@ function ScrapeConfigStep({
   );
 }
 
-function DateRangeFields({
-  from,
-  to,
-  setFrom,
-  setTo,
+function MaxLeadsField({
+  value,
+  onChange,
 }: {
-  from: string;
-  to: string;
-  setFrom: (v: string) => void;
-  setTo: (v: string) => void;
+  value: string;
+  onChange: (v: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <div className="space-y-1">
-        <Label htmlFor="sc-from">From (optional)</Label>
-        <Input
-          id="sc-from"
-          type="date"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="sc-to">To (optional)</Label>
-        <Input
-          id="sc-to"
-          type="date"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-        />
-      </div>
-      <p className="col-span-2 text-[11px] text-muted-foreground">
-        Instagram has no built-in date filter — we walk the grid newest-first and visit
-        each post to check its date. Leave blank to scrape everything currently visible.
+    <div className="space-y-1">
+      <Label htmlFor="sc-max">Max leads (blank = all)</Label>
+      <Input
+        id="sc-max"
+        type="number"
+        min={1}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="e.g. 2000"
+      />
+      <p className="text-[11px] text-muted-foreground">
+        We walk posts newest-first and stop once the cap is reached.
       </p>
     </div>
   );
@@ -524,6 +476,7 @@ function ReviewStep({
   category,
   error,
   submitting,
+  willEnqueue,
   onEditAccount,
   onEditScrape,
   onConfirm,
@@ -534,6 +487,7 @@ function ReviewStep({
   category: CategorySelection;
   error: string | null;
   submitting: boolean;
+  willEnqueue: boolean;
   onEditAccount: () => void;
   onEditScrape: () => void;
   onConfirm: () => void;
@@ -581,6 +535,12 @@ function ReviewStep({
         <CategorySummary value={category} />
       </SummaryCard>
 
+      {willEnqueue ? (
+        <p className="text-[11px] text-muted-foreground">
+          This account is busy. The scrape will be added to its queue and start once the
+          current jobs finish.
+        </p>
+      ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       <div>
@@ -591,7 +551,13 @@ function ReviewStep({
           className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
         >
           {submitting ? <Spinner /> : <Play className="h-3.5 w-3.5" />}
-          {submitting ? 'Starting…' : 'Start scrape'}
+          {submitting
+            ? willEnqueue
+              ? 'Enqueuing…'
+              : 'Starting…'
+            : willEnqueue
+            ? 'Add to queue'
+            : 'Start scrape'}
         </button>
       </div>
     </div>
@@ -622,38 +588,29 @@ function TargetSummary({ mode, config }: { mode: Mode; config: ConfigState }) {
     );
   }
   if (mode === 'scrape_by_hashtag') {
+    const max = parseMaxInput(config.maxInput);
     return (
       <div className="text-sm">
         <div>
           <span className="text-muted-foreground">Hashtag:</span>{' '}
           <span className="font-medium">#{config.hashtag.replace(/^#/, '')}</span>
         </div>
-        <DateRangeSummary from={config.fromDate} to={config.toDate} />
+        <div className="text-[11px] text-muted-foreground">
+          Max leads: {max != null ? max : 'all available'}
+        </div>
       </div>
     );
   }
+  const max = parseMaxInput(config.maxInput);
   return (
     <div className="text-sm">
       <div>
         <span className="text-muted-foreground">Location:</span>{' '}
         <span className="break-all font-medium">{config.locationUrl}</span>
       </div>
-      <DateRangeSummary from={config.fromDate} to={config.toDate} />
-    </div>
-  );
-}
-
-function DateRangeSummary({ from, to }: { from: string; to: string }) {
-  if (!from && !to) {
-    return (
       <div className="text-[11px] text-muted-foreground">
-        Date range: everything visible
+        Max leads: {max != null ? max : 'all available'}
       </div>
-    );
-  }
-  return (
-    <div className="text-[11px] text-muted-foreground">
-      Date range: {from || '—'} → {to || '—'}
     </div>
   );
 }

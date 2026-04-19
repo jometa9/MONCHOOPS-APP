@@ -39,6 +39,7 @@ export interface AccountsApi {
 export interface JobsApi {
   list(): Promise<JobPublic[]>;
   listRunning(): Promise<JobPublic[]>;
+  listActive(): Promise<JobPublic[]>;
   cancel(jobId: string): Promise<void>;
   startMassDm(payload: {
     accountId: string;
@@ -56,6 +57,7 @@ export interface JobsApi {
     cb: (evt: { jobId: string; done: number; total: number | null; item?: string }) => void
   ): Unsubscribe;
   onDone(cb: (evt: { jobId: string; status: string }) => void): Unsubscribe;
+  onAccountDrained(cb: (evt: { accountId: string; status: string }) => void): Unsubscribe;
 }
 
 export interface ScrapesApi {

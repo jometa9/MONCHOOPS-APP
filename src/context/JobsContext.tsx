@@ -11,6 +11,10 @@ interface JobProgress {
 }
 
 interface JobsContextValue {
+  // All running + queued jobs (FIFO). Running appear first for a given account.
+  active: JobPublic[];
+  // Backward-compat subset: only running jobs. Consumers showing "spinner" can
+  // keep using this without seeing queued entries.
   running: JobPublic[];
   progressByJob: Record<string, JobProgress>;
   refresh: () => Promise<void>;
@@ -19,7 +23,7 @@ interface JobsContextValue {
 const JobsContext = createContext<JobsContextValue | null>(null);
 
 export function JobsProvider({ children }: { children: ReactNode }) {
-  const [running, setRunning] = useState<JobPublic[]>([]);
+  const [active, setActive] = useState<JobPublic[]>([]);
   const [progressByJob, setProgressByJob] = useState<Record<string, JobProgress>>({});
   const mountedRef = useRef(true);
   const { prefs } = usePreferences();
@@ -27,9 +31,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   soundsEnabledRef.current = prefs.soundsEnabled;
 
   const refresh = useCallback(async () => {
-    const list = await b2dm.jobs.listRunning();
+    const list = await b2dm.jobs.listActive();
     if (!mountedRef.current) return;
-    setRunning(list);
+    setActive(list);
   }, []);
 
   useEffect(() => {
@@ -50,6 +54,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         delete next[evt.jobId];
         return next;
       });
+    });
+    // Sound plays exactly once per account — when the account's whole queue
+    // drains, not on every individual job completion.
+    const offDrained = b2dm.jobs.onAccountDrained((evt) => {
       if (evt.status === 'completed' && soundsEnabledRef.current) {
         playCompletionSound();
       }
@@ -59,10 +67,15 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       offChange();
       offProgress();
       offDone();
+      offDrained();
     };
   }, [refresh]);
 
-  const value = useMemo<JobsContextValue>(() => ({ running, progressByJob, refresh }), [running, progressByJob, refresh]);
+  const running = useMemo(() => active.filter((j) => j.status === 'running'), [active]);
+  const value = useMemo<JobsContextValue>(
+    () => ({ active, running, progressByJob, refresh }),
+    [active, running, progressByJob, refresh]
+  );
   return <JobsContext.Provider value={value}>{children}</JobsContext.Provider>;
 }
 

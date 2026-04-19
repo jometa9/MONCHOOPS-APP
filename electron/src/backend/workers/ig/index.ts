@@ -5,11 +5,11 @@
 export { ensureLoggedIn } from './login';
 export type { EnsureLoggedInOpts } from './login';
 
-export { getPostLinks, getReelLinks, getFollowers } from './profile';
-export type { ProfileLinksResult, FollowersOpts } from './profile';
+export { iterUserPosts, iterUserReels, getFollowers } from './profile';
+export type { FollowersOpts } from './profile';
 
 export { getCommenters, getLikers } from './post';
 export type { LikersResult, ExtractOpts } from './post';
 
-export { postsByHashtag, postsByLocation } from './search';
-export type { SearchOpts } from './search';
+export { iterPostsByHashtag, iterPostsByLocation } from './search';
+export type { LocationSearchOpts } from './search';

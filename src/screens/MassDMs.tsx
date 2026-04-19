@@ -58,6 +58,7 @@ export function MassDMs() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startedJobId, setStartedJobId] = useState<string | null>(null);
+  const [wasEnqueued, setWasEnqueued] = useState(false);
 
   const nonEmptyVariants = useMemo(
     () => variants.map((v) => v.trim()).filter((v) => v.length > 0),
@@ -91,6 +92,7 @@ export function MassDMs() {
     if (!accountId || !source || nonEmptyVariants.length === 0) return;
     setSubmitting(true);
     setError(null);
+    const enqueued = selectedAccount?.status === 'busy';
     try {
       const jobId = await b2dm.jobs.startMassDm({
         accountId,
@@ -98,6 +100,7 @@ export function MassDMs() {
         messages: nonEmptyVariants,
         intervalMs: Math.max(3000, intervalSec * 1000),
       });
+      setWasEnqueued(enqueued);
       setStartedJobId(jobId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start job');
@@ -114,6 +117,7 @@ export function MassDMs() {
     setIntervalSec(12);
     setError(null);
     setStartedJobId(null);
+    setWasEnqueued(false);
   }
 
   if (startedJobId) {
@@ -121,12 +125,16 @@ export function MassDMs() {
       <div className="mx-auto max-w-2xl p-4">
         <div className="border border-border bg-background">
           <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Cold DM started
+            {wasEnqueued ? 'Cold DM queued' : 'Cold DM started'}
           </div>
           <div className="p-4">
             <div className="flex items-center gap-2 text-sm">
               <Spinner className="h-4 w-4" />
-              <span>Watch progress in the bottom status bar.</span>
+              <span>
+                {wasEnqueued
+                  ? 'The account is busy — this Cold DM will start once earlier jobs finish. Track it in the Queue.'
+                  : 'Watch progress in the bottom status bar.'}
+              </span>
             </div>
           </div>
           <div className="flex items-stretch border-t border-border">
@@ -190,6 +198,7 @@ export function MassDMs() {
             intervalSec={intervalSec}
             error={error}
             submitting={submitting}
+            willEnqueue={selectedAccount?.status === 'busy'}
             onConfirm={confirmAndStart}
             onEditAccount={() => setStep(1)}
             onEditLeads={() => setStep(2)}
@@ -462,7 +471,7 @@ function JobsPanel({
             description="Run a scrape from Scrape Leads. Once it finishes, you can reuse its results here."
           />
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-1.5 text-left">Summary</th>
@@ -602,7 +611,7 @@ function CategoryPanel({
             description="Tag a scrape with a category to start pooling leads."
           />
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-1.5 text-left">Name</th>
@@ -769,6 +778,7 @@ function ReviewStep({
   intervalSec,
   error,
   submitting,
+  willEnqueue,
   onConfirm,
   onEditAccount,
   onEditLeads,
@@ -780,6 +790,7 @@ function ReviewStep({
   intervalSec: number;
   error: string | null;
   submitting: boolean;
+  willEnqueue: boolean;
   onConfirm: () => void;
   onEditAccount: () => void;
   onEditLeads: () => void;
@@ -859,6 +870,12 @@ function ReviewStep({
         </div>
       </SummaryCard>
 
+      {willEnqueue ? (
+        <p className="text-[11px] text-muted-foreground">
+          This account is busy. The Cold DM will be added to its queue and start once the
+          current jobs finish.
+        </p>
+      ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       <div>
@@ -869,7 +886,13 @@ function ReviewStep({
           className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
         >
           {submitting ? <Spinner /> : <Play className="h-3.5 w-3.5" />}
-          {submitting ? 'Starting…' : 'Start Cold DM job'}
+          {submitting
+            ? willEnqueue
+              ? 'Enqueuing…'
+              : 'Starting…'
+            : willEnqueue
+            ? 'Add to queue'
+            : 'Start Cold DM job'}
         </button>
       </div>
     </div>

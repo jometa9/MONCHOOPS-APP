@@ -173,7 +173,25 @@ function migrate(db: Database): void {
     `);
   }
 
-  db.pragma('user_version = 6');
+  if (current < 7) {
+    // Per-account FIFO queueing. `started_at` stays as the enqueue timestamp
+    // (used for FIFO ordering); `running_at` tracks when the worker actually
+    // started. Jobs with status='queued' have running_at = NULL until they
+    // get dispatched.
+    db.exec(`
+      ALTER TABLE jobs ADD COLUMN running_at INTEGER;
+      UPDATE jobs SET running_at = started_at WHERE running_at IS NULL;
+    `);
+  }
+
+  if (current < 8) {
+    // Store the password used for auto-login so the user can one-click retry
+    // an account that landed in status='error'. Encrypted at rest via the
+    // same AES-GCM key used for cookies/proxy creds.
+    db.exec(`ALTER TABLE accounts ADD COLUMN password_encrypted BLOB;`);
+  }
+
+  db.pragma('user_version = 8');
 }
 
 // meta helpers — used by license.ts for ad-hoc key/value state.

@@ -80,7 +80,7 @@ export function ColdDmHistory() {
           />
         </div>
       </div>
-      <table className="w-full text-sm">
+      <table className="w-full whitespace-nowrap text-sm">
         <thead className="sticky top-9 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           <tr>
             <th className="px-3 py-1.5 text-left">Account</th>

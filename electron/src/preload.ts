@@ -59,6 +59,7 @@ const accountsApi = {
 const jobsApi = {
   list: () => invoke<import('./backend/jobs').JobPublic[]>('jobs:list'),
   listRunning: () => invoke<import('./backend/jobs').JobPublic[]>('jobs:listRunning'),
+  listActive: () => invoke<import('./backend/jobs').JobPublic[]>('jobs:listActive'),
   cancel: (jobId: string) => invoke<void>('jobs:cancel', jobId),
   startMassDm: (payload: {
     accountId: string;
@@ -77,6 +78,8 @@ const jobsApi = {
   ) => listen<{ jobId: string; done: number; total: number | null; item?: string }>('jobs:progress', cb),
   onDone: (cb: (evt: { jobId: string; status: string }) => void) =>
     listen<{ jobId: string; status: string }>('jobs:done', cb),
+  onAccountDrained: (cb: (evt: { accountId: string; status: string }) => void) =>
+    listen<{ accountId: string; status: string }>('jobs:accountDrained', cb),
 };
 
 const statsApi = {

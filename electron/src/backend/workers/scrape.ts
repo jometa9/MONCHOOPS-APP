@@ -3,6 +3,14 @@
 // job) while streaming progress back to main via process.send(). The main
 // process ingests the CSV into the `leads` table on completion if the job
 // was tagged with a categoryId.
+//
+// Two Playwright pages run per job on a shared context:
+//   - gridPage: stays parked on the hashtag/location/profile grid while we
+//     scroll lazily to yield post URLs.
+//   - postPage: navigates into each post in turn to extract its commenters
+//     and likers.
+// Session cookies live on the context, so a single ensureLoggedIn on
+// gridPage authenticates both pages.
 
 import fs from 'fs';
 import path from 'path';
@@ -12,12 +20,14 @@ import {
   getCommenters,
   getFollowers,
   getLikers,
-  getPostLinks,
-  getReelLinks,
-  postsByHashtag,
-  postsByLocation,
+  iterPostsByHashtag,
+  iterPostsByLocation,
+  iterUserPosts,
+  iterUserReels,
 } from './ig';
 import type { AccountSecrets } from '../accounts';
+
+type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 type ScrapeKind =
   | 'scrape_by_username'
@@ -35,26 +45,34 @@ interface ScrapeInit {
 }
 
 interface CsvSink {
-  /** Write a (deduped) username row. Returns true if the username was new. */
+  /** Write a (deduped) username row. Returns true if the username was new
+   *  AND fit under the sink's cap. A false return can mean either the
+   *  username was already seen, or the cap has been reached. */
   write(username: string, sourceDetail: string): boolean;
   count(): number;
+  /** True once the sink has reached its configured cap. Callers use this
+   *  to short-circuit the collectors inside getCommenters/getLikers so we
+   *  don't keep scrolling past the user's objective. */
+  atCap(): boolean;
   close(): void;
 }
 
 // Job-scoped dedup: one row per unique username per scrape, regardless of
-// how many sub-sources (followers / likers / commenters) mention it.
-function openCsv(csvPath: string): CsvSink {
+// how many sub-sources (followers / likers / commenters) mention it. If a
+// cap is set, the sink stops writing once reached — belt-and-suspenders
+// alongside shouldStop plumbing.
+function openCsv(csvPath: string, max: number | undefined): CsvSink {
   fs.mkdirSync(path.dirname(csvPath), { recursive: true });
   const fd = fs.openSync(csvPath, 'w');
   fs.writeSync(fd, 'username,source,source_ref\n');
   const seen = new Set<string>();
   const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+  const atCap = () => (max != null ? seen.size >= max : false);
   return {
     write(username, sourceDetail) {
+      if (atCap()) return false;
       if (seen.has(username)) return false;
       seen.add(username);
-      // Split sourceDetail on the first " | " — first half is category-ish
-      // ("followers", "post_comment"), second half is the ref URL.
       const sep = sourceDetail.indexOf(' | ');
       const source = sep >= 0 ? sourceDetail.slice(0, sep) : sourceDetail;
       const ref = sep >= 0 ? sourceDetail.slice(sep + 3) : '';
@@ -64,24 +82,33 @@ function openCsv(csvPath: string): CsvSink {
     count() {
       return seen.size;
     },
+    atCap,
     close() {
       try { fs.closeSync(fd); } catch {}
     },
   };
 }
 
-async function runByUsername(page: any, params: any, sink: CsvSink): Promise<void> {
+function readMax(params: any): number | undefined {
+  return typeof params.max === 'number' && params.max > 0 ? params.max : undefined;
+}
+
+async function runByUsername(
+  gridPage: Page,
+  postPage: Page,
+  params: any,
+  sink: CsvSink
+): Promise<void> {
   const username = String(params.username ?? '').replace(/^@+/, '').trim();
   if (!username) throw new Error('username is required');
 
-  const max: number | undefined = typeof params.max === 'number' && params.max > 0 ? params.max : undefined;
-  const hitCap = () => (max ? sink.count() >= max : false);
-  const shouldStop = () => hitCap() || isCancelled();
+  const max = readMax(params);
+  const shouldStop = () => sink.atCap() || isCancelled();
 
-  // ─── Phase 1: followers ────────────────────────────────────────────────
   sendLog('info', `[1/3] Collecting followers of @${username}`);
-  await getFollowers(page, username, {
+  await getFollowers(gridPage, username, {
     max,
+    shouldStop,
     onBatch: (batch) => {
       for (const u of batch) {
         if (sink.write(u, `followers | @${username}`)) sendProgress(sink.count(), max, u);
@@ -92,74 +119,27 @@ async function runByUsername(page: any, params: any, sink: CsvSink): Promise<voi
   sendLog('info', `[1/3] Followers done. Leads so far: ${sink.count()}${max ? `/${max}` : ''}`);
   if (shouldStop()) return;
 
-  // ─── Phase 2 & 3: interleaved post/reel walking, lazy-enumerated ─────
-  // We ask IG for just `position + 1` URLs each time we need the next
-  // post/reel. collectByScrolling stops as soon as the cap is met, so
-  // positions that are already in the initial DOM grid (typically the
-  // first ~12) require zero scrolling; later positions trigger one
-  // scroll per uncovered batch.
-  let postLinks: string[] = [];
-  let reelLinks: string[] = [];
+  sendLog('info', `[2/3] Walking posts of @${username}`);
   let postIdx = 0;
+  for await (const url of iterUserPosts(gridPage, username)) {
+    if (shouldStop()) break;
+    postIdx += 1;
+    sendLog('info', `[2/3] → Post #${postIdx}: ${url}`);
+    await walkEngagement(postPage, url, 'post', sink, max);
+    sendLog('info', `[2/3] ← Post #${postIdx} done. Leads: ${sink.count()}${max ? `/${max}` : ''}`);
+    await waitFor(jitter(1500));
+  }
+  if (shouldStop()) return;
+
+  sendLog('info', `[3/3] Walking reels of @${username}`);
   let reelIdx = 0;
-  let round = 0;
-  let postsExhausted = false;
-  let reelsExhausted = false;
-
-  sendLog('info', `[2/3] Walking posts & reels interleaved (cap: ${max ?? 'none'})`);
-
-  while (!postsExhausted || !reelsExhausted) {
-    round += 1;
-    if (shouldStop()) return;
-
-    // ─── Post at current index ─────────────────────────────────────────
-    if (postIdx >= postLinks.length && !postsExhausted) {
-      sendLog('info', `[2/3] Need post #${postIdx + 1} — enumerating up to ${postIdx + 1}`);
-      const refreshed = (await getPostLinks(page, username, postIdx + 1)).links;
-      if (refreshed.length > postLinks.length) {
-        postLinks = refreshed;
-      } else {
-        postsExhausted = true;
-        sendLog('info', `[2/3] No more posts available (had ${postLinks.length})`);
-      }
-    }
-
-    const postUrl = postLinks[postIdx];
-    if (postUrl) {
-      sendLog('info', `[3/3] → Post #${postIdx + 1} (round ${round}): ${postUrl}`);
-      await walkEngagement(page, postUrl, 'post', sink, max);
-      sendLog('info', `[3/3] ← Post #${postIdx + 1} done. Leads: ${sink.count()}${max ? `/${max}` : ''}`);
-      postIdx += 1;
-      if (shouldStop()) return;
-      await waitFor(jitter(1500));
-    }
-
-    if (shouldStop()) return;
-
-    // ─── Reel at current index ─────────────────────────────────────────
-    if (reelIdx >= reelLinks.length && !reelsExhausted) {
-      sendLog('info', `[2/3] Need reel #${reelIdx + 1} — enumerating up to ${reelIdx + 1}`);
-      const refreshed = (await getReelLinks(page, username, reelIdx + 1)).links;
-      if (refreshed.length > reelLinks.length) {
-        reelLinks = refreshed;
-      } else {
-        reelsExhausted = true;
-        sendLog('info', `[2/3] No more reels available (had ${reelLinks.length})`);
-      }
-    }
-
-    const reelUrl = reelLinks[reelIdx];
-    if (reelUrl) {
-      sendLog('info', `[3/3] → Reel #${reelIdx + 1} (round ${round}): ${reelUrl}`);
-      await walkEngagement(page, reelUrl, 'reel', sink, max);
-      sendLog('info', `[3/3] ← Reel #${reelIdx + 1} done. Leads: ${sink.count()}${max ? `/${max}` : ''}`);
-      reelIdx += 1;
-      if (shouldStop()) return;
-      await waitFor(jitter(1500));
-    }
-
-    // Nothing walked this round — both sides exhausted.
-    if (!postUrl && !reelUrl) break;
+  for await (const url of iterUserReels(gridPage, username)) {
+    if (shouldStop()) break;
+    reelIdx += 1;
+    sendLog('info', `[3/3] → Reel #${reelIdx}: ${url}`);
+    await walkEngagement(postPage, url, 'reel', sink, max);
+    sendLog('info', `[3/3] ← Reel #${reelIdx} done. Leads: ${sink.count()}${max ? `/${max}` : ''}`);
+    await waitFor(jitter(1500));
   }
 
   sendLog('info', `[done] Total leads: ${sink.count()}`);
@@ -168,18 +148,19 @@ async function runByUsername(page: any, params: any, sink: CsvSink): Promise<voi
 // Extract commenters + likers from a single post/reel, streaming each batch
 // into the sink and short-circuiting when the global `max` cap is reached.
 async function walkEngagement(
-  page: any,
+  page: Page,
   url: string,
   kindPrefix: 'post' | 'reel',
   sink: CsvSink,
   max: number | undefined
 ): Promise<void> {
-  const shouldStop = () => (max ? sink.count() >= max : false) || isCancelled();
+  const shouldStop = () => sink.atCap() || isCancelled();
   const startCount = sink.count();
 
   sendLog('info', `    ↳ commenters of ${url}`);
   try {
     await getCommenters(page, url, {
+      shouldStop,
       onBatch: (batch) => {
         for (const u of batch) {
           if (sink.write(u, `${kindPrefix}_comment | ${url}`)) sendProgress(sink.count(), max, u);
@@ -197,6 +178,7 @@ async function walkEngagement(
   sendLog('info', `    ↳ likers of ${url}`);
   try {
     const result = await getLikers(page, url, {
+      shouldStop,
       onBatch: (batch) => {
         for (const u of batch) {
           if (sink.write(u, `${kindPrefix}_like | ${url}`)) sendProgress(sink.count(), max, u);
@@ -210,7 +192,7 @@ async function walkEngagement(
   }
 }
 
-async function runByPost(page: any, params: any, sink: CsvSink): Promise<void> {
+async function runByPost(page: Page, params: any, sink: CsvSink): Promise<void> {
   const postUrl = String(params.postUrl ?? '').trim();
   if (!postUrl) throw new Error('postUrl is required');
 
@@ -246,89 +228,116 @@ async function runByPost(page: any, params: any, sink: CsvSink): Promise<void> {
   }
 }
 
-async function runByHashtag(page: any, params: any, sink: CsvSink): Promise<void> {
+async function runByHashtag(
+  gridPage: Page,
+  postPage: Page,
+  params: any,
+  sink: CsvSink
+): Promise<void> {
   const hashtag = String(params.hashtag ?? '').replace(/^#+/, '').trim();
   if (!hashtag) throw new Error('hashtag is required');
 
-  const { from, to, max } = readSearchOpts(params);
-  sendLog('info', `Collecting posts for #${hashtag}`);
-  const urls = await postsByHashtag(page, hashtag, { from, to, max });
-  await walkPosts(page, urls, sink, `hashtag:#${hashtag}`);
+  const max = readMax(params);
+  sendLog('info', `Walking #${hashtag}${max ? ` (cap: ${max} leads)` : ''}`);
+  await walkGrid(
+    iterPostsByHashtag(gridPage, hashtag),
+    postPage,
+    sink,
+    `hashtag:#${hashtag}`,
+    max
+  );
 }
 
-async function runByLocation(page: any, params: any, sink: CsvSink): Promise<void> {
+async function runByLocation(
+  gridPage: Page,
+  postPage: Page,
+  params: any,
+  sink: CsvSink
+): Promise<void> {
   const locationInput = String(params.locationUrl ?? params.locationSlug ?? '').trim();
   if (!locationInput) throw new Error('location URL or slug is required');
 
-  const { from, to, max } = readSearchOpts(params);
-  sendLog('info', `Collecting posts for location ${locationInput}`);
-  const urls = await postsByLocation(page, locationInput, { from, to, max });
-  await walkPosts(page, urls, sink, `location:${locationInput}`);
+  const max = readMax(params);
+  sendLog('info', `Walking location ${locationInput} (recent)${max ? ` (cap: ${max} leads)` : ''}`);
+  await walkGrid(
+    iterPostsByLocation(gridPage, locationInput, { recent: true }),
+    postPage,
+    sink,
+    `location:${locationInput}`,
+    max
+  );
 }
 
-function readSearchOpts(params: any): { from?: number; to?: number; max?: number } {
-  const out: { from?: number; to?: number; max?: number } = {};
-  if (typeof params.from === 'number' && Number.isFinite(params.from)) out.from = params.from;
-  if (typeof params.to === 'number' && Number.isFinite(params.to)) out.to = params.to;
-  if (typeof params.max === 'number' && params.max > 0) out.max = params.max;
-  return out;
-}
+async function walkGrid(
+  urls: AsyncIterable<string>,
+  postPage: Page,
+  sink: CsvSink,
+  refTag: string,
+  max: number | undefined
+): Promise<void> {
+  const shouldStop = () => sink.atCap() || isCancelled();
+  let idx = 0;
 
-async function walkPosts(page: any, urls: string[], sink: CsvSink, refTag: string): Promise<void> {
-  for (const url of urls) {
-    if (isCancelled()) return;
+  for await (const url of urls) {
+    if (shouldStop()) break;
+    idx += 1;
     const isReel = /\/reel\//.test(url);
     const prefix = isReel ? 'reel' : 'post';
+    sendLog('info', `→ #${idx} ${url}`);
     try {
-      await getCommenters(page, url, {
+      await getCommenters(postPage, url, {
+        shouldStop,
         onBatch: (batch) => {
           for (const u of batch) {
             if (sink.write(u, `${prefix}_comment | ${refTag} | ${url}`)) {
-              sendProgress(sink.count(), undefined, u);
+              sendProgress(sink.count(), max, u);
             }
-            if (isCancelled()) return;
+            if (shouldStop()) return;
           }
         },
       });
-      if (isCancelled()) return;
-      await getLikers(page, url, {
+      if (shouldStop()) break;
+      await getLikers(postPage, url, {
+        shouldStop,
         onBatch: (batch) => {
           for (const u of batch) {
             if (sink.write(u, `${prefix}_like | ${refTag} | ${url}`)) {
-              sendProgress(sink.count(), undefined, u);
+              sendProgress(sink.count(), max, u);
             }
-            if (isCancelled()) return;
+            if (shouldStop()) return;
           }
         },
       });
     } catch (err) {
       sendLog('warn', `${url}: ${err instanceof Error ? err.message : String(err)}`);
     }
+    sendLog('info', `← #${idx} done. Leads: ${sink.count()}${max ? `/${max}` : ''}`);
     await waitFor(jitter(1800));
   }
 }
 
 onInit<ScrapeInit>(async (init) => {
-  const sink = openCsv(init.csvPath);
+  const sink = openCsv(init.csvPath, readMax(init.params));
   const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets });
-  const page = await context.newPage();
+  const gridPage = await context.newPage();
+  const postPage = await context.newPage();
   sendProgress(0);
 
   try {
-    await ensureLoggedIn(page, { captchaTimeoutMs: 5 * 60_000 });
+    await ensureLoggedIn(gridPage, { captchaTimeoutMs: 5 * 60_000 });
 
     switch (init.kind) {
       case 'scrape_by_username':
-        await runByUsername(page, init.params, sink);
+        await runByUsername(gridPage, postPage, init.params, sink);
         break;
       case 'scrape_by_post':
-        await runByPost(page, init.params, sink);
+        await runByPost(postPage, init.params, sink);
         break;
       case 'scrape_by_hashtag':
-        await runByHashtag(page, init.params, sink);
+        await runByHashtag(gridPage, postPage, init.params, sink);
         break;
       case 'scrape_by_location':
-        await runByLocation(page, init.params, sink);
+        await runByLocation(gridPage, postPage, init.params, sink);
         break;
       default:
         throw new Error(`Unknown scrape kind: ${init.kind}`);

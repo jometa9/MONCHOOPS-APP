@@ -16,6 +16,7 @@ import { Queue } from '@/screens/Queue';
 import { Data } from '@/screens/Data';
 import { LeadsDetail } from '@/screens/LeadsDetail';
 import { Categories } from '@/screens/Categories';
+import { CategoryLeadsDetail } from '@/screens/CategoryLeadsDetail';
 import { Settings } from '@/screens/Settings';
 import { Spinner } from '@/components/common/Spinner';
 
@@ -47,6 +48,7 @@ function Gate() {
             <Route path="data" element={<Data />} />
             <Route path="data/:jobId" element={<LeadsDetail />} />
             <Route path="categories" element={<Categories />} />
+            <Route path="categories/:categoryId" element={<CategoryLeadsDetail />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

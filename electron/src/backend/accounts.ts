@@ -13,6 +13,7 @@ export interface AccountPublic {
   proxyUrl: string | null;
   proxyUsername: string | null;
   hasProxyPassword: boolean;
+  hasStoredPassword: boolean;
   status: AccountStatus;
   lastError: string | null;
   createdAt: number;
@@ -29,6 +30,7 @@ interface AccountRow {
   proxy_url: string | null;
   proxy_username: string | null;
   proxy_password_encrypted: Buffer | null;
+  password_encrypted: Buffer | null;
   status: AccountStatus;
   last_error: string | null;
   created_at: number;
@@ -66,6 +68,7 @@ function rowToPublic(row: AccountRow): AccountPublic {
     proxyUrl: row.proxy_url,
     proxyUsername: row.proxy_username,
     hasProxyPassword: !!row.proxy_password_encrypted,
+    hasStoredPassword: !!row.password_encrypted,
     status: row.status,
     lastError: row.last_error,
     createdAt: row.created_at,
@@ -79,6 +82,10 @@ export interface CreateAccountInput {
   profilePicUrl?: string | null;
   cookies: InstagramCookie[];
   userAgent: string;
+  // Password used to log in — persisted encrypted so the user can retry a
+  // later failure without re-typing. Pass null to leave the stored password
+  // unchanged; pass a string to overwrite it.
+  password?: string | null;
 }
 
 export function listAccounts(): AccountPublic[] {

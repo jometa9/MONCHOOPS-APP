@@ -13,6 +13,7 @@ import {
 import {
   cancelJob,
   getStats,
+  listActiveJobs,
   listJobs,
   listMassDmResults,
   listRunningJobs,
@@ -70,6 +71,8 @@ function broadcastJobEvent(event: JobEvent): void {
     broadcast('jobs:done', event);
     broadcast('accounts:changed');
     broadcast('categories:changed');
+  } else if (event.type === 'jobs:accountDrained') {
+    broadcast('jobs:accountDrained', event);
   }
 }
 
@@ -139,6 +142,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   // Jobs
   ipcMain.handle('jobs:list', async () => listJobs());
   ipcMain.handle('jobs:listRunning', async () => listRunningJobs());
+  ipcMain.handle('jobs:listActive', async () => listActiveJobs());
   ipcMain.handle('jobs:cancel', async (_e, jobId: string) => {
     cancelJob(jobId);
   });
@@ -337,7 +341,8 @@ function persistUsernameFile(src: string): { path: string; count: number } {
       const usernames = rows
         .map((r) => {
           const first = Object.values(r)[0];
-          return typeof first === 'string' ? first.trim() : String(first ?? '').trim();
+          const raw = typeof first === 'string' ? first.trim() : String(first ?? '').trim();
+          return raw.replace(/^[@#]+/, '').trim();
         })
         .filter(Boolean);
       const csvDest = dest.replace(/\.(xlsx?|xls)$/i, '.csv');

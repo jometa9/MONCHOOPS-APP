@@ -47,9 +47,9 @@ function AccountRow({
             </div>
           )}
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium leading-tight">@{account.username}</div>
+            <div className="text-sm font-medium leading-tight">@{account.username}</div>
             {account.displayName ? (
-              <div className="truncate text-[11px] leading-tight text-muted-foreground">
+              <div className="text-[11px] leading-tight text-muted-foreground">
                 {account.displayName}
               </div>
             ) : null}
@@ -64,10 +64,10 @@ function AccountRow({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-xs">
               <Globe className="h-3 w-3 flex-none text-muted-foreground" />
-              <span className="truncate font-mono">{account.proxyUrl}</span>
+              <span className="font-mono">{account.proxyUrl}</span>
             </div>
             {account.proxyUsername ? (
-              <div className="truncate pl-[18px] text-[11px] text-muted-foreground">
+              <div className="pl-[18px] text-[11px] text-muted-foreground">
                 {account.proxyUsername}
                 {account.hasProxyPassword ? ' · ••••' : ''}
               </div>
@@ -596,7 +596,7 @@ function BulkLoginDialog({
               ) : null}
             </div>
             <div className="max-h-40 overflow-auto rounded-md border border-border">
-              <table className="w-full text-xs">
+              <table className="w-full whitespace-nowrap text-xs">
                 <thead className="bg-muted/40">
                   <tr>
                     <th className="px-2 py-1 text-left font-medium">#</th>
@@ -802,14 +802,7 @@ export function InstagramAccounts() {
           </button>
         </div>
 
-        <table className="w-full table-fixed border-collapse text-left">
-          <colgroup>
-            <col />
-            <col className="w-24" />
-            <col className="w-[38%]" />
-            <col className="w-28" />
-            <col className="w-24" />
-          </colgroup>
+        <table className="w-full whitespace-nowrap border-collapse text-left">
           <thead className="sticky top-9 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-1.5 text-left">Account</th>

@@ -28,7 +28,7 @@ export type JobKind =
 
 export type ScrapeKind = Exclude<JobKind, 'login' | 'mass_dm'>;
 
-export type JobStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface JobPublic {
   id: string;
@@ -37,6 +37,7 @@ export interface JobPublic {
   params: unknown;
   status: JobStatus;
   startedAt: number;
+  runningAt: number | null;
   endedAt: number | null;
   progressDone: number;
   progressTotal: number | null;

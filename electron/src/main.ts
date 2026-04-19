@@ -1,4 +1,4 @@
-import { BrowserWindow, app, ipcMain, shell, nativeImage, Tray, Menu, powerMonitor, screen, session } from 'electron';
+import { BrowserWindow, app, ipcMain, shell, nativeImage, Menu, powerMonitor, screen, session } from 'electron';
 import path from 'path';
 import fs from 'fs';
 
@@ -101,11 +101,8 @@ function getFrontendServerUrl(): string | undefined {
 const showDevTools = false;
 
 let mainWindow: BrowserWindow | null = null;
-let tray: Tray | null = null;
 let deeplinkingUrl: string | undefined;
 let pendingDeepLinkUrl: string | undefined;
-let trayMenuJustClosed = false;
-let trayMenuJustClosedTimer: ReturnType<typeof setTimeout> | null = null;
 
 const urlFromArgv = process.argv.find((arg) => arg.toLowerCase().startsWith(PROTOCOL_PREFIX));
 if (urlFromArgv) {
@@ -174,35 +171,6 @@ if (!gotTheLock) {
       console.log(`[main] Dev: make sure "npm run dev" is running (Vite at http://localhost:${getFrontendPort()})`);
     }
 
-    if (process.platform === 'darwin') {
-      const trayIconPath = getTrayIconPath();
-      if (trayIconPath) {
-        const trayImage = nativeImage.createFromPath(trayIconPath);
-        trayImage.setTemplateImage(true);
-        tray = new Tray(trayImage);
-        tray.setToolTip(PRODUCT_NAME);
-        tray.on('click', () => {
-          if (!tray) return;
-          if (trayMenuJustClosed) {
-            trayMenuJustClosed = false;
-            if (trayMenuJustClosedTimer) clearTimeout(trayMenuJustClosedTimer);
-            return;
-          }
-          const menu = buildTrayMenu();
-          menu.once('menu-will-close', () => {
-            trayMenuJustClosed = true;
-            if (trayMenuJustClosedTimer) clearTimeout(trayMenuJustClosedTimer);
-            trayMenuJustClosedTimer = setTimeout(() => {
-              trayMenuJustClosed = false;
-              trayMenuJustClosedTimer = null;
-            }, 200);
-          });
-          tray.setContextMenu(menu);
-          tray.popUpContextMenu();
-        });
-      }
-    }
-
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
@@ -241,31 +209,6 @@ function getWindowIconPath(): string {
   const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png';
   const iconPath = path.join(appRoot, 'public', iconName);
   return fs.existsSync(iconPath) ? iconPath : '';
-}
-
-function getTrayIconPath(): string {
-  if (app.isPackaged) {
-    const unpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'public', 'iconTrayTemplate.png');
-    if (fs.existsSync(unpacked)) return unpacked;
-  }
-  const base = path.join(appRoot, 'public', 'iconTrayTemplate.png');
-  return fs.existsSync(base) ? base : '';
-}
-
-function openSettingsInFrontend(): void {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
-    mainWindow.webContents.send('navigate-to-settings');
-  }
-}
-
-function buildTrayMenu(): Menu {
-  return Menu.buildFromTemplate([
-    { label: 'Settings', click: () => openSettingsInFrontend() },
-    { type: 'separator' },
-    { label: 'Quit', role: 'quit' },
-  ]);
 }
 
 let saveWindowStateTimer: ReturnType<typeof setTimeout> | null = null;

@@ -28,6 +28,10 @@ export interface LikersResult {
 export interface ExtractOpts {
   max?: number;
   onBatch?: (added: string[]) => void;
+  /** When it returns true, stop scrolling the comments/likers list right
+   *  away — the caller has already hit its global lead cap and further
+   *  extraction would be wasted work. */
+  shouldStop?: () => boolean;
 }
 
 export async function getCommenters(page: Page, postUrl: string, opts: ExtractOpts = {}): Promise<string[]> {
@@ -57,6 +61,7 @@ export async function getCommenters(page: Page, postUrl: string, opts: ExtractOp
   try {
     return await collectByScrolling<string>({
       max: opts.max,
+      shouldStop: opts.shouldStop,
       // With the network tracker deciding when to advance, stale-idle
       // counting is a tiebreaker more than a timer. Keep it tight.
       maxIdleRounds: 3,
@@ -153,6 +158,7 @@ export async function getLikers(page: Page, postUrl: string, opts: ExtractOpts =
     try {
       const users = await collectByScrolling<string>({
         max: opts.max,
+        shouldStop: opts.shouldStop,
         maxIdleRounds: 3,
         pauseMs: 100,
         onBatch: (added) => {

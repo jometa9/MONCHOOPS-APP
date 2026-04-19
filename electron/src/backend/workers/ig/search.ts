@@ -1,54 +1,57 @@
-// Search primitives: enumerate posts under a hashtag or location. An
-// optional { from, to } window filters by post datetime — since Instagram
-// does not expose a built-in date filter, we scroll the grid newest-first
-// and stop once we read a post whose timestamp is older than `from`.
+// Search primitives: lazily yield post URLs from a hashtag or location grid.
+// The caller drives iteration — we only scroll the grid when they ask for the
+// next URL, so if they hit their lead cap after one post we never scroll at
+// all.
 
-import { safeGoto, sendLog, waitFor } from '../lib';
-import { collectByScrolling, scrollWindow } from './scroll';
+import { safeGoto, waitFor } from '../lib';
+import { iterateByScrolling, scrollWindow } from './scroll';
 
 type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-export interface SearchOpts {
-  /** Inclusive lower bound (epoch ms). Posts older than this are excluded. */
-  from?: number;
-  /** Inclusive upper bound (epoch ms). Posts newer than this are excluded. */
-  to?: number;
-  /** Stop collecting once this many URLs pass the filter. */
-  max?: number;
+export interface LocationSearchOpts {
+  /** Use Instagram's /recent/ variant of the location page. Default true. */
+  recent?: boolean;
 }
 
-export async function postsByHashtag(page: Page, hashtag: string, opts: SearchOpts = {}): Promise<string[]> {
+export async function* iterPostsByHashtag(
+  page: Page,
+  hashtag: string
+): AsyncGenerator<string, void, void> {
   const clean = hashtag.replace(/^#+/, '').trim();
   if (!clean) throw new Error('hashtag is required');
 
   await safeGoto(page, `https://www.instagram.com/explore/tags/${encodeURIComponent(clean)}/`);
   await waitFor(2500);
-  return collectPostsFromGrid(page, opts);
+  yield* iterateGridPosts(page);
 }
 
-export async function postsByLocation(
+export async function* iterPostsByLocation(
   page: Page,
   locationInput: string,
-  opts: SearchOpts = {}
-): Promise<string[]> {
+  opts: LocationSearchOpts = {}
+): AsyncGenerator<string, void, void> {
   const raw = locationInput.trim();
   if (!raw) throw new Error('location is required');
-  const url = raw.startsWith('http')
+
+  const base = raw.startsWith('http')
     ? raw
     : `https://www.instagram.com/explore/locations/${raw}/`;
+  const url = (opts.recent ?? true) ? toRecentUrl(base) : base;
 
   await safeGoto(page, url);
   await waitFor(2500);
-  return collectPostsFromGrid(page, opts);
+  yield* iterateGridPosts(page);
 }
 
-async function collectPostsFromGrid(page: Page, opts: SearchOpts): Promise<string[]> {
-  // When the caller wants a date filter, pull more candidates than `max`
-  // because some will be rejected. 3× is a reasonable cushion.
-  const gridMax = opts.from || opts.to ? (opts.max ? opts.max * 3 : undefined) : opts.max;
+function toRecentUrl(url: string): string {
+  let u = url.split('?')[0];
+  if (/\/recent\/?$/.test(u)) return u.endsWith('/') ? u : `${u}/`;
+  if (!u.endsWith('/')) u += '/';
+  return `${u}recent/`;
+}
 
-  const candidates = await collectByScrolling<string>({
-    max: gridMax,
+function iterateGridPosts(page: Page): AsyncGenerator<string, void, void> {
+  return iterateByScrolling<string>({
     scroll: () => scrollWindow(page),
     extract: async () =>
       page.evaluate(() => {
@@ -63,45 +66,4 @@ async function collectPostsFromGrid(page: Page, opts: SearchOpts): Promise<strin
         return Array.from(set);
       }),
   });
-
-  if (!opts.from && !opts.to) {
-    return opts.max ? candidates.slice(0, opts.max) : candidates;
-  }
-
-  // Date-filtered walk: newest first, stop once we go past `from`.
-  const kept: string[] = [];
-  let consecutiveOutOfRange = 0;
-  for (const url of candidates) {
-    const dt = await readPostDatetime(page, url);
-    if (dt == null) continue;
-    if (opts.to && dt > opts.to) continue;
-    if (opts.from && dt < opts.from) {
-      consecutiveOutOfRange += 1;
-      // Grids aren't strictly chronological on hashtag "Top" — allow a few
-      // misses before giving up.
-      if (consecutiveOutOfRange >= 5) break;
-      continue;
-    }
-    consecutiveOutOfRange = 0;
-    kept.push(url);
-    if (opts.max && kept.length >= opts.max) break;
-  }
-  return kept;
-}
-
-async function readPostDatetime(page: Page, postUrl: string): Promise<number | null> {
-  try {
-    await safeGoto(page, postUrl);
-    await waitFor(1200);
-    const iso = (await page.evaluate(() => {
-      const t = document.querySelector<HTMLTimeElement>('time[datetime]');
-      return t ? t.getAttribute('datetime') : null;
-    })) as string | null;
-    if (!iso) return null;
-    const parsed = Date.parse(iso);
-    return Number.isFinite(parsed) ? parsed : null;
-  } catch (err) {
-    sendLog('warn', `datetime read failed for ${postUrl}: ${err instanceof Error ? err.message : String(err)}`);
-    return null;
-  }
 }

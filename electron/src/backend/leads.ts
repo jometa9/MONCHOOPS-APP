@@ -76,7 +76,7 @@ export function listCategories(): LeadCategoryPublic[] {
          c.id, c.name, c.created_at, c.updated_at,
          COALESCE(l.lead_count, 0) AS lead_count,
          COALESCE(s.scrape_count, 0) AS scrape_count,
-         MAX(l.last_scraped_at, s.last_added_at) AS last_activity_at
+         MAX(COALESCE(l.last_scraped_at, 0), COALESCE(s.last_added_at, 0), c.created_at) AS last_activity_at
        FROM lead_categories c
        LEFT JOIN (
          SELECT category_id, COUNT(*) AS lead_count, MAX(scraped_at) AS last_scraped_at
@@ -152,6 +152,10 @@ export interface IngestLeadInput {
   sourceDetail?: string | null;
 }
 
+export function sanitizeUsername(raw: string): string {
+  return raw.trim().replace(/^[@#]+/, '').trim();
+}
+
 /** Bulk-insert leads into a category. Deduplicates via UNIQUE(category_id, username).
  *  Returns the number of rows actually inserted (new leads). */
 export function ingestLeads(
@@ -160,7 +164,10 @@ export function ingestLeads(
   sourceJobId: string | null,
   items: IngestLeadInput[]
 ): number {
-  if (items.length === 0) return 0;
+  const cleaned = items
+    .map((r) => ({ ...r, username: sanitizeUsername(r.username) }))
+    .filter((r) => r.username.length > 0);
+  if (cleaned.length === 0) return 0;
   const db = getDb();
   const now = Date.now();
 
@@ -185,7 +192,7 @@ export function ingestLeads(
     return added;
   });
 
-  const added = txn(items);
+  const added = txn(cleaned);
 
   if (sourceJobId) {
     db.prepare(

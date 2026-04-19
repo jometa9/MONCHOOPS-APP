@@ -20,6 +20,53 @@ export interface CollectOptions<T> {
   onBatch?: (added: T[]) => void;
   /** Custom dedup key. Defaults to `String(item)`. */
   keyOf?: (item: T) => string;
+  /** Short-circuit: when it returns true we stop scrolling immediately. Lets
+   *  upstream code halt a per-post comment slurp once the global lead cap
+   *  has been hit. */
+  shouldStop?: () => boolean;
+}
+
+/** Lazy variant of `collectByScrolling`: yields each new item as soon as it
+ *  appears in the DOM. Lets callers act on items one at a time (e.g. walk a
+ *  post for leads) without pre-scrolling the whole grid. Stops when the DOM
+ *  yields no new items for `maxIdleRounds` consecutive scrolls. */
+export async function* iterateByScrolling<T>(opts: {
+  extract: () => Promise<T[]>;
+  scroll: () => Promise<void>;
+  maxIdleRounds?: number;
+  pauseMs?: number;
+  keyOf?: (item: T) => string;
+  shouldStop?: () => boolean;
+}): AsyncGenerator<T, void, void> {
+  const keyOf = opts.keyOf ?? ((item: T) => String(item));
+  const idleMax = opts.maxIdleRounds ?? 6;
+  const pause = opts.pauseMs ?? 1200;
+
+  const seen = new Set<string>();
+  let idle = 0;
+  let prevSize = 0;
+
+  while (idle < idleMax) {
+    if (opts.shouldStop?.()) return;
+    const batch = await opts.extract();
+    for (const item of batch) {
+      const key = keyOf(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      yield item;
+      if (opts.shouldStop?.()) return;
+    }
+
+    if (seen.size === prevSize) {
+      idle += 1;
+    } else {
+      idle = 0;
+      prevSize = seen.size;
+    }
+
+    await opts.scroll();
+    await waitFor(pause);
+  }
 }
 
 /** Incrementally collect items from a page, deduplicating by a string key. */
@@ -34,6 +81,7 @@ export async function collectByScrolling<T>(opts: CollectOptions<T>): Promise<T[
   let lastSize = -1;
 
   while (idle < idleMax) {
+    if (opts.shouldStop?.()) break;
     const batch = await opts.extract();
     const added: T[] = [];
     for (const item of batch) {
@@ -47,6 +95,7 @@ export async function collectByScrolling<T>(opts: CollectOptions<T>): Promise<T[
     if (added.length > 0) opts.onBatch?.(added);
 
     if (opts.max && out.length >= opts.max) break;
+    if (opts.shouldStop?.()) break;
 
     if (out.length === lastSize) {
       idle += 1;

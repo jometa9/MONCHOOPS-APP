@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Send, Users } from 'lucide-react';
 import { useSession } from '@/context/SessionContext';
 import { useAccounts } from '@/context/AccountsContext';
-import { useJobs } from '@/context/JobsContext';
 import { b2dm } from '@/lib/b2dm';
 
 interface Stats {
@@ -34,7 +33,6 @@ function formatTimeSaved(ms: number): string {
 export function Home() {
   const { session } = useSession();
   const { accounts } = useAccounts();
-  const { running } = useJobs();
   const [stats, setStats] = useState<Stats>({
     totalJobs: 0,
     totalLeads: 0,
@@ -64,38 +62,30 @@ export function Home() {
     <div className="flex min-h-full items-center justify-center">
       <div className="mx-auto w-full max-w-3xl pb-40 p-16">
         <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Connect your Instagram accounts, run mass DM campaigns, and scrape username lists.
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">What do you want to do today?</p>
 
-        <div className="mt-8 grid gap-4 grid-cols-4">
-          <StatCard label="Plan" value={<span className="capitalize">{session.subscription?.plan ?? 'free'}</span>} />
-          <StatCard label="Accounts" value={formatCount(accounts.length)} />
-          <StatCard label="Running" value={formatCount(running.length)} />
-          <StatCard label="Jobs" value={formatCount(stats.totalJobs)} />
-        </div>
-
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <StatCard label="Leads" value={formatCount(stats.totalLeads)} />
-          <StatCard label="Messages" value={formatCount(stats.totalMessages)} />
-          <StatCard label="Time saved" value={formatTimeSaved(stats.timeSavedMs)} />
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="mt-8 grid grid-cols-2 gap-4">
           <ActionCard
             to="/scrape"
             icon={<Users className="h-5 w-5" />}
             title="Scrape Leads"
-            description="Extract usernames from followers, following, or engagement lists."
-            cta="Start scrape"
+            description="Build a list of usernames from followers, hashtags, or posts."
+            cta="New scrape"
           />
           <ActionCard
             to="/cold-dm"
             icon={<Send className="h-5 w-5" />}
             title="Cold DM"
-            description="Send mass DMs to a list of usernames from your linked accounts."
-            cta="Start campaign"
+            description="Launch a DM campaign to your lead list."
+            cta="New campaign"
           />
+        </div>
+
+        <div className="mt-4 grid gap-4 grid-cols-4">
+          <StatCard label="Accounts" value={formatCount(accounts.length)} />
+          <StatCard label="Leads" value={formatCount(stats.totalLeads)} />
+          <StatCard label="Messages" value={formatCount(stats.totalMessages)} />
+          <StatCard label="Time saved" value={formatTimeSaved(stats.timeSavedMs)} />
         </div>
       </div>
     </div>

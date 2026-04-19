@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, FolderTree, Plus, Search, Tag, Trash2, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
+import { Download, Eye, FolderTree, Plus, Search, Tag, Trash2, X } from 'lucide-react';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
 import { b2dm } from '@/lib/b2dm';
 import { formatDateTime } from '@/lib/format';
-import type { LeadCategoryPublic, LeadPublic } from '@/types/domain';
+import type { LeadCategoryPublic } from '@/types/domain';
 
 export function Categories() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<LeadCategoryPublic[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
-  const [selected, setSelected] = useState<LeadCategoryPublic | null>(null);
   const [query, setQuery] = useState('');
 
   const filteredRows = useMemo(() => {
@@ -25,10 +25,6 @@ export function Categories() {
   async function load() {
     const list = await b2dm.categories.list();
     setRows(list);
-    if (selected) {
-      const updated = list.find((c) => c.id === selected.id) ?? null;
-      setSelected(updated);
-    }
   }
 
   useEffect(() => {
@@ -60,7 +56,6 @@ export function Categories() {
     setBusy(id);
     try {
       await b2dm.categories.delete(id);
-      if (selected?.id === id) setSelected(null);
     } finally {
       setBusy(null);
     }
@@ -160,7 +155,7 @@ export function Categories() {
             )}
           </div>
 
-          <table className="w-full text-sm">
+          <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-9 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-1.5 text-left">Name</th>
@@ -182,7 +177,7 @@ export function Categories() {
                   <tr
                     key={row.id}
                     className="cursor-pointer border-t border-border even:bg-muted/30 last:border-b hover:bg-accent/40"
-                    onClick={() => setSelected(row)}
+                    onClick={() => navigate(`/categories/${row.id}`)}
                   >
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-2">
@@ -195,6 +190,15 @@ export function Categories() {
                     <td className="px-3 py-1.5 text-muted-foreground">{formatDateTime(row.lastActivityAt)}</td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/categories/${row.id}`)}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          title="View leads"
+                          aria-label="View leads"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => void exportCsv(row.id)}
@@ -225,74 +229,6 @@ export function Categories() {
         </div>
       )}
 
-      {selected ? <CategoryDetail category={selected} onClose={() => setSelected(null)} /> : null}
-    </div>
-  );
-}
-
-function CategoryDetail({ category, onClose }: { category: LeadCategoryPublic; onClose: () => void }) {
-  const [leads, setLeads] = useState<LeadPublic[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const list = await b2dm.categories.listLeads({ categoryId: category.id, limit: 1000 });
-      if (!cancelled) setLeads(list);
-    }
-    void load();
-    return () => { cancelled = true; };
-  }, [category.id]);
-
-  return (
-    <div className="mt-6 overflow-hidden rounded-xl border border-border bg-background">
-      <div className="flex items-center justify-between border-b border-border bg-muted/20 px-4 py-2">
-        <div>
-          <div className="text-xs uppercase tracking-wider text-muted-foreground">Leads in</div>
-          <div className="font-medium">{category.name}</div>
-        </div>
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-      {leads === null ? (
-        <div className="flex items-center justify-center py-10">
-          <Spinner className="h-5 w-5 text-muted-foreground" />
-        </div>
-      ) : leads.length === 0 ? (
-        <div className="py-10 text-center text-sm text-muted-foreground">
-          No leads yet. Run a scrape tagged with this category.
-        </div>
-      ) : (
-        <div className="max-h-[480px] overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2 text-left">Username</th>
-                <th className="px-4 py-2 text-left">Source</th>
-                <th className="px-4 py-2 text-left">Added</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map((lead) => (
-                <tr key={lead.id} className="border-t border-border even:bg-muted/30 last:border-b">
-                  <td className="px-4 py-2 font-medium">@{lead.username}</td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">
-                    {lead.sourceDetail ?? lead.sourceKind}
-                  </td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">
-                    {formatDateTime(lead.scrapedAt)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {leads && leads.length >= 1000 ? (
-        <div className="border-t border-border bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">
-          Showing first 1000 rows — export the CSV for the full list.
-        </div>
-      ) : null}
     </div>
   );
 }

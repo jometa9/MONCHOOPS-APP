@@ -22,7 +22,7 @@ export type JobKind =
   | 'scrape_by_hashtag'
   | 'scrape_by_location';
 
-export type JobStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface JobPublic {
   id: string;
@@ -31,6 +31,7 @@ export interface JobPublic {
   params: unknown;
   status: JobStatus;
   startedAt: number;
+  runningAt: number | null;
   endedAt: number | null;
   progressDone: number;
   progressTotal: number | null;
@@ -67,6 +68,7 @@ interface JobRow {
   params_json: string;
   status: JobStatus;
   started_at: number;
+  running_at: number | null;
   ended_at: number | null;
   progress_done: number;
   progress_total: number | null;
@@ -90,7 +92,8 @@ type Listener = (event: JobEvent) => void;
 export type JobEvent =
   | { type: 'jobs:changed' }
   | { type: 'jobs:progress'; jobId: string; done: number; total: number | null; item?: string }
-  | { type: 'jobs:done'; jobId: string; status: JobStatus };
+  | { type: 'jobs:done'; jobId: string; status: JobStatus }
+  | { type: 'jobs:accountDrained'; accountId: string; status: JobStatus };
 
 const listeners = new Set<Listener>();
 const runningChildren = new Map<string, ChildProcess>();
@@ -124,6 +127,7 @@ function rowToPublic(row: JobRow): JobPublic {
     params,
     status: row.status,
     startedAt: row.started_at,
+    runningAt: row.running_at,
     endedAt: row.ended_at,
     progressDone: row.progress_done,
     progressTotal: row.progress_total,
@@ -165,6 +169,17 @@ export function listJobs(): JobPublic[] {
 
 export function listRunningJobs(): JobPublic[] {
   return listJobs().filter((j) => j.status === 'running');
+}
+
+// Running + queued, in dispatch order (FIFO by started_at, which we use as
+// the enqueue timestamp). Used by the Queue UI.
+export function listActiveJobs(): JobPublic[] {
+  const rows = getDb()
+    .prepare<[], JobRow>(
+      `SELECT * FROM jobs WHERE status IN ('running','queued') ORDER BY started_at ASC`
+    )
+    .all();
+  return rows.map(rowToPublic);
 }
 
 export interface StatsPublic {
@@ -350,11 +365,35 @@ function insertJob(
   const now = Date.now();
   getDb()
     .prepare(
-      `INSERT INTO jobs(id, account_id, kind, params_json, status, started_at, progress_done)
-       VALUES (?, ?, ?, ?, 'running', ?, 0)`
+      `INSERT INTO jobs(id, account_id, kind, params_json, status, started_at, running_at, progress_done)
+       VALUES (?, ?, ?, ?, 'running', ?, ?, 0)`
+    )
+    .run(id, accountId, kind, JSON.stringify(params ?? {}), now, now);
+  return id;
+}
+
+function insertQueuedJob(
+  kind: JobKind,
+  accountId: string,
+  params: unknown
+): string {
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  getDb()
+    .prepare(
+      `INSERT INTO jobs(id, account_id, kind, params_json, status, started_at, running_at, progress_done)
+       VALUES (?, ?, ?, ?, 'queued', ?, NULL, 0)`
     )
     .run(id, accountId, kind, JSON.stringify(params ?? {}), now);
   return id;
+}
+
+function markJobRunning(jobId: string): number {
+  const now = Date.now();
+  getDb()
+    .prepare(`UPDATE jobs SET status='running', running_at=? WHERE id=?`)
+    .run(now, jobId);
+  return now;
 }
 
 function updateJobProgress(jobId: string, done: number, total: number | null): void {
@@ -460,9 +499,8 @@ export interface StartMassDmArgs {
 const MAX_DM_VARIANTS = 20;
 
 export function startMassDm(args: StartMassDmArgs): string {
-  ensureAccountIdle(args.accountId);
-  const secrets = getAccountSecrets(args.accountId);
-  if (!secrets) throw new Error('Account not found');
+  const acc = getAccount(args.accountId);
+  if (!acc) throw new Error('Account not found');
 
   const messages = (args.messages ?? [])
     .map((m) => m.trim())
@@ -470,28 +508,47 @@ export function startMassDm(args: StartMassDmArgs): string {
     .slice(0, MAX_DM_VARIANTS);
   if (messages.length === 0) throw new Error('At least one message variant is required');
 
-  const jobId = insertJob('mass_dm', args.accountId, {
+  const params = {
     intervalMs: args.intervalMs,
     messages,
     usernamesCsvPath: args.usernamesCsvPath,
-  });
+  };
 
+  if (hasPendingJobForAccount(args.accountId)) {
+    const jobId = insertQueuedJob('mass_dm', args.accountId, params);
+    emit({ type: 'jobs:changed' });
+    return jobId;
+  }
+
+  const secrets = getAccountSecrets(args.accountId);
+  if (!secrets) throw new Error('Account not found');
+
+  const jobId = insertJob('mass_dm', args.accountId, params);
+  spawnMassDmWorker(jobId, args.accountId, secrets, params);
+  emit({ type: 'jobs:changed' });
+  return jobId;
+}
+
+function spawnMassDmWorker(
+  jobId: string,
+  accountId: string,
+  secrets: NonNullable<ReturnType<typeof getAccountSecrets>>,
+  params: { usernamesCsvPath: string; messages: string[]; intervalMs: number }
+): void {
   const child = spawnWorker(workerForKind('mass_dm'), jobId, {
     type: 'init',
     payload: {
       jobId,
       secrets,
-      usernamesCsvPath: args.usernamesCsvPath,
-      messages,
-      intervalMs: args.intervalMs,
+      usernamesCsvPath: params.usernamesCsvPath,
+      messages: params.messages,
+      intervalMs: params.intervalMs,
       headless: getHeadlessPref(),
     },
   });
   runningChildren.set(jobId, child);
-  runningMeta.set(jobId, { startedAt: Date.now(), accountId: args.accountId, kind: 'mass_dm' });
-  setAccountStatus(args.accountId, 'busy');
-  emit({ type: 'jobs:changed' });
-  return jobId;
+  runningMeta.set(jobId, { startedAt: Date.now(), accountId, kind: 'mass_dm' });
+  setAccountStatus(accountId, 'busy');
 }
 
 export interface StartScrapeArgs {
@@ -501,9 +558,8 @@ export interface StartScrapeArgs {
 }
 
 export function startScrape(args: StartScrapeArgs): string {
-  ensureAccountIdle(args.accountId);
-  const secrets = getAccountSecrets(args.accountId);
-  if (!secrets) throw new Error('Account not found');
+  const acc = getAccount(args.accountId);
+  if (!acc) throw new Error('Account not found');
 
   // Resolve category ref (existing id or new name) into a stable categoryId
   // that we persist on the job params. null means "no category bucket".
@@ -518,30 +574,114 @@ export function startScrape(args: StartScrapeArgs): string {
     newCategoryName: undefined,
   };
 
-  const jobId = insertJob(args.kind, args.accountId, paramsWithCategory);
-  const csvPath = path.join(scrapesDir(), `${jobId}.csv`);
+  if (hasPendingJobForAccount(args.accountId)) {
+    const jobId = insertQueuedJob(args.kind, args.accountId, paramsWithCategory);
+    emit({ type: 'jobs:changed' });
+    return jobId;
+  }
 
-  const child = spawnWorker(workerForKind(args.kind), jobId, {
-    type: 'init',
-    payload: {
-      jobId,
-      kind: args.kind,
-      secrets,
-      csvPath,
-      params: paramsWithCategory,
-      headless: getHeadlessPref(),
-    },
-  });
-  runningChildren.set(jobId, child);
-  runningMeta.set(jobId, { startedAt: Date.now(), accountId: args.accountId, kind: args.kind });
-  setAccountStatus(args.accountId, 'busy');
+  const secrets = getAccountSecrets(args.accountId);
+  if (!secrets) throw new Error('Account not found');
+
+  const jobId = insertJob(args.kind, args.accountId, paramsWithCategory);
+  spawnScrapeWorker(jobId, args.accountId, args.kind, secrets, paramsWithCategory);
   emit({ type: 'jobs:changed' });
   return jobId;
 }
 
+function spawnScrapeWorker(
+  jobId: string,
+  accountId: string,
+  kind: Exclude<JobKind, 'login' | 'mass_dm'>,
+  secrets: NonNullable<ReturnType<typeof getAccountSecrets>>,
+  params: Record<string, unknown>
+): void {
+  const csvPath = path.join(scrapesDir(), `${jobId}.csv`);
+  const child = spawnWorker(workerForKind(kind), jobId, {
+    type: 'init',
+    payload: {
+      jobId,
+      kind,
+      secrets,
+      csvPath,
+      params,
+      headless: getHeadlessPref(),
+    },
+  });
+  runningChildren.set(jobId, child);
+  runningMeta.set(jobId, { startedAt: Date.now(), accountId, kind });
+  setAccountStatus(accountId, 'busy');
+}
+
+// True if the account already has a running or queued job. Login jobs don't
+// have an accountId so they can't block anything here.
+function hasPendingJobForAccount(accountId: string): boolean {
+  const row = getDb()
+    .prepare<[string], { c: number }>(
+      `SELECT COUNT(*) AS c FROM jobs
+       WHERE account_id = ? AND status IN ('running','queued')`
+    )
+    .get(accountId);
+  return (row?.c ?? 0) > 0;
+}
+
+// Pull the next queued job for this account and dispatch it. Returns true if
+// a job was started; false if the queue is empty.
+function dispatchNextForAccount(accountId: string): boolean {
+  const row = getDb()
+    .prepare<[string], JobRow>(
+      `SELECT * FROM jobs
+       WHERE account_id = ? AND status = 'queued'
+       ORDER BY started_at ASC LIMIT 1`
+    )
+    .get(accountId);
+  if (!row) return false;
+
+  const secrets = getAccountSecrets(accountId);
+  if (!secrets) {
+    finaliseJob(row.id, 'failed', 'Account secrets not available');
+    emit({ type: 'jobs:done', jobId: row.id, status: 'failed' });
+    // Try the next one (account may still have queue entries we should flush).
+    return dispatchNextForAccount(accountId);
+  }
+
+  markJobRunning(row.id);
+  const params = (() => {
+    try { return JSON.parse(row.params_json); } catch { return {}; }
+  })();
+
+  if (row.kind === 'mass_dm') {
+    spawnMassDmWorker(row.id, accountId, secrets, {
+      usernamesCsvPath: String(params.usernamesCsvPath ?? ''),
+      messages: Array.isArray(params.messages) ? params.messages : [],
+      intervalMs: Number(params.intervalMs) || 0,
+    });
+  } else {
+    spawnScrapeWorker(
+      row.id,
+      accountId,
+      row.kind as Exclude<JobKind, 'login' | 'mass_dm'>,
+      secrets,
+      params
+    );
+  }
+  return true;
+}
+
 export function cancelJob(jobId: string): void {
   const child = runningChildren.get(jobId);
-  if (!child) return;
+  if (!child) {
+    // Queued (not yet running) job — no worker to stop. Just mark cancelled.
+    const row = getDb()
+      .prepare<[string], JobRow>('SELECT * FROM jobs WHERE id = ?')
+      .get(jobId);
+    if (row && row.status === 'queued') {
+      finaliseJob(jobId, 'cancelled');
+      emit({ type: 'jobs:done', jobId, status: 'cancelled' });
+      emit({ type: 'jobs:changed' });
+    }
+    return;
+  }
   if (cancellingJobs.has(jobId)) return;
   cancellingJobs.add(jobId);
 
@@ -557,12 +697,6 @@ export function cancelJob(jobId: string): void {
       try { child.kill('SIGKILL'); } catch {}
     }, TERM_GRACE_MS);
   }, CANCEL_GRACE_MS);
-}
-
-function ensureAccountIdle(accountId: string): void {
-  const acc = getAccount(accountId);
-  if (!acc) throw new Error('Account not found');
-  if (acc.status === 'busy') throw new Error('account_busy');
 }
 
 function spawnWorker(scriptPath: string, jobId: string, initMessage: unknown): ChildProcess {
@@ -764,12 +898,28 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
     }
   }
 
-  // Release account lock.
+  emit({ type: 'jobs:done', jobId, status: finalStatus });
+
+  // Per-account FIFO: if more jobs are queued for this account, dispatch the
+  // next one and keep the account flagged 'busy'. Only when the queue drains
+  // do we release the account and emit the "account drained" signal (used by
+  // the renderer to play the completion sound exactly once per batch).
   if (meta?.accountId) {
-    setAccountStatus(meta.accountId, finalStatus === 'failed' ? 'error' : 'idle', finalStatus === 'failed' ? (jobRow?.error ?? null) : null);
+    const startedNext = dispatchNextForAccount(meta.accountId);
+    if (!startedNext) {
+      setAccountStatus(
+        meta.accountId,
+        finalStatus === 'failed' ? 'error' : 'idle',
+        finalStatus === 'failed' ? (jobRow?.error ?? null) : null
+      );
+      emit({
+        type: 'jobs:accountDrained',
+        accountId: meta.accountId,
+        status: finalStatus,
+      });
+    }
   }
 
-  emit({ type: 'jobs:done', jobId, status: finalStatus });
   emit({ type: 'jobs:changed' });
 }
 
@@ -804,6 +954,14 @@ function buildScrapeSummary(kind: JobKind, params: any, _count: number): string 
 // `timeoutMs` for them to exit, then force-kills anything still running. The
 // caller is expected to await this before calling `app.exit()`.
 export async function shutdownAllJobs(timeoutMs = 15_000): Promise<void> {
+  // Cancel any queued jobs up front — they haven't forked yet and won't run
+  // during this shutdown.
+  try {
+    getDb()
+      .prepare(`UPDATE jobs SET status='cancelled', ended_at=? WHERE status='queued'`)
+      .run(Date.now());
+  } catch {}
+
   if (runningChildren.size === 0) return;
   for (const [jobId, child] of runningChildren) {
     cancellingJobs.add(jobId);
@@ -818,15 +976,22 @@ export async function shutdownAllJobs(timeoutMs = 15_000): Promise<void> {
   }
 }
 
-// On app boot, mark any stranded 'running' rows as failed and flip busy
-// accounts back to idle. Jobs never survive an app restart in v1.
+// On app boot, mark any stranded 'running' rows as failed and 'queued' rows
+// as cancelled, then flip busy accounts back to idle. Jobs never survive an
+// app restart in v1.
 export function reconcileOnStartup(): void {
   try {
+    const now = Date.now();
     getDb()
       .prepare(
         `UPDATE jobs SET status = 'failed', ended_at = ?, error = 'App restarted before job finished' WHERE status = 'running'`
       )
-      .run(Date.now());
+      .run(now);
+    getDb()
+      .prepare(
+        `UPDATE jobs SET status = 'cancelled', ended_at = ? WHERE status = 'queued'`
+      )
+      .run(now);
     getDb().prepare(`UPDATE accounts SET status = 'idle' WHERE status = 'busy'`).run();
   } catch (err) {
     console.error('[jobs] reconcileOnStartup failed:', err);

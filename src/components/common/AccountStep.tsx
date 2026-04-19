@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Check, Instagram, Search } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { EmptyPanel } from '@/components/common/EmptyPanel';
+import { useJobs } from '@/context/JobsContext';
 import type { AccountPublic } from '@/types/domain';
 
 interface Props {
@@ -12,6 +13,16 @@ interface Props {
 
 export function AccountStep({ accounts, value, onChange }: Props) {
   const [query, setQuery] = useState('');
+  const { active } = useJobs();
+
+  const queueDepthById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const j of active) {
+      if (!j.accountId || j.status !== 'queued') continue;
+      map.set(j.accountId, (map.get(j.accountId) ?? 0) + 1);
+    }
+    return map;
+  }, [active]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -45,7 +56,7 @@ export function AccountStep({ accounts, value, onChange }: Props) {
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full text-sm">
+        <table className="w-full whitespace-nowrap text-sm">
           <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-1.5 text-left">Account</th>
@@ -63,14 +74,14 @@ export function AccountStep({ accounts, value, onChange }: Props) {
               filtered.map((acc) => {
                 const selected = value === acc.id;
                 const busy = acc.status === 'busy';
+                const queued = queueDepthById.get(acc.id) ?? 0;
                 return (
                   <tr
                     key={acc.id}
-                    onClick={() => !busy && onChange(acc.id)}
+                    onClick={() => onChange(acc.id)}
                     className={cn(
                       'cursor-pointer border-t border-border transition-colors even:bg-muted/30 last:border-b hover:bg-accent/40',
-                      selected && 'bg-primary/5 hover:bg-primary/10',
-                      busy && 'cursor-not-allowed opacity-60'
+                      selected && 'bg-primary/5 hover:bg-primary/10'
                     )}
                   >
                     <td className="px-3 py-2">
@@ -88,9 +99,9 @@ export function AccountStep({ accounts, value, onChange }: Props) {
                           </div>
                         )}
                         <div className="min-w-0">
-                          <div className="truncate font-medium">@{acc.username}</div>
+                          <div className="font-medium">@{acc.username}</div>
                           {acc.displayName ? (
-                            <div className="truncate text-[11px] text-muted-foreground">
+                            <div className="text-[11px] text-muted-foreground">
                               {acc.displayName}
                             </div>
                           ) : null}
@@ -108,6 +119,11 @@ export function AccountStep({ accounts, value, onChange }: Props) {
                       >
                         {busy ? 'Busy' : acc.status === 'error' ? 'Error' : 'Idle'}
                       </span>
+                      {queued > 0 ? (
+                        <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                          +{queued} queued
+                        </span>
+                      ) : null}
                       {selected ? (
                         <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-primary">
                           <Check className="h-3 w-3" />
