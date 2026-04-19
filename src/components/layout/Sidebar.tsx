@@ -53,7 +53,7 @@ export function Sidebar() {
   return (
     <aside className="flex h-full w-56 flex-col border-r border-border bg-muted/30">
       <div className="px-4 pb-2 pt-4">
-        <div className="text-sm font-semibold">B2DM</div>
+        <div className="text-sm font-semibold">MonchoOps</div>
         {session.profile ? (
           <div className="mt-0.5 truncate text-xs text-muted-foreground">{session.profile.email}</div>
         ) : null}

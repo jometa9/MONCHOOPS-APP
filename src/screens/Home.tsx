@@ -59,8 +59,23 @@ export function Home() {
   }, []);
 
   return (
-    <div className="flex min-h-full items-center justify-center">
-      <div className="mx-auto w-full max-w-3xl pb-40 p-16">
+    <div className="relative flex min-h-full items-center justify-center overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute bottom-0 left-0 z-0 h-[50vh] bg-foreground/[0.03]"
+        style={{
+          aspectRatio: '1280 / 1116',
+          WebkitMaskImage: 'url(/home-bg.svg)',
+          maskImage: 'url(/home-bg.svg)',
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
+          WebkitMaskPosition: 'bottom left',
+          maskPosition: 'bottom left',
+          WebkitMaskSize: 'contain',
+          maskSize: 'contain',
+        }}
+      />
+      <div className="relative z-10 mx-auto w-full max-w-3xl pb-40 p-16">
         <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">What do you want to do today?</p>
 

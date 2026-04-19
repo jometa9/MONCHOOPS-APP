@@ -36,7 +36,7 @@ export function Login() {
       <div className="flex flex-1 items-center justify-center p-6">
         <Card className="w-full max-w-sm">
           <CardHeader>
-            <CardTitle>Welcome to B2DM</CardTitle>
+            <CardTitle>Welcome to MonchoOps</CardTitle>
             <CardDescription>Sign in with your license key or your Google account.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

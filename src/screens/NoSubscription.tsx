@@ -18,8 +18,8 @@ export function NoSubscription() {
         title="No active subscription"
         description={
           session.profile?.email
-            ? `We couldn't find an active B2DM subscription on ${session.profile.email}. Activate a plan to start using the app.`
-            : 'Activate a B2DM plan to start using the app.'
+            ? `We couldn't find an active MonchoOps subscription on ${session.profile.email}. Activate a plan to start using the app.`
+            : 'Activate a MonchoOps plan to start using the app.'
         }
         action={
           <div className="flex items-center gap-2">
