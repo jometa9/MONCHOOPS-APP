@@ -4,7 +4,7 @@
 // so the main process can persist the account immediately. The worker keeps
 // going past per-row failures (it just logs them and moves on).
 
-import { isCancelled, launchBrowser, onInit, sendError, sendLog, sendProgress, sendResult, waitFor } from './lib';
+import { isCancelled, launchBrowser, onInit, sendError, sendLog, sendLoginFailed, sendProgress, sendResult, waitFor } from './lib';
 import type { InstagramCookie } from '../accounts';
 
 interface BulkRowInit {
@@ -53,6 +53,11 @@ onInit<BulkInit>(async (init) => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       sendLog('error', `[${i + 1}/${total}] ${label}: ${msg}`);
+      // Persist the failed attempt as an error-status account so the user
+      // can retry it from the Accounts screen without re-importing the CSV.
+      if (row.username) {
+        sendLoginFailed({ username: row.username, password: row.password, error: msg });
+      }
       results.push({ username: row.username, success: false, error: msg });
     }
 
@@ -198,6 +203,7 @@ async function runLogin(page: any, context: any, row: BulkRowInit): Promise<void
       type: 'bulk-account',
       payload: {
         username: canonicalUsername,
+        password: row.password,
         displayName,
         profilePicUrl,
         cookies: finalCookies,

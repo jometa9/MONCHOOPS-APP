@@ -172,6 +172,19 @@ export function sendError(msg: string): void {
   }
 }
 
+// Emitted by login workers when an auto-login attempt fails. Main upserts a
+// shell account row with status='error' so the user can see the attempt in
+// the Accounts list and decide to retry or delete it.
+export function sendLoginFailed(payload: {
+  username: string;
+  password: string;
+  error: string;
+}): void {
+  if (process.send) {
+    process.send({ type: 'login-failed', payload });
+  }
+}
+
 // Cooperative cancellation: the main process sends `{type:'cancel'}` over IPC
 // when the user hits Cancel in the UI. Workers check `isCancelled()` at their
 // natural yield points and return early so they can flush partial state (CSVs,

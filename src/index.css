@@ -65,7 +65,7 @@
 @layer components {
   .titlebar {
     -webkit-app-region: drag;
-    height: 40px;
+    height: 28px;
   }
   .titlebar button,
   .titlebar a,

@@ -25,6 +25,7 @@ export interface AccountsApi {
   get(id: string): Promise<AccountPublic | null>;
   startLogin(): Promise<{ jobId: string }>;
   startAutoLogin(username: string, password: string): Promise<{ jobId: string }>;
+  retryLogin(id: string, password?: string | null): Promise<{ jobId: string }>;
   startBulkAutoLogin(rows: BulkLoginRow[]): Promise<{ jobId: string }>;
   delete(id: string): Promise<void>;
   updateProxy(payload: {

@@ -128,8 +128,16 @@ export function createAccount(input: CreateAccountInput): AccountPublic {
     .get(input.username);
   const now = Date.now();
   const cookiesBlob = encryptJson(input.cookies);
+  const passwordBlob =
+    typeof input.password === 'string' && input.password.length > 0
+      ? encryptString(input.password)
+      : null;
 
   if (existing) {
+    // Keep the previously stored password if the caller didn't provide a new
+    // one (success path from the classic manual-login worker, which doesn't
+    // know the password).
+    const nextPassword = passwordBlob ?? existing.password_encrypted;
     getDb()
       .prepare(
         `UPDATE accounts SET
@@ -137,6 +145,7 @@ export function createAccount(input: CreateAccountInput): AccountPublic {
            profile_pic_url = ?,
            cookies_encrypted = ?,
            user_agent = ?,
+           password_encrypted = ?,
            status = 'idle',
            last_error = NULL,
            updated_at = ?
@@ -147,6 +156,7 @@ export function createAccount(input: CreateAccountInput): AccountPublic {
         input.profilePicUrl ?? existing.profile_pic_url,
         cookiesBlob,
         input.userAgent,
+        nextPassword,
         now,
         existing.id
       );
@@ -157,8 +167,8 @@ export function createAccount(input: CreateAccountInput): AccountPublic {
   getDb()
     .prepare(
       `INSERT INTO accounts
-        (id, username, display_name, profile_pic_url, cookies_encrypted, user_agent, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, ?)`
+        (id, username, display_name, profile_pic_url, cookies_encrypted, user_agent, password_encrypted, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?)`
     )
     .run(
       id,
@@ -167,10 +177,76 @@ export function createAccount(input: CreateAccountInput): AccountPublic {
       input.profilePicUrl ?? null,
       cookiesBlob,
       input.userAgent,
+      passwordBlob,
       now,
       now
     );
   return getAccount(id)!;
+}
+
+// Called when an auto-login attempt fails. Creates (or updates) a shell
+// account row with status='error' so the user can see the failed attempt and
+// choose to retry or delete it. Cookies are stored as an empty list — the
+// row is not usable for scraping/DMs until a successful retry replaces them.
+export interface UpsertFailedAccountInput {
+  username: string;
+  password?: string | null;
+  lastError: string;
+}
+
+export function upsertFailedAccount(input: UpsertFailedAccountInput): AccountPublic {
+  const existing = getDb()
+    .prepare<[string], AccountRow>('SELECT * FROM accounts WHERE username = ?')
+    .get(input.username);
+  const now = Date.now();
+  const passwordBlob =
+    typeof input.password === 'string' && input.password.length > 0
+      ? encryptString(input.password)
+      : null;
+
+  if (existing) {
+    // Don't nuke existing cookies/UA if we already have a working session —
+    // only flip status to 'error' and record the new error message. This way
+    // a transient failure on a healthy account just surfaces the error; the
+    // old cookies remain until the user retries.
+    const nextPassword = passwordBlob ?? existing.password_encrypted;
+    getDb()
+      .prepare(
+        `UPDATE accounts SET
+           password_encrypted = ?,
+           status = 'error',
+           last_error = ?,
+           updated_at = ?
+         WHERE id = ?`
+      )
+      .run(nextPassword, input.lastError, now, existing.id);
+    return getAccount(existing.id)!;
+  }
+
+  const id = crypto.randomUUID();
+  const emptyCookies = encryptJson([] as InstagramCookie[]);
+  getDb()
+    .prepare(
+      `INSERT INTO accounts
+        (id, username, display_name, profile_pic_url, cookies_encrypted, user_agent, password_encrypted, status, last_error, created_at, updated_at)
+       VALUES (?, ?, NULL, NULL, ?, '', ?, 'error', ?, ?, ?)`
+    )
+    .run(id, input.username, emptyCookies, passwordBlob, input.lastError, now, now);
+  return getAccount(id)!;
+}
+
+// Returns the decrypted password stored on the account row, or null if none
+// was ever stored (e.g. account was created via the manual-login flow).
+export function getAccountPassword(id: string): string | null {
+  const row = getDb()
+    .prepare<[string], AccountRow>('SELECT * FROM accounts WHERE id = ?')
+    .get(id);
+  if (!row || !row.password_encrypted) return null;
+  try {
+    return decryptString(row.password_encrypted);
+  } catch {
+    return null;
+  }
 }
 
 export function deleteAccount(id: string): void {

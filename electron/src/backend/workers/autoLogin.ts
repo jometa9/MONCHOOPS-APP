@@ -1,6 +1,6 @@
 // Auto-login worker: uses provided credentials to log into Instagram automatically via Playwright
 
-import { isCancelled, launchBrowser, onInit, sendError, sendResult, waitFor } from './lib';
+import { isCancelled, launchBrowser, onInit, sendError, sendLoginFailed, sendResult, waitFor } from './lib';
 import type { InstagramCookie } from '../accounts';
 
 interface AutoLoginInit {
@@ -14,6 +14,13 @@ interface AutoLoginInit {
 const LOGIN_DEADLINE_MS = 10 * 60_000;
 
 onInit<AutoLoginInit>(async (init) => {
+  // Helper: flag the attempt as failed with a user-visible error AND ask
+  // main to upsert a shell account row so the user can see + retry it.
+  const fail = (msg: string): void => {
+    sendLoginFailed({ username: init.username, password: init.password, error: msg });
+    sendError(msg);
+  };
+
   const { browser, context } = await launchBrowser({ headless: init.headless, proxy: init.proxy });
 
   const page = await context.newPage();
@@ -25,7 +32,7 @@ onInit<AutoLoginInit>(async (init) => {
     // Fill username field
     const usernameInput = await page.$('input[name="username"]');
     if (!usernameInput) {
-      sendError('Could not find username field on Instagram login page');
+      fail('Could not find username field on Instagram login page');
       try { await browser.close(); } catch {}
       process.exit(1);
       return;
@@ -35,7 +42,7 @@ onInit<AutoLoginInit>(async (init) => {
     // Fill password field
     const passwordInput = await page.$('input[name="password"]');
     if (!passwordInput) {
-      sendError('Could not find password field on Instagram login page');
+      fail('Could not find password field on Instagram login page');
       try { await browser.close(); } catch {}
       process.exit(1);
       return;
@@ -61,7 +68,7 @@ onInit<AutoLoginInit>(async (init) => {
         return;
       }
       if (context.pages().length === 0 || page.isClosed()) {
-        sendError('Login window was closed unexpectedly');
+        fail('Login window was closed unexpectedly');
         try { await browser.close(); } catch {}
         process.exit(1);
         return;
@@ -91,14 +98,14 @@ onInit<AutoLoginInit>(async (init) => {
         errorText.includes("couldn't find an account") ||
         errorText.includes('please wait a few minutes')
       ) {
-        sendError('Invalid username or password. Please check your credentials and try again.');
+        fail('Invalid username or password. Please check your credentials and try again.');
         try { await browser.close(); } catch {}
         process.exit(1);
         return;
       }
 
       if (errorText.includes('two-factor') || errorText.includes('security code') || errorText.includes('confirm it')) {
-        sendError('Two-factor authentication or a checkpoint is required. Use manual login for this account.');
+        fail('Two-factor authentication or a checkpoint is required. Use manual login for this account.');
         try { await browser.close(); } catch {}
         process.exit(1);
         return;
@@ -108,7 +115,7 @@ onInit<AutoLoginInit>(async (init) => {
     }
 
     if (!sessionFound) {
-      sendError('Timed out waiting for Instagram login. Please check your credentials and try again.');
+      fail('Timed out waiting for Instagram login. Please check your credentials and try again.');
       try { await browser.close(); } catch {}
       process.exit(1);
       return;
@@ -122,7 +129,7 @@ onInit<AutoLoginInit>(async (init) => {
 
     const username = await readUsernameFromEdit(page);
     if (!username) {
-      sendError('Logged in, but could not read your username from settings. Try again.');
+      fail('Logged in, but could not read your username from settings. Try again.');
       try { await browser.close(); } catch {}
       process.exit(1);
       return;
@@ -158,6 +165,7 @@ onInit<AutoLoginInit>(async (init) => {
 
     sendResult({
       username,
+      password: init.password,
       displayName,
       profilePicUrl,
       cookies,
@@ -168,7 +176,7 @@ onInit<AutoLoginInit>(async (init) => {
     process.exit(0);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    sendError(`Login failed: ${msg}`);
+    fail(`Login failed: ${msg}`);
     try { await browser.close(); } catch {}
     process.exit(1);
   }

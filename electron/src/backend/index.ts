@@ -7,6 +7,7 @@ import { handleAuthDeepLink } from './oauth';
 import {
   listAccounts,
   getAccount,
+  getAccountPassword,
   deleteAccount,
   updateProxy,
 } from './accounts';
@@ -112,6 +113,25 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     const jobId = startAutoLogin({ username, password });
     return { jobId };
   });
+  // Retry a failed auto-login. If `password` is provided, use it (and persist
+  // it on success). Otherwise fall back to the password stored on the account
+  // from the original attempt.
+  ipcMain.handle(
+    'accounts:retryLogin',
+    async (_e, payload: { id: string; password?: string | null }) => {
+      const acc = getAccount(payload.id);
+      if (!acc) throw new Error('Account not found');
+      const password =
+        typeof payload.password === 'string' && payload.password.length > 0
+          ? payload.password
+          : getAccountPassword(payload.id);
+      if (!password) {
+        throw new Error('No stored password for this account. Please enter one to retry.');
+      }
+      const jobId = startAutoLogin({ username: acc.username, password });
+      return { jobId };
+    }
+  );
   ipcMain.handle('accounts:startBulkAutoLogin', async (_e, rows: BulkLoginRow[]) => {
     const jobId = startBulkAutoLogin(rows);
     return { jobId };

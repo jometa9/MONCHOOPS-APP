@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Globe, Instagram, Loader2, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, Globe, Instagram, Loader2, Plus, RefreshCw, Search, Trash2, Upload } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,10 +25,12 @@ function AccountRow({
   account,
   onDelete,
   onConfigureProxy,
+  onRetry,
 }: {
   account: AccountPublic;
   onDelete: () => void;
   onConfigureProxy: () => void;
+  onRetry: () => void;
 }) {
   return (
     <tr className="border-t border-border even:bg-muted/30 last:border-b hover:bg-accent/40">
@@ -57,7 +59,18 @@ function AccountRow({
         </div>
       </td>
       <td className="px-3 py-1.5">
-        <StatusBadge status={account.status} />
+        <div className="flex flex-col gap-0.5">
+          <StatusBadge status={account.status} />
+          {account.status === 'error' && account.lastError ? (
+            <div
+              className="flex items-start gap-1 text-[11px] leading-tight text-destructive"
+              title={account.lastError}
+            >
+              <AlertTriangle className="h-3 w-3 flex-none translate-y-0.5" />
+              <span className="line-clamp-2">{account.lastError}</span>
+            </div>
+          ) : null}
+        </div>
       </td>
       <td className="px-3 py-1.5">
         {account.proxyUrl ? (
@@ -82,6 +95,17 @@ function AccountRow({
       </td>
       <td className="px-2 py-1.5">
         <div className="flex items-center justify-end gap-0.5">
+          {account.status === 'error' ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="Retry login"
+              aria-label="Retry login"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onConfigureProxy}
@@ -104,6 +128,88 @@ function AccountRow({
         </div>
       </td>
     </tr>
+  );
+}
+
+function RetryLoginDialog({
+  account,
+  onClose,
+}: {
+  account: AccountPublic;
+  onClose: () => void;
+}) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const hasStored = account.hasStoredPassword;
+
+  async function submit(useStored: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      await b2dm.accounts.retryLogin(account.id, useStored ? null : password);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start retry');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canRetryStored = hasStored && !busy;
+  const canSubmitTyped = password.trim().length > 0 && !busy;
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Retry login for @${account.username}`}
+      description={
+        hasStored
+          ? 'Retry with the saved password, or enter a new one if you changed it.'
+          : 'Enter the password to retry signing in.'
+      }
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          {hasStored ? (
+            <Button variant="outline" onClick={() => submit(true)} disabled={!canRetryStored}>
+              {busy ? <Spinner /> : null}
+              Use saved password
+            </Button>
+          ) : null}
+          <Button onClick={() => submit(false)} disabled={!canSubmitTyped}>
+            {busy ? <Spinner /> : null}
+            Sign in
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {account.lastError ? (
+          <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+            <AlertTriangle className="h-3.5 w-3.5 flex-none translate-y-0.5" />
+            <span>{account.lastError}</span>
+          </div>
+        ) : null}
+        <div className="space-y-1">
+          <Label htmlFor="retry-password">
+            {hasStored ? 'New password (leave empty to use saved)' : 'Password'}
+          </Label>
+          <Input
+            id="retry-password"
+            type="password"
+            placeholder={hasStored ? '•••••••• (saved)' : '••••••••'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={busy}
+          />
+        </div>
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      </div>
+    </Dialog>
   );
 }
 
@@ -645,6 +751,7 @@ export function InstagramAccounts() {
   const [addError, setAddError] = useState<string | null>(null);
   const [proxyTarget, setProxyTarget] = useState<AccountPublic | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AccountPublic | null>(null);
+  const [retryTarget, setRetryTarget] = useState<AccountPublic | null>(null);
   const [showLoginMethod, setShowLoginMethod] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [query, setQuery] = useState('');
@@ -826,6 +933,7 @@ export function InstagramAccounts() {
                   account={account}
                   onDelete={() => setDeleteTarget(account)}
                   onConfigureProxy={() => setProxyTarget(account)}
+                  onRetry={() => setRetryTarget(account)}
                 />
               ))
             )}
@@ -837,6 +945,9 @@ export function InstagramAccounts() {
       ) : null}
       {deleteTarget ? (
         <ConfirmDeleteDialog account={deleteTarget} onClose={() => setDeleteTarget(null)} />
+      ) : null}
+      {retryTarget ? (
+        <RetryLoginDialog account={retryTarget} onClose={() => setRetryTarget(null)} />
       ) : null}
       {showLoginMethod ? (
         <LoginMethodDialog

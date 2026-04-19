@@ -228,13 +228,16 @@ async function createWindow() {
     show: false,
     alwaysOnTop: false,
     ...(iconPath && { icon: nativeImage.createFromPath(iconPath) }),
-    ...(process.platform === 'darwin' && { titleBarStyle: 'hiddenInset' }),
+    ...(process.platform === 'darwin' && {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 9, y: 6 },
+    }),
     ...(isWindows && { titleBarStyle: 'hidden' }),
     ...(isWindows && {
       titleBarOverlay: {
         color: '#FFFFFF',
         symbolColor: '#111827',
-        height: 40,
+        height: 28,
       },
     }),
     backgroundColor: '#FFFFFF',

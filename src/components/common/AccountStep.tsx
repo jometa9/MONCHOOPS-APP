@@ -24,20 +24,32 @@ export function AccountStep({ accounts, value, onChange }: Props) {
     return map;
   }, [active]);
 
+  // Error-status accounts have no valid session — omit them from the picker
+  // so the user can't start a job that will fail at the first Playwright step.
+  const usable = useMemo(
+    () => accounts.filter((a) => a.status !== 'error'),
+    [accounts]
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return accounts;
-    return accounts.filter((a) =>
+    if (!q) return usable;
+    return usable.filter((a) =>
       [a.username, a.displayName ?? ''].some((s) => s.toLowerCase().includes(q))
     );
-  }, [accounts, query]);
+  }, [usable, query]);
 
-  if (accounts.length === 0) {
+  if (usable.length === 0) {
+    const hasErrorAccounts = accounts.length > 0;
     return (
       <EmptyPanel
         icon={<Instagram className="h-8 w-8" />}
-        title="No accounts yet"
-        description="Link an Instagram account from the Accounts screen first."
+        title={hasErrorAccounts ? 'No working accounts' : 'No accounts yet'}
+        description={
+          hasErrorAccounts
+            ? 'All your linked accounts are in an error state. Retry or remove them from the Accounts screen.'
+            : 'Link an Instagram account from the Accounts screen first.'
+        }
       />
     );
   }

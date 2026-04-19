@@ -10,6 +10,7 @@ import {
   getAccountSecrets,
   setAccountStatus,
   updateProxy,
+  upsertFailedAccount,
   type InstagramCookie,
 } from './accounts';
 import { ingestLeadsFromCsv, resolveCategoryRef } from './leads';
@@ -752,6 +753,24 @@ function handleWorkerMessage(jobId: string, msg: any): void {
     finaliseJob(jobId, 'failed', typeof msg.msg === 'string' ? msg.msg : 'Unknown worker error');
   } else if (msg.type === 'bulk-account') {
     persistBulkAccount(jobId, msg.payload);
+  } else if (msg.type === 'login-failed') {
+    persistFailedLogin(jobId, msg.payload);
+  }
+}
+
+function persistFailedLogin(jobId: string, payload: any): void {
+  if (!payload || typeof payload !== 'object') return;
+  const username = typeof payload.username === 'string' ? payload.username.trim() : '';
+  if (!username) return;
+  try {
+    upsertFailedAccount({
+      username,
+      password: typeof payload.password === 'string' ? payload.password : null,
+      lastError: typeof payload.error === 'string' ? payload.error : 'Login failed',
+    });
+    emit({ type: 'jobs:changed' });
+  } catch (err) {
+    console.error(`[jobs ${jobId}] failed to persist failed login:`, err);
   }
 }
 
@@ -764,6 +783,7 @@ function persistBulkAccount(jobId: string, payload: any): void {
       profilePicUrl: payload.profilePicUrl ?? null,
       cookies: (payload.cookies ?? []) as InstagramCookie[],
       userAgent: String(payload.userAgent || 'Mozilla/5.0'),
+      password: typeof payload.password === 'string' ? payload.password : null,
     });
     if (payload.proxy && typeof payload.proxy === 'object' && payload.proxy.url) {
       try {
@@ -831,6 +851,7 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
           profilePicUrl: r.profilePicUrl,
           cookies: r.cookies,
           userAgent: r.userAgent || 'Mozilla/5.0',
+          password: typeof r.password === 'string' ? r.password : null,
         });
         void acc;
       } catch (err) {

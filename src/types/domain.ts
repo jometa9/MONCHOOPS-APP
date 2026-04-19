@@ -12,6 +12,7 @@ export interface AccountPublic {
   proxyUrl: string | null;
   proxyUsername: string | null;
   hasProxyPassword: boolean;
+  hasStoredPassword: boolean;
   status: AccountStatus;
   lastError: string | null;
   createdAt: number;
