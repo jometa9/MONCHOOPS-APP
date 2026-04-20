@@ -23,8 +23,13 @@ interface BulkInit {
   maximizeWindow?: boolean;
 }
 
-const PER_ROW_DEADLINE_MS = 90_000;
-const POST_SUBMIT_DEADLINE_MS = 15_000;
+// Post-submit window is generous on purpose: if Instagram throws a captcha or
+// checkpoint, the login flow is headed and the user can solve it manually
+// before the sessionid cookie lands. 3 min covers reCAPTCHA + 2FA SMS wait.
+// PER_ROW_DEADLINE_MS must stay above POST_SUBMIT plus navigation and
+// identity extraction (~90s worst case).
+const POST_SUBMIT_DEADLINE_MS = 180_000;
+const PER_ROW_DEADLINE_MS = 300_000;
 
 interface RowResult {
   username: string;

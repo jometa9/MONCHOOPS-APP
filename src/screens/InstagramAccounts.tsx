@@ -1122,7 +1122,7 @@ export function InstagramAccounts() {
         </div>
 
         {filteredAccounts.length === 0 ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center">
+          <div className="flex min-h-0 flex-1 items-center justify-center border-t border-border">
             <EmptyState
               icon={<Search className="h-10 w-10" />}
               title="No accounts match your filters"
