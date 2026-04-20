@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ListTodo, X } from 'lucide-react';
-import { EmptyState } from '@/components/common/EmptyState';
+import { ArrowRight, ListTodo, X } from 'lucide-react';
+import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
 import { useJobs } from '@/context/JobsContext';
 import { useAccounts } from '@/context/AccountsContext';
@@ -70,6 +70,11 @@ export function Queue() {
         icon={<ListTodo className="h-10 w-10" />}
         title="Nothing running"
         description="Jobs in progress or waiting show up here."
+        action={
+          <EmptyStateLinkButton to="/scrape" icon={<ArrowRight className="h-3.5 w-3.5" />}>
+            Start scraping leads
+          </EmptyStateLinkButton>
+        }
       />
     );
   }
