@@ -52,6 +52,7 @@ import {
   startWarmupScheduler,
   stopWarmupScheduler,
 } from './warmupSchedules';
+import { wipeUserData } from './userData';
 import type { SessionSnapshot } from './types';
 import {
   checkForUpdatesManual,
@@ -400,37 +401,10 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
 
   // Wipe every trace of user data except the authenticated session (license
   // key + cached profile/subscription stay so the user doesn't get kicked
-  // out). Cancels running jobs, deletes all DB rows across feature tables,
-  // removes CSV artifacts, and resets preference meta keys.
+  // out). Shares the same helper with the automatic wipe-on-user-switch in
+  // license.validateLicense so the two code paths stay in lockstep.
   ipcMain.handle('settings:wipeAllData', async () => {
-    const running = listRunningJobs();
-    for (const job of running) cancelJob(job.id);
-
-    const scrapeRows = listScrapeResults();
-    for (const row of scrapeRows) {
-      try { fs.unlinkSync(row.csvPath); } catch {}
-    }
-
-    const db = getDb();
-    const wipe = db.transaction(() => {
-      db.prepare('DELETE FROM leads').run();
-      db.prepare('DELETE FROM category_scrapes').run();
-      db.prepare('DELETE FROM lead_categories').run();
-      db.prepare('DELETE FROM mass_dm_results').run();
-      db.prepare('DELETE FROM warmup_results').run();
-      db.prepare('DELETE FROM warmup_schedules').run();
-      db.prepare('DELETE FROM scrape_results').run();
-      db.prepare('DELETE FROM jobs').run();
-      db.prepare('DELETE FROM accounts').run();
-      // Preserve login state. Everything else in meta (preferences, cached
-      // dirs, etc.) goes away so the app feels truly reset.
-      db.prepare(
-        `DELETE FROM meta
-         WHERE key NOT IN ('license_key_encrypted', 'profile', 'subscription')`
-      ).run();
-    });
-    wipe();
-
+    wipeUserData();
     broadcast('accounts:changed');
     broadcast('jobs:changed');
     broadcast('categories:changed');

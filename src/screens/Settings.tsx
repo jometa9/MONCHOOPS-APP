@@ -178,12 +178,12 @@ export function Settings() {
           {/* Data */}
           <div className="border border-border bg-background">
             <SectionHeader title="Data" />
-            <div className="flex items-stretch">
+            <div className="flex items-stretch border-t border-border">
               <button
                 type="button"
                 onClick={() => void handleDeleteAccounts()}
                 disabled={isDeletingAccounts || isWipingAll}
-                className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+                className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
               >
                 {isDeletingAccounts ? (
                   <Loader className="h-3.5 w-3.5 animate-spin" />
@@ -196,7 +196,7 @@ export function Settings() {
                 type="button"
                 onClick={() => void handleDeleteScrapes()}
                 disabled={isDeletingScrapes || isWipingAll}
-                className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+                className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
               >
                 {isDeletingScrapes ? (
                   <Loader className="h-3.5 w-3.5 animate-spin" />
@@ -209,7 +209,7 @@ export function Settings() {
                 type="button"
                 onClick={() => void handleWipeAllData()}
                 disabled={isDeletingAccounts || isDeletingScrapes || isWipingAll}
-                className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground disabled:opacity-60"
+                className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
               >
                 {isWipingAll ? (
                   <Loader className="h-3.5 w-3.5 animate-spin" />

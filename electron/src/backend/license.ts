@@ -3,10 +3,14 @@ import { encryptString, decryptString } from './crypto';
 import { metaGet, metaSet, metaGetJson, metaSetJson } from './db';
 import type { ProfileInfo, SessionSnapshot, SubscriptionInfo } from './types';
 import { EMPTY_SESSION } from './types';
+import { wipeUserData } from './userData';
 
 const LICENSE_KEY_META = 'license_key_encrypted'; // base64 of encrypted blob
 const PROFILE_META = 'profile';
 const SUBSCRIPTION_META = 'subscription';
+// Sticks around after logout so we can detect when a different user logs
+// back in on the same machine and scrub the previous user's data.
+const LAST_OWNER_EMAIL_META = 'last_owner_email';
 
 interface ExternalLicenseResponse {
   email?: string;
@@ -46,6 +50,20 @@ function saveSubscription(sub: SubscriptionInfo): void {
   metaSetJson(SUBSCRIPTION_META, sub);
 }
 
+// Wipes user-scoped data if the incoming session belongs to someone other
+// than the last owner. The first login after a fresh install has no stored
+// owner, so nothing gets wiped. A matching email (same user re-logging in)
+// is also a no-op so the user keeps their accounts/leads/history.
+function ensureOwnerMatches(incomingEmail: string): void {
+  const normalized = incomingEmail.trim().toLowerCase();
+  if (!normalized) return;
+  const previous = metaGet(LAST_OWNER_EMAIL_META);
+  if (previous && previous !== normalized) {
+    wipeUserData();
+  }
+  metaSet(LAST_OWNER_EMAIL_META, normalized);
+}
+
 export function getSession(): SessionSnapshot {
   const licenseKey = loadLicenseKey();
   if (!licenseKey) return EMPTY_SESSION;
@@ -77,6 +95,7 @@ export async function validateLicense(licenseKey: string): Promise<SessionSnapsh
 
   if (trimmed === MOCK_LICENSE_KEY) {
     const snapshot = buildMockSession();
+    ensureOwnerMatches(snapshot.profile!.email);
     saveLicenseKey(trimmed);
     saveProfile(snapshot.profile!);
     saveSubscription(snapshot.subscription!);
@@ -117,6 +136,7 @@ export async function validateLicense(licenseKey: string): Promise<SessionSnapsh
   const { plan, active } = normalisePlan(data.plan);
   const subscription: SubscriptionInfo = { plan, active, version: data.version };
 
+  ensureOwnerMatches(email);
   saveLicenseKey(trimmed);
   saveProfile(profile);
   saveSubscription(subscription);

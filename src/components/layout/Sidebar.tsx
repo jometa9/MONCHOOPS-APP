@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Database, Flame, FolderTree, History, Home, Instagram, ListTodo, LogOut, Send, Settings, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/context/SessionContext';
 import { useJobs } from '@/context/JobsContext';
 import { Spinner } from '@/components/common/Spinner';
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import type { JobKind } from '@/types/domain';
 
 const SCRAPE_KINDS: JobKind[] = ['scrape_by_username', 'scrape_by_post', 'scrape_by_hashtag', 'scrape_by_location'];
@@ -33,6 +36,18 @@ const bottomItems: Item[] = [
 export function Sidebar() {
   const { session, logout } = useSession();
   const { running, progressByJob } = useJobs();
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleConfirmLogout() {
+    setLoggingOut(true);
+    try {
+      await logout();
+      setConfirmLogout(false);
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     cn(
@@ -88,13 +103,41 @@ export function Sidebar() {
           </NavLink>
         ))}
         <button
-          onClick={() => { void logout(); }}
+          onClick={() => setConfirmLogout(true)}
           className="flex w-full items-center gap-2.5 border-y border-transparent px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
         >
           <LogOut className="h-4 w-4" />
           <span>Log out</span>
         </button>
       </div>
+
+      {confirmLogout ? (
+        <Dialog
+          open
+          onClose={() => {
+            if (!loggingOut) setConfirmLogout(false);
+          }}
+          title="Log out?"
+          description="Your Instagram accounts, scrapes, categories and history stay on this device. You'll see them again next time you log in with the same account."
+          footer={
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => setConfirmLogout(false)}
+                disabled={loggingOut}
+              >
+                Cancel
+              </Button>
+              <Button onClick={() => void handleConfirmLogout()} disabled={loggingOut}>
+                {loggingOut ? <Spinner /> : <LogOut className="h-3.5 w-3.5" />}
+                {loggingOut ? 'Logging out…' : 'Log out'}
+              </Button>
+            </>
+          }
+        >
+          {null}
+        </Dialog>
+      ) : null}
     </aside>
   );
 }
