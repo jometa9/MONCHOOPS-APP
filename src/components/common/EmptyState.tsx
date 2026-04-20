@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 
 interface EmptyStateProps {
@@ -13,7 +14,7 @@ export function EmptyState({ icon, title, description, action, className }: Empt
   return (
     <div
       className={cn(
-        'flex h-full w-full flex-col items-center justify-center gap-4 px-6 py-16 text-center',
+        'flex h-full w-full flex-col items-center justify-center gap-4 px-6 pt-16 pb-40 text-center',
         className
       )}
     >
@@ -24,5 +25,23 @@ export function EmptyState({ icon, title, description, action, className }: Empt
       </div>
       {action ? <div>{action}</div> : null}
     </div>
+  );
+}
+
+interface EmptyStateLinkButtonProps {
+  to: string;
+  icon?: ReactNode;
+  children: ReactNode;
+}
+
+export function EmptyStateLinkButton({ to, icon, children }: EmptyStateLinkButtonProps) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex h-9 items-center gap-1.5 border border-border bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+    >
+      {icon}
+      {children}
+    </Link>
   );
 }

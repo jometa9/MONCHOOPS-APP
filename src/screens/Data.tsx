@@ -1,20 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Database, Download, Eye, FolderOpen, Search, Tag } from 'lucide-react';
-import { EmptyState } from '@/components/common/EmptyState';
+import { ArrowRight, Database, Download, Eye, FolderOpen, Search, Tag } from 'lucide-react';
+import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
 import { b2dm } from '@/lib/b2dm';
 import { formatDateTime } from '@/lib/format';
 import type { ScrapeResultPublic } from '@/types/domain';
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms} ms`;
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rs = s % 60;
-  return `${m}m ${rs}s`;
-}
 
 export function Data() {
   const navigate = useNavigate();
@@ -68,13 +59,16 @@ export function Data() {
 
   if (rows.length === 0) {
     return (
-      <div className="h-full">
-        <EmptyState
-          icon={<Database className="h-10 w-10" />}
-          title="No scraped data yet"
-          description="Run a scrape from Actions → Scrape usernames. Results will appear here with a download button."
-        />
-      </div>
+      <EmptyState
+        icon={<Database className="h-10 w-10" />}
+        title="No scraped data yet"
+        description="Scraped leads show up here, ready to export or reuse in a campaign."
+        action={
+          <EmptyStateLinkButton to="/scrape" icon={<ArrowRight className="h-3.5 w-3.5" />}>
+            Scrape data
+          </EmptyStateLinkButton>
+        }
+      />
     );
   }
 
@@ -98,7 +92,6 @@ export function Data() {
               <th className="px-3 py-1.5 text-left">Summary</th>
               <th className="px-3 py-1.5 text-left">Category</th>
               <th className="px-3 py-1.5 text-right">Usernames</th>
-              <th className="px-3 py-1.5 text-right">Duration</th>
               <th className="px-3 py-1.5 text-left">Completed</th>
               <th className="px-3 py-1.5 text-right">Actions</th>
             </tr>
@@ -106,14 +99,16 @@ export function Data() {
           <tbody>
             {filteredRows!.length === 0 ? (
               <tr className="border-t border-border last:border-b">
-                <td colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">
                   No scrapes match your search.
                 </td>
               </tr>
             ) : filteredRows!.map((row) => (
               <tr key={row.jobId} className="border-t border-border even:bg-muted/30 last:border-b">
                 <td className="px-3 py-1.5">
-                  <div className="font-medium">{row.summary}</div>
+                  <div className="font-medium">
+                    {row.summary.length > 20 ? `${row.summary.slice(0, 20)}…` : row.summary}
+                  </div>
                   <div className="text-[11px] text-muted-foreground">{row.kind}</div>
                 </td>
                 <td className="px-3 py-1.5">
@@ -127,7 +122,6 @@ export function Data() {
                   )}
                 </td>
                 <td className="px-3 py-1.5 text-right tabular-nums">{row.usernameCount}</td>
-                <td className="px-3 py-1.5 text-right text-muted-foreground">{formatDuration(row.durationMs)}</td>
                 <td className="px-3 py-1.5 text-muted-foreground">{formatDateTime(row.completedAt)}</td>
                 <td className="px-2 py-1.5">
                   <div className="flex items-center justify-end gap-0.5">

@@ -14,6 +14,7 @@ import {
   type InstagramCookie,
 } from './accounts';
 import { ingestLeadsFromCsv, resolveCategoryRef } from './leads';
+import { acquireSlot, releaseSlot, type WindowBounds } from './windowSlots';
 
 export type JobKind =
   | 'login'
@@ -21,7 +22,48 @@ export type JobKind =
   | 'scrape_by_username'
   | 'scrape_by_post'
   | 'scrape_by_hashtag'
-  | 'scrape_by_location';
+  | 'scrape_by_location'
+  | 'warmup';
+
+export type WarmupAction =
+  | { type: 'view_feed'; durationSec: number }
+  | { type: 'view_explore'; durationSec: number }
+  | { type: 'hashtag_like'; hashtag: string; count: number }
+  | { type: 'hashtag_follow'; hashtag: string; count: number }
+  | { type: 'location_like'; location: string; count: number }
+  | { type: 'location_follow'; location: string; count: number }
+  | {
+      type: 'combo';
+      feedSec: number;
+      exploreSec: number;
+      hashtag: string;
+      likeCount: number;
+      followCount: number;
+    };
+
+export interface WarmupResultPublic {
+  jobId: string;
+  accountId: string | null;
+  accountUsername: string | null;
+  actionType: WarmupAction['type'];
+  action: WarmupAction;
+  visited: number;
+  liked: number;
+  followed: number;
+  skipped: number;
+  failed: number;
+  viewedMs: number;
+  durationMs: number;
+  completedAt: number;
+}
+
+export interface MassDmInteractionsConfig {
+  /** Follow the target username before DMing them. */
+  follow: boolean;
+  /** Like this many of the target's most recent posts before DMing. 0
+   *  means "don't like anything". */
+  likeCount: number;
+}
 
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
@@ -331,6 +373,56 @@ export function listMassDmResults(): MassDmResultPublic[] {
   return rows.map(massDmRowToPublic);
 }
 
+interface WarmupResultRow {
+  job_id: string;
+  account_id: string | null;
+  account_username: string | null;
+  action_type: string;
+  action_json: string;
+  result_json: string;
+  duration_ms: number;
+  completed_at: number;
+}
+
+const WARMUP_RESULT_SELECT = `
+  SELECT
+    wr.*,
+    a.username AS account_username
+  FROM warmup_results wr
+  LEFT JOIN accounts a ON a.id = wr.account_id
+`;
+
+function warmupRowToPublic(row: WarmupResultRow): WarmupResultPublic {
+  let action: WarmupAction = { type: 'view_feed', durationSec: 0 };
+  try { action = JSON.parse(row.action_json) as WarmupAction; } catch {}
+  let counters: Record<string, unknown> = {};
+  try { counters = JSON.parse(row.result_json) as Record<string, unknown>; } catch {}
+  return {
+    jobId: row.job_id,
+    accountId: row.account_id,
+    accountUsername: row.account_username,
+    actionType: action.type,
+    action,
+    visited: Number(counters.visited) || 0,
+    liked: Number(counters.liked) || 0,
+    followed: Number(counters.followed) || 0,
+    skipped: Number(counters.skipped) || 0,
+    failed: Number(counters.failed) || 0,
+    viewedMs: Number(counters.viewedMs) || 0,
+    durationMs: row.duration_ms,
+    completedAt: row.completed_at,
+  };
+}
+
+export function listWarmupResults(): WarmupResultPublic[] {
+  const rows = getDb()
+    .prepare<[], WarmupResultRow>(
+      `${WARMUP_RESULT_SELECT} ORDER BY wr.completed_at DESC`
+    )
+    .all();
+  return rows.map(warmupRowToPublic);
+}
+
 function scrapesDir(): string {
   const d = path.join(app.getPath('userData'), 'scrapes');
   fs.mkdirSync(d, { recursive: true });
@@ -351,9 +443,18 @@ function getHeadlessPref(): boolean {
   return raw !== 'false';
 }
 
+// "Full window" means: when headed, open the Chromium maximized instead of
+// tiling it into the screen-grid. Defaults to false (tiling on) since the
+// whole point of the headed mode is being able to monitor several runs
+// side-by-side.
+function getFullWindowPref(): boolean {
+  return metaGet('full_window') === 'true';
+}
+
 function workerForKind(kind: JobKind): string {
   if (kind === 'login') return workerScriptPath('login');
   if (kind === 'mass_dm') return workerScriptPath('massDm');
+  if (kind === 'warmup') return workerScriptPath('warmup');
   return workerScriptPath('scrape');
 }
 
@@ -442,10 +543,16 @@ export function startLogin(args: StartLoginArgs = {}): string {
   }
   const jobId = insertJob('login', null, {});
   const scriptPath = workerScriptPath('login');
-  const child = spawnWorker(scriptPath, jobId, {
-    type: 'init',
-    payload: { jobId, proxy: toWorkerProxy(args.proxy) },
-  });
+  // Manual login is always headed — the user has to interact with it.
+  const child = spawnWorker(
+    scriptPath,
+    jobId,
+    {
+      type: 'init',
+      payload: { jobId, proxy: toWorkerProxy(args.proxy) },
+    },
+    { headed: true }
+  );
   runningChildren.set(jobId, child);
   runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });
   if (args.proxy && args.proxy.url) pendingLoginProxies.set(jobId, args.proxy);
@@ -467,16 +574,22 @@ export function startAutoLogin(args: StartAutoLoginArgs): string {
   }
   const jobId = insertJob('login', null, { type: 'auto' });
   const scriptPath = workerScriptPath('autoLogin');
-  const child = spawnWorker(scriptPath, jobId, {
-    type: 'init',
-    payload: {
-      jobId,
-      username: args.username,
-      password: args.password,
-      headless: getHeadlessPref(),
-      proxy: toWorkerProxy(args.proxy),
+  const headless = getHeadlessPref();
+  const child = spawnWorker(
+    scriptPath,
+    jobId,
+    {
+      type: 'init',
+      payload: {
+        jobId,
+        username: args.username,
+        password: args.password,
+        headless,
+        proxy: toWorkerProxy(args.proxy),
+      },
     },
-  });
+    { headed: !headless }
+  );
   runningChildren.set(jobId, child);
   runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });
   if (args.proxy && args.proxy.url) pendingLoginProxies.set(jobId, args.proxy);
@@ -503,10 +616,16 @@ export function startBulkAutoLogin(rows: BulkLoginRow[]): string {
   }
   const jobId = insertJob('login', null, { type: 'bulk', count: rows.length });
   const scriptPath = workerScriptPath('bulkAutoLogin');
-  const child = spawnWorker(scriptPath, jobId, {
-    type: 'init',
-    payload: { jobId, rows, headless: getHeadlessPref() },
-  });
+  const headless = getHeadlessPref();
+  const child = spawnWorker(
+    scriptPath,
+    jobId,
+    {
+      type: 'init',
+      payload: { jobId, rows, headless },
+    },
+    { headed: !headless }
+  );
   runningChildren.set(jobId, child);
   runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });
   emit({ type: 'jobs:changed' });
@@ -518,6 +637,7 @@ export interface StartMassDmArgs {
   usernamesCsvPath: string;
   messages: string[];
   intervalMs: number;
+  interactions?: MassDmInteractionsConfig | null;
 }
 
 const MAX_DM_VARIANTS = 20;
@@ -532,10 +652,12 @@ export function startMassDm(args: StartMassDmArgs): string {
     .slice(0, MAX_DM_VARIANTS);
   if (messages.length === 0) throw new Error('At least one message variant is required');
 
+  const interactions = normaliseInteractions(args.interactions);
   const params = {
     intervalMs: args.intervalMs,
     messages,
     usernamesCsvPath: args.usernamesCsvPath,
+    interactions,
   };
 
   if (hasPendingJobForAccount(args.accountId)) {
@@ -553,31 +675,144 @@ export function startMassDm(args: StartMassDmArgs): string {
   return jobId;
 }
 
+function normaliseInteractions(
+  raw: MassDmInteractionsConfig | null | undefined
+): MassDmInteractionsConfig | null {
+  if (!raw) return null;
+  const likeCount = Math.max(0, Math.min(5, Math.floor(Number(raw.likeCount) || 0)));
+  const follow = !!raw.follow;
+  if (!follow && likeCount === 0) return null;
+  return { follow, likeCount };
+}
+
 function spawnMassDmWorker(
   jobId: string,
   accountId: string,
   secrets: NonNullable<ReturnType<typeof getAccountSecrets>>,
-  params: { usernamesCsvPath: string; messages: string[]; intervalMs: number }
+  params: {
+    usernamesCsvPath: string;
+    messages: string[];
+    intervalMs: number;
+    interactions?: MassDmInteractionsConfig | null;
+  }
 ): void {
-  const child = spawnWorker(workerForKind('mass_dm'), jobId, {
-    type: 'init',
-    payload: {
-      jobId,
-      secrets,
-      usernamesCsvPath: params.usernamesCsvPath,
-      messages: params.messages,
-      intervalMs: params.intervalMs,
-      headless: getHeadlessPref(),
+  const headless = getHeadlessPref();
+  const child = spawnWorker(
+    workerForKind('mass_dm'),
+    jobId,
+    {
+      type: 'init',
+      payload: {
+        jobId,
+        secrets,
+        usernamesCsvPath: params.usernamesCsvPath,
+        messages: params.messages,
+        intervalMs: params.intervalMs,
+        interactions: params.interactions ?? null,
+        headless,
+      },
     },
-  });
+    { headed: !headless }
+  );
   runningChildren.set(jobId, child);
   runningMeta.set(jobId, { startedAt: Date.now(), accountId, kind: 'mass_dm' });
   setAccountStatus(accountId, 'busy');
 }
 
+export interface StartWarmupArgs {
+  accountId: string;
+  action: WarmupAction;
+}
+
+export function startWarmup(args: StartWarmupArgs): string {
+  const acc = getAccount(args.accountId);
+  if (!acc) throw new Error('Account not found');
+
+  const action = validateWarmupAction(args.action);
+  const params = { action };
+
+  if (hasPendingJobForAccount(args.accountId)) {
+    const jobId = insertQueuedJob('warmup', args.accountId, params);
+    emit({ type: 'jobs:changed' });
+    return jobId;
+  }
+
+  const secrets = getAccountSecrets(args.accountId);
+  if (!secrets) throw new Error('Account not found');
+
+  const jobId = insertJob('warmup', args.accountId, params);
+  spawnWarmupWorker(jobId, args.accountId, secrets, action);
+  emit({ type: 'jobs:changed' });
+  return jobId;
+}
+
+function validateWarmupAction(action: WarmupAction): WarmupAction {
+  switch (action.type) {
+    case 'view_feed':
+    case 'view_explore': {
+      const durationSec = Math.max(30, Math.min(1800, Math.floor(action.durationSec)));
+      return { type: action.type, durationSec };
+    }
+    case 'hashtag_like':
+    case 'hashtag_follow': {
+      const hashtag = (action.hashtag || '').replace(/^#+/, '').trim();
+      if (!hashtag) throw new Error('Hashtag is required');
+      const count = Math.max(1, Math.min(50, Math.floor(action.count)));
+      return { type: action.type, hashtag, count };
+    }
+    case 'location_like':
+    case 'location_follow': {
+      const location = (action.location || '').trim();
+      if (!location) throw new Error('Location URL or slug is required');
+      const count = Math.max(1, Math.min(50, Math.floor(action.count)));
+      return { type: action.type, location, count };
+    }
+    case 'combo': {
+      const hashtag = (action.hashtag || '').replace(/^#+/, '').trim();
+      if (!hashtag) throw new Error('Hashtag is required for the combo warmup');
+      return {
+        type: 'combo',
+        feedSec: Math.max(0, Math.min(1800, Math.floor(action.feedSec))),
+        exploreSec: Math.max(0, Math.min(1800, Math.floor(action.exploreSec))),
+        hashtag,
+        likeCount: Math.max(0, Math.min(50, Math.floor(action.likeCount))),
+        followCount: Math.max(0, Math.min(50, Math.floor(action.followCount))),
+      };
+    }
+    default:
+      throw new Error('Unknown warmup action');
+  }
+}
+
+function spawnWarmupWorker(
+  jobId: string,
+  accountId: string,
+  secrets: NonNullable<ReturnType<typeof getAccountSecrets>>,
+  action: WarmupAction
+): void {
+  const headless = getHeadlessPref();
+  const child = spawnWorker(
+    workerForKind('warmup'),
+    jobId,
+    {
+      type: 'init',
+      payload: {
+        jobId,
+        secrets,
+        action,
+        headless,
+      },
+    },
+    { headed: !headless }
+  );
+  runningChildren.set(jobId, child);
+  runningMeta.set(jobId, { startedAt: Date.now(), accountId, kind: 'warmup' });
+  setAccountStatus(accountId, 'busy');
+}
+
 export interface StartScrapeArgs {
   accountId: string;
-  kind: Exclude<JobKind, 'login' | 'mass_dm'>;
+  kind: Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>;
   params: Record<string, unknown>;
 }
 
@@ -616,22 +851,28 @@ export function startScrape(args: StartScrapeArgs): string {
 function spawnScrapeWorker(
   jobId: string,
   accountId: string,
-  kind: Exclude<JobKind, 'login' | 'mass_dm'>,
+  kind: Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>,
   secrets: NonNullable<ReturnType<typeof getAccountSecrets>>,
   params: Record<string, unknown>
 ): void {
   const csvPath = path.join(scrapesDir(), `${jobId}.csv`);
-  const child = spawnWorker(workerForKind(kind), jobId, {
-    type: 'init',
-    payload: {
-      jobId,
-      kind,
-      secrets,
-      csvPath,
-      params,
-      headless: getHeadlessPref(),
+  const headless = getHeadlessPref();
+  const child = spawnWorker(
+    workerForKind(kind),
+    jobId,
+    {
+      type: 'init',
+      payload: {
+        jobId,
+        kind,
+        secrets,
+        csvPath,
+        params,
+        headless,
+      },
     },
-  });
+    { headed: !headless }
+  );
   runningChildren.set(jobId, child);
   runningMeta.set(jobId, { startedAt: Date.now(), accountId, kind });
   setAccountStatus(accountId, 'busy');
@@ -679,12 +920,26 @@ function dispatchNextForAccount(accountId: string): boolean {
       usernamesCsvPath: String(params.usernamesCsvPath ?? ''),
       messages: Array.isArray(params.messages) ? params.messages : [],
       intervalMs: Number(params.intervalMs) || 0,
+      interactions: normaliseInteractions(params.interactions ?? null),
     });
+  } else if (row.kind === 'warmup') {
+    try {
+      spawnWarmupWorker(
+        row.id,
+        accountId,
+        secrets,
+        validateWarmupAction(params.action as WarmupAction)
+      );
+    } catch (err) {
+      finaliseJob(row.id, 'failed', err instanceof Error ? err.message : String(err));
+      emit({ type: 'jobs:done', jobId: row.id, status: 'failed' });
+      return dispatchNextForAccount(accountId);
+    }
   } else {
     spawnScrapeWorker(
       row.id,
       accountId,
-      row.kind as Exclude<JobKind, 'login' | 'mass_dm'>,
+      row.kind as Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>,
       secrets,
       params
     );
@@ -723,13 +978,41 @@ export function cancelJob(jobId: string): void {
   }, CANCEL_GRACE_MS);
 }
 
-function spawnWorker(scriptPath: string, jobId: string, initMessage: unknown): ChildProcess {
+function spawnWorker(
+  scriptPath: string,
+  jobId: string,
+  initMessage: unknown,
+  opts: { headed: boolean } = { headed: false }
+): ChildProcess {
   if (!fs.existsSync(scriptPath)) {
     finaliseJob(jobId, 'failed', `Worker script not found: ${scriptPath}`);
     throw new Error(`Worker script not found: ${scriptPath}`);
   }
 
   console.log(`[jobs] forking worker ${jobId} → ${scriptPath}`);
+
+  // Pick the headed-window strategy. "Full window" maximizes the Chromium
+  // and skips tiling entirely; otherwise we reserve a tile on the screen
+  // grid and inject its bounds into the worker's init payload (released in
+  // handleWorkerExit). Headless runs ignore both — there's no window to
+  // place.
+  let messageToSend = initMessage as any;
+  if (opts.headed && messageToSend && typeof messageToSend === 'object' && messageToSend.payload) {
+    if (getFullWindowPref()) {
+      messageToSend = {
+        ...messageToSend,
+        payload: { ...messageToSend.payload, maximizeWindow: true },
+      };
+    } else {
+      const bounds: WindowBounds | null = acquireSlot(jobId);
+      if (bounds) {
+        messageToSend = {
+          ...messageToSend,
+          payload: { ...messageToSend.payload, windowBounds: bounds },
+        };
+      }
+    }
+  }
 
   // ELECTRON_RUN_AS_NODE makes Electron's binary behave like plain Node,
   // which is what child_process.fork expects inside a packaged Electron app.
@@ -754,7 +1037,7 @@ function spawnWorker(scriptPath: string, jobId: string, initMessage: unknown): C
   child.stderr?.on('data', (d) => console.error(`[worker ${jobId}] ${d.toString().trimEnd()}`));
 
   try {
-    child.send(initMessage as any);
+    child.send(messageToSend);
   } catch (err) {
     console.error(`[jobs] could not send init to worker ${jobId}:`, err);
   }
@@ -835,6 +1118,7 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
   const meta = runningMeta.get(jobId);
   runningChildren.delete(jobId);
   runningMeta.delete(jobId);
+  releaseSlot(jobId);
 
   const result = pendingResults.get(jobId);
   pendingResults.delete(jobId);
@@ -916,6 +1200,32 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
           );
       } catch (err) {
         console.error('[jobs] failed to persist mass_dm result:', err);
+      }
+    } else if (meta.kind === 'warmup') {
+      try {
+        const params = (() => {
+          try { return JSON.parse(jobRow?.params_json ?? '{}'); } catch { return {}; }
+        })();
+        const action = params.action ?? null;
+        const actionType = typeof r.action === 'string' ? r.action : action?.type ?? 'unknown';
+        getDb()
+          .prepare(
+            `INSERT OR REPLACE INTO warmup_results(
+               job_id, account_id, action_type, action_json, result_json,
+               duration_ms, completed_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            jobId,
+            meta.accountId,
+            actionType,
+            JSON.stringify(action ?? {}),
+            JSON.stringify(r),
+            Date.now() - meta.startedAt,
+            Date.now()
+          );
+      } catch (err) {
+        console.error('[jobs] failed to persist warmup result:', err);
       }
     } else if (r.csvPath) {
       try {

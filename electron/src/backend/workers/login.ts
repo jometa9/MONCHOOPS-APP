@@ -3,19 +3,21 @@
 // never by hitting Instagram's internal JSON endpoints. That's friendlier to
 // IG's bot detection and avoids the schema drift we'd get from private APIs.
 
-import { isCancelled, launchBrowser, onInit, sendError, sendResult, waitFor } from './lib';
+import { isCancelled, launchBrowser, onInit, sendError, sendResult, waitFor, type WindowBounds } from './lib';
 import type { InstagramCookie } from '../accounts';
 
 interface LoginInit {
   jobId: string;
   proxy?: { server: string; username?: string; password?: string };
+  windowBounds?: WindowBounds;
+  maximizeWindow?: boolean;
 }
 
 const LOGIN_DEADLINE_MS = 10 * 60_000;
 const RESERVED = new Set(['explore', 'direct', 'accounts', 'reels', 'reel', 'p', 'stories', 'tv', 'about', 'legal']);
 
 onInit<LoginInit>(async (init) => {
-  const { browser, context } = await launchBrowser({ headless: false, proxy: init.proxy });
+  const { browser, context } = await launchBrowser({ headless: false, proxy: init.proxy, windowBounds: init.windowBounds, maximizeWindow: init.maximizeWindow });
 
   const page = await context.newPage();
   await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'domcontentloaded' });

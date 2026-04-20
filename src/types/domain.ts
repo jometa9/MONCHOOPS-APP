@@ -17,6 +17,9 @@ export interface AccountPublic {
   lastError: string | null;
   createdAt: number;
   updatedAt: number;
+  warmupActiveDays: number;
+  lastWarmupAt: number | null;
+  isWarmed: boolean;
 }
 
 export type JobKind =
@@ -25,9 +28,59 @@ export type JobKind =
   | 'scrape_by_username'
   | 'scrape_by_post'
   | 'scrape_by_hashtag'
-  | 'scrape_by_location';
+  | 'scrape_by_location'
+  | 'warmup';
 
-export type ScrapeKind = Exclude<JobKind, 'login' | 'mass_dm'>;
+export type ScrapeKind = Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>;
+
+export type WarmupAction =
+  | { type: 'view_feed'; durationSec: number }
+  | { type: 'view_explore'; durationSec: number }
+  | { type: 'hashtag_like'; hashtag: string; count: number }
+  | { type: 'hashtag_follow'; hashtag: string; count: number }
+  | { type: 'location_like'; location: string; count: number }
+  | { type: 'location_follow'; location: string; count: number }
+  | {
+      type: 'combo';
+      feedSec: number;
+      exploreSec: number;
+      hashtag: string;
+      likeCount: number;
+      followCount: number;
+    };
+
+export interface MassDmInteractionsConfig {
+  follow: boolean;
+  likeCount: number;
+}
+
+export interface WarmupResultPublic {
+  jobId: string;
+  accountId: string | null;
+  accountUsername: string | null;
+  actionType: WarmupAction['type'];
+  action: WarmupAction;
+  visited: number;
+  liked: number;
+  followed: number;
+  skipped: number;
+  failed: number;
+  viewedMs: number;
+  durationMs: number;
+  completedAt: number;
+}
+
+export interface WarmupSchedulePublic {
+  id: string;
+  accountId: string;
+  startDate: number;
+  endDate: number;
+  timeOfDaySec: number;
+  actions: WarmupAction[];
+  lastFiredAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
 
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 

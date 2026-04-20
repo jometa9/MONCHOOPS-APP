@@ -76,10 +76,41 @@ type BrowserContext = any; // eslint-disable-line @typescript-eslint/no-explicit
 type Browser = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
+export interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface LaunchOpts {
   headless: boolean;
   secrets?: AccountSecrets;
   proxy?: AccountSecrets['proxy'];
+  // When set (and headless=false), position + size the Chromium window so
+  // the main process can tile concurrent automations into a grid. The
+  // bounds come from windowSlots in main and are forwarded here via the
+  // worker's init payload.
+  windowBounds?: WindowBounds;
+  // When true (and headless=false), open the Chromium window maximized
+  // instead of tiling it. Mutually exclusive with windowBounds — set by
+  // the user's "Full window" preference.
+  maximizeWindow?: boolean;
+}
+
+// IG's mobile breakpoint is ~768px. We use 1024 as the cutoff with margin so
+// browser chrome / scrollbars don't shave us under the breakpoint.
+const DESKTOP_LAYOUT_MIN_WIDTH = 1024;
+const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
+
+function pickViewport(opts: LaunchOpts): { width: number; height: number } | null {
+  if (opts.headless) return DEFAULT_VIEWPORT;
+  // Maximized headed window is always larger than the desktop breakpoint —
+  // let the page fill it naturally.
+  if (opts.maximizeWindow) return null;
+  if (!opts.windowBounds) return DEFAULT_VIEWPORT;
+  if (opts.windowBounds.width >= DESKTOP_LAYOUT_MIN_WIDTH) return null;
+  return DEFAULT_VIEWPORT;
 }
 
 export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browser; context: BrowserContext }> {
@@ -93,11 +124,23 @@ export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browse
 
   const executablePath = resolveChromiumExecutable();
 
+  const tileArgs: string[] = [];
+  if (!opts.headless) {
+    if (opts.maximizeWindow) {
+      tileArgs.push('--start-maximized');
+    } else if (opts.windowBounds) {
+      const { x, y, width, height } = opts.windowBounds;
+      tileArgs.push(`--window-position=${x},${y}`);
+      tileArgs.push(`--window-size=${width},${height}`);
+    }
+  }
+
   let browser: Browser;
   try {
     browser = await chromium.launch({
       headless: opts.headless,
       executablePath,
+      args: tileArgs.length ? tileArgs : undefined,
       proxy: proxy
         ? {
             server: proxy.server,
@@ -120,7 +163,15 @@ export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browse
 
   const context = await browser.newContext({
     userAgent,
-    viewport: { width: 1280, height: 800 },
+    // Viewport policy when we tile the window:
+    //   - Big tile (≥1024px wide): viewport:null lets the page fill the
+    //     window naturally, since IG's desktop layout still applies.
+    //   - Small tile: pin viewport to 1280x800 so IG doesn't collapse into
+    //     mobile layout (which would break our desktop selectors). The
+    //     page renders at 1280x800 but is clipped inside the smaller OS
+    //     window — fine for monitoring, scraper sees the same DOM as
+    //     when running un-tiled.
+    viewport: pickViewport(opts),
   });
 
   if (opts.secrets?.cookies?.length) {

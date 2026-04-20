@@ -19,6 +19,7 @@ import {
   listMassDmResults,
   listRunningJobs,
   listScrapeResults,
+  listWarmupResults,
   getScrapeResult,
   readScrapeUsernames,
   reconcileOnStartup,
@@ -28,7 +29,10 @@ import {
   startBulkAutoLogin,
   startMassDm,
   startScrape,
+  startWarmup,
   type BulkLoginRow,
+  type WarmupAction,
+  type MassDmInteractionsConfig,
   subscribe as subscribeToJobs,
   type JobEvent,
   type JobKind,
@@ -41,6 +45,13 @@ import {
   listLeads,
   renameCategory,
 } from './leads';
+import {
+  createWarmupSchedule,
+  deleteWarmupSchedule,
+  listWarmupSchedules,
+  startWarmupScheduler,
+  stopWarmupScheduler,
+} from './warmupSchedules';
 import type { SessionSnapshot } from './types';
 
 interface BackendOptions {
@@ -90,6 +101,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   }
 
   subscribeToJobs(broadcastJobEvent);
+  startWarmupScheduler();
 
   ipcMain.handle('session:get', async () => getSession());
   ipcMain.handle('license:validate', async (_e, key: string) => {
@@ -193,6 +205,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       usernamesCsvPath: string;
       messages: string[];
       intervalMs: number;
+      interactions?: MassDmInteractionsConfig | null;
     }) => {
       return startMassDm(payload);
     }
@@ -201,15 +214,47 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     'jobs:startScrape',
     async (_e, payload: {
       accountId: string;
-      kind: Exclude<JobKind, 'login' | 'mass_dm'>;
+      kind: Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>;
       params: Record<string, unknown>;
     }) => {
       return startScrape(payload);
     }
   );
+  ipcMain.handle(
+    'jobs:startWarmup',
+    async (_e, payload: { accountId: string; action: WarmupAction }) => {
+      return startWarmup(payload);
+    }
+  );
 
   // Mass DM history
   ipcMain.handle('massDms:list', async () => listMassDmResults());
+
+  // Warmup history
+  ipcMain.handle('warmups:list', async () => listWarmupResults());
+
+  // Warmup schedules
+  ipcMain.handle('warmupSchedules:list', async (_e, accountId?: string) =>
+    listWarmupSchedules(accountId)
+  );
+  ipcMain.handle(
+    'warmupSchedules:create',
+    async (_e, payload: {
+      accountId: string;
+      startDate: number;
+      endDate: number;
+      timeOfDaySec: number;
+      actions: WarmupAction[];
+    }) => {
+      const row = createWarmupSchedule(payload);
+      broadcast('warmupSchedules:changed');
+      return row;
+    }
+  );
+  ipcMain.handle('warmupSchedules:delete', async (_e, id: string) => {
+    deleteWarmupSchedule(id);
+    broadcast('warmupSchedules:changed');
+  });
 
   // Scrape results
   ipcMain.handle('scrapes:list', async () => listScrapeResults());
@@ -362,6 +407,13 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     metaSet('headless', headless ? 'true' : 'false');
   });
 
+  // Default false → tile windows into a grid. When true, every headed
+  // Chromium opens maximized (no tiling).
+  ipcMain.handle('settings:getFullWindow', () => metaGet('full_window') === 'true');
+  ipcMain.handle('settings:setFullWindow', (_e, full: boolean) => {
+    metaSet('full_window', full ? 'true' : 'false');
+  });
+
   // Lead categories
   ipcMain.handle('categories:list', async () => listCategories());
   ipcMain.handle('categories:create', async (_e, name: string) => {
@@ -396,6 +448,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
 
   let shutdownStarted = false;
   app.on('before-quit', (event) => {
+    stopWarmupScheduler();
     if (listRunningJobs().length === 0) return;
     // Block every before-quit cycle until the flush is done — otherwise the
     // second app.quit() (from main.ts's 5s prepare-quit timer) would tear the

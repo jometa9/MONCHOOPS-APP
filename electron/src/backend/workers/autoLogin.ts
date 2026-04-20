@@ -1,6 +1,6 @@
 // Auto-login worker: uses provided credentials to log into Instagram automatically via Playwright
 
-import { isCancelled, launchBrowser, onInit, sendError, sendLoginFailed, sendResult, waitFor } from './lib';
+import { isCancelled, launchBrowser, onInit, sendError, sendLoginFailed, sendResult, waitFor, type WindowBounds } from './lib';
 import type { InstagramCookie } from '../accounts';
 
 interface AutoLoginInit {
@@ -9,6 +9,8 @@ interface AutoLoginInit {
   password: string;
   headless: boolean;
   proxy?: { server: string; username?: string; password?: string };
+  windowBounds?: WindowBounds;
+  maximizeWindow?: boolean;
 }
 
 const LOGIN_DEADLINE_MS = 15_000;
@@ -21,7 +23,7 @@ onInit<AutoLoginInit>(async (init) => {
     sendError(msg);
   };
 
-  const { browser, context } = await launchBrowser({ headless: init.headless, proxy: init.proxy });
+  const { browser, context } = await launchBrowser({ headless: init.headless, proxy: init.proxy, windowBounds: init.windowBounds, maximizeWindow: init.maximizeWindow });
 
   const page = await context.newPage();
 

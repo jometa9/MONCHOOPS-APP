@@ -25,14 +25,28 @@ function formatTimeSaved(ms: number): string {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
+  if (h < 24) {
+    const rm = m - h * 60;
+    return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
+  }
   const d = Math.floor(h / 24);
-  return `${d}d`;
+  if (d < 30) {
+    const rh = h - d * 24;
+    return rh > 0 ? `${d}d ${rh}h` : `${d}d`;
+  }
+  const mo = Math.floor(d / 30);
+  if (mo < 12) {
+    const rd = d - mo * 30;
+    return rd > 0 ? `${mo}mo ${rd}d` : `${mo}mo`;
+  }
+  const y = Math.floor(d / 365);
+  const rd = d - y * 365;
+  return rd > 0 ? `${y}y ${rd}d` : `${y}y`;
 }
 
 export function Home() {
   const { session } = useSession();
-  const { accounts } = useAccounts();
+  const { usableAccounts } = useAccounts();
   const [stats, setStats] = useState<Stats>({
     totalJobs: 0,
     totalLeads: 0,
@@ -82,10 +96,10 @@ export function Home() {
         </div>
 
         <div className="grid grid-cols-4 border-l border-border">
-          <StatCard label="Accounts" value={formatCount(accounts.length)} />
+          <StatCard label="Accounts" value={formatCount(usableAccounts.length)} />
           <StatCard label="Leads" value={formatCount(stats.totalLeads)} />
           <StatCard label="Messages" value={formatCount(stats.totalMessages)} />
-          <StatCard label="Time saved" value={formatTimeSaved(stats.timeSavedMs)} />
+          <StatCard label="Time saved" value={formatTimeSaved(stats.timeSavedMs * 5)} />
         </div>
       </div>
     </div>

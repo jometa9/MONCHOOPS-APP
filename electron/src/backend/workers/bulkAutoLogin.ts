@@ -4,7 +4,7 @@
 // so the main process can persist the account immediately. The worker keeps
 // going past per-row failures (it just logs them and moves on).
 
-import { isCancelled, launchBrowser, onInit, sendError, sendLog, sendLoginFailed, sendProgress, sendResult, waitFor } from './lib';
+import { isCancelled, launchBrowser, onInit, sendError, sendLog, sendLoginFailed, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
 import type { InstagramCookie } from '../accounts';
 
 interface BulkRowInit {
@@ -19,6 +19,8 @@ interface BulkInit {
   jobId: string;
   rows: BulkRowInit[];
   headless: boolean;
+  windowBounds?: WindowBounds;
+  maximizeWindow?: boolean;
 }
 
 const PER_ROW_DEADLINE_MS = 90_000;
@@ -49,7 +51,7 @@ onInit<BulkInit>(async (init) => {
     sendLog('info', `[${i + 1}/${total}] Logging in ${label}…`);
 
     try {
-      await processRow(row, init.headless);
+      await processRow(row, init.headless, init.windowBounds, init.maximizeWindow);
       results.push({ username: row.username, success: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -79,7 +81,7 @@ onInit<BulkInit>(async (init) => {
   process.exit(0);
 });
 
-async function processRow(row: BulkRowInit, headless: boolean): Promise<void> {
+async function processRow(row: BulkRowInit, headless: boolean, windowBounds?: WindowBounds, maximizeWindow?: boolean): Promise<void> {
   const proxy = row.proxyUrl
     ? {
         server: row.proxyUrl,
@@ -88,7 +90,7 @@ async function processRow(row: BulkRowInit, headless: boolean): Promise<void> {
       }
     : undefined;
 
-  const { browser, context } = await launchBrowser({ headless, proxy });
+  const { browser, context } = await launchBrowser({ headless, proxy, windowBounds, maximizeWindow });
   const page = await context.newPage();
 
   try {

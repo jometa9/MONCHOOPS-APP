@@ -1,9 +1,17 @@
 // Forked worker: sends a Direct Message to a list of Instagram usernames,
-// one at a time, with a configurable interval + jitter between sends.
+// one at a time, with a configurable interval + jitter between sends. If
+// the user enabled pre-DM interactions, we follow / like-n-posts of each
+// target before opening the chat.
 
 import fs from 'fs';
-import { isCancelled, launchBrowser, jitter, onInit, safeGoto, sendError, sendLog, sendProgress, sendResult, waitFor } from './lib';
+import { ensureLoggedIn, followUser, likeNPostsOfUser } from './ig';
+import { isCancelled, launchBrowser, jitter, onInit, safeGoto, sendError, sendLog, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
 import type { AccountSecrets } from '../accounts';
+
+interface InteractionsConfig {
+  follow: boolean;
+  likeCount: number;
+}
 
 interface MassDmInit {
   jobId: string;
@@ -11,7 +19,10 @@ interface MassDmInit {
   usernamesCsvPath: string;
   messages: string[];
   intervalMs: number;
+  interactions?: InteractionsConfig | null;
   headless: boolean;
+  windowBounds?: WindowBounds;
+  maximizeWindow?: boolean;
 }
 
 function pickVariant(messages: string[]): string {
@@ -42,12 +53,28 @@ onInit<MassDmInit>(async (init) => {
     return;
   }
 
+  const interactions =
+    init.interactions &&
+    (init.interactions.follow || init.interactions.likeCount > 0)
+      ? { follow: !!init.interactions.follow, likeCount: Math.max(0, Math.min(5, Math.floor(init.interactions.likeCount))) }
+      : null;
+
   sendProgress(0, usernames.length);
-  const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets });
+  const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets, windowBounds: init.windowBounds, maximizeWindow: init.maximizeWindow });
 
   const page = await context.newPage();
   let sent = 0;
   const failed: string[] = [];
+
+  try {
+    // Make sure we actually have a live session before we start hitting
+    // DM / profile pages. ensureLoggedIn is a no-op when the cookie is
+    // already valid; otherwise it waits out captcha and tries a password
+    // re-login if credentials were seeded on the context.
+    if (interactions) await ensureLoggedIn(page, { captchaTimeoutMs: 5 * 60_000 });
+  } catch (err) {
+    sendLog('warn', `Login check failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   try {
     await safeGoto(page, 'https://www.instagram.com/direct/inbox/');
@@ -60,6 +87,16 @@ onInit<MassDmInit>(async (init) => {
     if (isCancelled()) break;
     const username = usernames[i]!;
     const personalised = pickVariant(variants).replace(/\{\{username\}\}/g, username);
+
+    if (interactions) {
+      try {
+        await runPreDmInteractions(page, username, interactions);
+      } catch (err) {
+        sendLog('warn', `Interactions for @${username} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      if (isCancelled()) break;
+    }
+
     try {
       await safeGoto(page, 'https://www.instagram.com/direct/new/');
       await waitFor(1500);
@@ -114,3 +151,33 @@ onInit<MassDmInit>(async (init) => {
   await browser.close();
   process.exit(0);
 });
+
+// Follow → like N posts. Order is deliberately "visit profile → engage
+// → DM" because that reads as a natural funnel to IG's spam heuristics
+// and mirrors how a real user discovers someone before messaging.
+async function runPreDmInteractions(
+  page: any,
+  username: string,
+  cfg: InteractionsConfig
+): Promise<void> {
+  if (cfg.follow) {
+    const res = await followUser(page, username);
+    if (res.ok && !res.skipped) sendLog('info', `Followed @${username}`);
+    else if (res.ok && res.skipped) sendLog('info', `@${username} — ${res.reason}`);
+    else sendLog('warn', `Follow @${username} failed: ${res.reason}`);
+    await waitFor(jitter(2000));
+    if (isCancelled()) return;
+  }
+  if (cfg.likeCount > 0) {
+    const res = await likeNPostsOfUser(page, username, cfg.likeCount);
+    if (res.reason) {
+      sendLog('info', `@${username}: ${res.reason}`);
+    } else {
+      sendLog(
+        'info',
+        `@${username}: liked ${res.liked}/${res.attempted} (${res.skipped} skipped, ${res.failed} failed)`
+      );
+    }
+    await waitFor(jitter(2000));
+  }
+}

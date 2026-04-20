@@ -10,12 +10,14 @@ import {
   MapPin,
   Play,
   Tag,
+  Users,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/common/Spinner';
 import { AccountStep } from '@/components/common/AccountStep';
 import { Stepper } from '@/components/common/Stepper';
 import { SummaryCard } from '@/components/common/SummaryCard';
+import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
 import {
   CategoryPicker,
   type CategorySelection,
@@ -58,7 +60,7 @@ const MODES: { id: Mode; label: string; hint: string; icon: typeof AtSign }[] = 
 ];
 
 export function Scrape() {
-  const { accounts } = useAccounts();
+  const { accounts: allAccounts, usableAccounts: accounts } = useAccounts();
 
   const [step, setStep] = useState<Step>(1);
   const [accountId, setAccountId] = useState<string | null>(null);
@@ -153,6 +155,21 @@ export function Scrape() {
     setError(null);
     setStartedJobId(null);
     setWasEnqueued(false);
+  }
+
+  if (allAccounts.length === 0) {
+    return (
+      <EmptyState
+        icon={<Users className="h-10 w-10" />}
+        title="Add an Instagram account first"
+        description="Scrapes run from a signed-in account."
+        action={
+          <EmptyStateLinkButton to="/accounts" icon={<ArrowLeft className="h-3.5 w-3.5" />}>
+            Add accounts
+          </EmptyStateLinkButton>
+        }
+      />
+    );
   }
 
   if (startedJobId) {

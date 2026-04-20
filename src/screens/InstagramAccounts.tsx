@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, AtSign, Eye, EyeOff, FileUp, Globe, Instagram, KeyRound, Loader2, MousePointerClick, Plus, RefreshCw, Search, Trash2, Upload, Users } from 'lucide-react';
+import { AlertTriangle, AtSign, Eye, EyeOff, FileUp, Flame, Globe, Instagram, KeyRound, Loader2, MousePointerClick, Plus, RefreshCw, Search, Trash2, Upload, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -13,12 +13,21 @@ import { useAccounts } from '@/context/AccountsContext';
 import { b2dm } from '@/lib/b2dm';
 import type { AccountPublic } from '@/types/domain';
 
-type StatusFilter = 'all' | AccountPublic['status'];
+type StatusFilter = 'all' | AccountPublic['status'] | 'warmed';
 
 function StatusBadge({ status }: { status: AccountPublic['status'] }) {
   if (status === 'busy') return <Badge variant="warning">Running</Badge>;
   if (status === 'error') return <Badge variant="destructive">Error</Badge>;
   return <Badge variant="success">Idle</Badge>;
+}
+
+function WarmedBadge() {
+  return (
+    <Badge variant="default" title="Account is fully warmed up">
+      <Flame className="h-2.5 w-2.5" />
+      Warmed
+    </Badge>
+  );
 }
 
 function AccountRow({
@@ -59,7 +68,10 @@ function AccountRow({
         </div>
       </td>
       <td className="px-3 py-1.5">
-        <StatusBadge status={account.status} />
+        <div className="flex flex-wrap items-center gap-1">
+          <StatusBadge status={account.status} />
+          {account.isWarmed ? <WarmedBadge /> : null}
+        </div>
       </td>
       <td className="px-3 py-1.5">
         {account.proxyUrl ? (
@@ -220,6 +232,7 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'idle', label: 'Idle' },
   { value: 'busy', label: 'Running' },
+  { value: 'warmed', label: 'Warmed' },
   { value: 'error', label: 'Error' },
 ];
 
@@ -958,7 +971,11 @@ export function InstagramAccounts() {
   const filteredAccounts = useMemo(() => {
     const q = query.trim().toLowerCase();
     return accounts.filter((account) => {
-      if (statusFilter !== 'all' && account.status !== statusFilter) return false;
+      if (statusFilter === 'warmed') {
+        if (!account.isWarmed) return false;
+      } else if (statusFilter !== 'all' && account.status !== statusFilter) {
+        return false;
+      }
       if (!q) return true;
       const haystack = [
         account.username,
@@ -1029,7 +1046,7 @@ export function InstagramAccounts() {
 
   if (accounts.length === 0) {
     return (
-      <div className="h-full">
+      <>
         <EmptyState
           icon={<Instagram className="h-10 w-10" />}
           title="No Instagram accounts yet"
@@ -1057,7 +1074,7 @@ export function InstagramAccounts() {
             onStartBulk={handleStartBulk}
           />
         ) : null}
-      </div>
+      </>
     );
   }
 

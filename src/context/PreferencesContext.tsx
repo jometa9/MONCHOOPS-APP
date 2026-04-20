@@ -3,6 +3,7 @@ import { b2dm } from '@/lib/b2dm';
 
 interface Preferences {
   headless: boolean;
+  fullWindow: boolean;
   soundsEnabled: boolean;
   scrapeExportDir: string;
 }
@@ -10,6 +11,7 @@ interface Preferences {
 interface PreferencesContextValue {
   prefs: Preferences;
   setHeadless: (v: boolean) => void;
+  setFullWindow: (v: boolean) => void;
   setSoundsEnabled: (v: boolean) => void;
   setScrapeExportDir: (v: string) => void;
 }
@@ -32,7 +34,7 @@ function loadPrefs(): Preferences {
 }
 
 function defaults(): Preferences {
-  return { headless: true, soundsEnabled: true, scrapeExportDir: '' };
+  return { headless: true, fullWindow: false, soundsEnabled: true, scrapeExportDir: '' };
 }
 
 function savePrefs(prefs: Preferences): void {
@@ -49,6 +51,14 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
       setPrefs((prev) => {
         if (prev.headless === headless) return prev;
         const next = { ...prev, headless };
+        savePrefs(next);
+        return next;
+      });
+    });
+    void b2dm.settings.getFullWindow().then((fullWindow) => {
+      setPrefs((prev) => {
+        if (prev.fullWindow === fullWindow) return prev;
+        const next = { ...prev, fullWindow };
         savePrefs(next);
         return next;
       });
@@ -71,11 +81,20 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     [update]
   );
 
+  const setFullWindow = useCallback(
+    (v: boolean) => {
+      update({ fullWindow: v });
+      void b2dm.settings.setFullWindow(v);
+    },
+    [update]
+  );
+
   return (
     <PreferencesContext.Provider
       value={{
         prefs,
         setHeadless,
+        setFullWindow,
         setSoundsEnabled: (v) => update({ soundsEnabled: v }),
         setScrapeExportDir: (v) => update({ scrapeExportDir: v }),
       }}

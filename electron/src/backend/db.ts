@@ -191,7 +191,55 @@ function migrate(db: Database): void {
     db.exec(`ALTER TABLE accounts ADD COLUMN password_encrypted BLOB;`);
   }
 
-  db.pragma('user_version = 8');
+  if (current < 9) {
+    // History of warmup runs. action_json stores the full action payload
+    // (type + params); result_json stores counters (visited, liked,
+    // followed, skipped, failed). One row per completed/cancelled
+    // warmup job — used by the Warmup screen to surface "last run" state
+    // alongside the accounts table.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS warmup_results (
+        job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+        action_type TEXT NOT NULL,
+        action_json TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        completed_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_warmup_results_completed
+        ON warmup_results(completed_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_warmup_results_account
+        ON warmup_results(account_id);
+    `);
+  }
+
+  if (current < 10) {
+    // Recurring warmup schedules. Each row represents a "daily warmup
+    // plan" for one account across a date range. The actions_json
+    // column stores an ordered list of WarmupAction payloads — all of
+    // them fire (sequentially, via the per-account FIFO) when the
+    // schedule's daily slot arrives. last_fired_at is the ms timestamp
+    // of the latest successful firing; the scheduler uses it to avoid
+    // double-running on the same local day.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS warmup_schedules (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        start_date INTEGER NOT NULL,
+        end_date INTEGER NOT NULL,
+        time_of_day_sec INTEGER NOT NULL,
+        actions_json TEXT NOT NULL,
+        last_fired_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_warmup_schedules_account
+        ON warmup_schedules(account_id);
+    `);
+  }
+
+  db.pragma('user_version = 10');
 }
 
 // meta helpers — used by license.ts for ad-hoc key/value state.

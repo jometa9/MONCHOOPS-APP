@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { History, Instagram, Search } from 'lucide-react';
-import { EmptyState } from '@/components/common/EmptyState';
+import { ArrowRight, History, Instagram, Search } from 'lucide-react';
+import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
 import { b2dm } from '@/lib/b2dm';
 import { formatDateTime } from '@/lib/format';
@@ -57,13 +57,16 @@ export function ColdDmHistory() {
 
   if (rows.length === 0) {
     return (
-      <div className="h-full">
-        <EmptyState
-          icon={<History className="h-10 w-10" />}
-          title="No Cold DM runs yet"
-          description="Once you send your first campaign, it will show up here."
-        />
-      </div>
+      <EmptyState
+        icon={<History className="h-10 w-10" />}
+        title="No Cold DM runs yet"
+        description="Once you send your first campaign, it will show up here."
+        action={
+          <EmptyStateLinkButton to="/cold-dm" icon={<ArrowRight className="h-3.5 w-3.5" />}>
+            Start sending DMs
+          </EmptyStateLinkButton>
+        }
+      />
     );
   }
 

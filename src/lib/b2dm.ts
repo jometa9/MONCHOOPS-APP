@@ -4,10 +4,14 @@ import type {
   JobPublic,
   LeadCategoryPublic,
   LeadPublic,
+  MassDmInteractionsConfig,
   MassDmResultPublic,
   ScrapeKind,
   ScrapeResultPublic,
   ScrapeUsernameRow,
+  WarmupAction,
+  WarmupResultPublic,
+  WarmupSchedulePublic,
 } from '@/types/domain';
 
 type Unsubscribe = () => void;
@@ -57,11 +61,16 @@ export interface JobsApi {
     usernamesCsvPath: string;
     messages: string[];
     intervalMs: number;
+    interactions?: MassDmInteractionsConfig | null;
   }): Promise<string>;
   startScrape(payload: {
     accountId: string;
     kind: ScrapeKind;
     params: Record<string, unknown>;
+  }): Promise<string>;
+  startWarmup(payload: {
+    accountId: string;
+    action: WarmupAction;
   }): Promise<string>;
   onChange(cb: () => void): Unsubscribe;
   onProgress(
@@ -81,6 +90,20 @@ export interface ScrapesApi {
 
 export interface MassDmsApi {
   list(): Promise<MassDmResultPublic[]>;
+}
+
+export interface WarmupsApi {
+  list(): Promise<WarmupResultPublic[]>;
+  listSchedules(accountId?: string): Promise<WarmupSchedulePublic[]>;
+  createSchedule(payload: {
+    accountId: string;
+    startDate: number;
+    endDate: number;
+    timeOfDaySec: number;
+    actions: WarmupAction[];
+  }): Promise<WarmupSchedulePublic>;
+  deleteSchedule(id: string): Promise<void>;
+  onSchedulesChange(cb: () => void): Unsubscribe;
 }
 
 export interface CategoriesApi {
@@ -120,6 +143,8 @@ export interface SettingsApi {
   setScrapeExportDir(dir: string): Promise<void>;
   getHeadless(): Promise<boolean>;
   setHeadless(headless: boolean): Promise<void>;
+  getFullWindow(): Promise<boolean>;
+  setFullWindow(full: boolean): Promise<void>;
 }
 
 export interface B2dmApi {
@@ -148,6 +173,7 @@ export interface B2dmApi {
   jobs: JobsApi;
   scrapes: ScrapesApi;
   massDms: MassDmsApi;
+  warmups: WarmupsApi;
   categories: CategoriesApi;
   csv: CsvApi;
   settings: SettingsApi;

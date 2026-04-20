@@ -15,6 +15,7 @@ const KIND_LABEL: Record<JobKind, string> = {
   scrape_by_post: 'Scrape · post',
   scrape_by_hashtag: 'Scrape · hashtag',
   scrape_by_location: 'Scrape · location',
+  warmup: 'Warmup',
 };
 
 function formatElapsed(startedAt: number): string {
@@ -65,13 +66,11 @@ export function Queue() {
 
   if (orderedJobs.length === 0) {
     return (
-      <div className="h-full">
-        <EmptyState
-          icon={<ListTodo className="h-10 w-10" />}
-          title="Nothing running"
-          description="Scrapes, Cold DMs and logins show up here while they're in progress or waiting. Cancel any job and we keep whatever it gathered so far."
-        />
-      </div>
+      <EmptyState
+        icon={<ListTodo className="h-10 w-10" />}
+        title="Nothing running"
+        description="Scrapes, Cold DMs and logins show up here while they're in progress or waiting. Cancel any job and we keep whatever it gathered so far."
+      />
     );
   }
 

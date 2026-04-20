@@ -13,6 +13,7 @@ import { InstagramAccounts } from '@/screens/InstagramAccounts';
 import { MassDMs } from '@/screens/MassDMs';
 import { ColdDmHistory } from '@/screens/ColdDmHistory';
 import { Scrape } from '@/screens/Scrape';
+import { Warmup } from '@/screens/Warmup';
 import { Queue } from '@/screens/Queue';
 import { Data } from '@/screens/Data';
 import { LeadsDetail } from '@/screens/LeadsDetail';
@@ -59,6 +60,7 @@ function Gate() {
             <Route path="cold-dm" element={<MassDMs />} />
             <Route path="dm-history" element={<ColdDmHistory />} />
             <Route path="scrape" element={<Scrape />} />
+            <Route path="warmup" element={<Warmup />} />
             <Route path="queue" element={<Queue />} />
             <Route path="data" element={<Data />} />
             <Route path="data/:jobId" element={<LeadsDetail />} />

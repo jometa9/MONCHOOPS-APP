@@ -13,3 +13,19 @@ export type { LikersResult, ExtractOpts } from './post';
 
 export { iterPostsByHashtag, iterPostsByLocation } from './search';
 export type { LocationSearchOpts } from './search';
+
+export {
+  likePost,
+  followUser,
+  likeNPostsOfUser,
+  viewFeed,
+  viewExplore,
+  iterHashtagAndAct,
+  iterLocationAndAct,
+} from './interactions';
+export type {
+  InteractionOutcome,
+  LikeNResult,
+  HashtagActOpts,
+  HashtagActResult,
+} from './interactions';

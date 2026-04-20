@@ -72,12 +72,17 @@ const jobsApi = {
     usernamesCsvPath: string;
     messages: string[];
     intervalMs: number;
+    interactions?: import('./backend/jobs').MassDmInteractionsConfig | null;
   }) => invoke<string>('jobs:startMassDm', payload),
   startScrape: (payload: {
     accountId: string;
     kind: 'scrape_by_username' | 'scrape_by_post' | 'scrape_by_hashtag' | 'scrape_by_location';
     params: Record<string, unknown>;
   }) => invoke<string>('jobs:startScrape', payload),
+  startWarmup: (payload: {
+    accountId: string;
+    action: import('./backend/jobs').WarmupAction;
+  }) => invoke<string>('jobs:startWarmup', payload),
   onChange: (cb: () => void) => listen<void>('jobs:changed', () => cb()),
   onProgress: (
     cb: (evt: { jobId: string; done: number; total: number | null; item?: string }) => void
@@ -110,6 +115,28 @@ const scrapesApi = {
 
 const massDmsApi = {
   list: () => invoke<import('./backend/jobs').MassDmResultPublic[]>('massDms:list'),
+};
+
+const warmupsApi = {
+  list: () => invoke<import('./backend/jobs').WarmupResultPublic[]>('warmups:list'),
+  listSchedules: (accountId?: string) =>
+    invoke<import('./backend/warmupSchedules').WarmupSchedulePublic[]>(
+      'warmupSchedules:list',
+      accountId ?? undefined
+    ),
+  createSchedule: (payload: {
+    accountId: string;
+    startDate: number;
+    endDate: number;
+    timeOfDaySec: number;
+    actions: import('./backend/jobs').WarmupAction[];
+  }) =>
+    invoke<import('./backend/warmupSchedules').WarmupSchedulePublic>(
+      'warmupSchedules:create',
+      payload
+    ),
+  deleteSchedule: (id: string) => invoke<void>('warmupSchedules:delete', id),
+  onSchedulesChange: (cb: () => void) => listen<void>('warmupSchedules:changed', () => cb()),
 };
 
 const csvApi = {
@@ -148,6 +175,8 @@ const settingsApi = {
   setScrapeExportDir: (dir: string) => invoke<void>('settings:setScrapeExportDir', dir),
   getHeadless: () => invoke<boolean>('settings:getHeadless'),
   setHeadless: (headless: boolean) => invoke<void>('settings:setHeadless', headless),
+  getFullWindow: () => invoke<boolean>('settings:getFullWindow'),
+  setFullWindow: (full: boolean) => invoke<void>('settings:setFullWindow', full),
 };
 
 contextBridge.exposeInMainWorld('b2dm', {
@@ -157,6 +186,7 @@ contextBridge.exposeInMainWorld('b2dm', {
   jobs: jobsApi,
   scrapes: scrapesApi,
   massDms: massDmsApi,
+  warmups: warmupsApi,
   categories: categoriesApi,
   csv: csvApi,
   settings: settingsApi,

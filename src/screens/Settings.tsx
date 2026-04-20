@@ -45,7 +45,7 @@ function SwitchRow({
 export function Settings() {
   const { session, refresh } = useSession();
   const { resolvedTheme, setTheme } = useTheme();
-  const { prefs, setHeadless, setSoundsEnabled } = usePreferences();
+  const { prefs, setHeadless, setFullWindow, setSoundsEnabled } = usePreferences();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeletingAccounts, setIsDeletingAccounts] = useState(false);
@@ -124,6 +124,12 @@ export function Settings() {
               label="Headless mode"
               checked={prefs.headless}
               onCheckedChange={setHeadless}
+            />
+            <SwitchRow
+              label="Full window"
+              checked={prefs.fullWindow}
+              onCheckedChange={setFullWindow}
+              disabled={prefs.headless}
             />
             <SwitchRow
               label="Dark theme"

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Check, Instagram, Search } from 'lucide-react';
+import { Check, Flame, Instagram, Search } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Badge } from '@/components/ui/badge';
 import { EmptyPanel } from '@/components/common/EmptyPanel';
@@ -10,6 +10,15 @@ function StatusBadge({ status }: { status: AccountPublic['status'] }) {
   if (status === 'busy') return <Badge variant="warning">Running</Badge>;
   if (status === 'error') return <Badge variant="destructive">Error</Badge>;
   return <Badge variant="success">Idle</Badge>;
+}
+
+function WarmedBadge() {
+  return (
+    <Badge variant="default" title="Account is fully warmed up">
+      <Flame className="h-2.5 w-2.5" />
+      Warmed
+    </Badge>
+  );
 }
 
 interface Props {
@@ -130,6 +139,7 @@ export function AccountStep({ accounts, value, onChange }: Props) {
                     <td className="px-3 py-1.5">
                       <div className="flex flex-wrap items-center gap-1">
                         <StatusBadge status={acc.status} />
+                        {acc.isWarmed ? <WarmedBadge /> : null}
                         {queued > 0 ? (
                           <Badge variant="muted">+{queued} queued</Badge>
                         ) : null}

@@ -5,24 +5,30 @@ import {
   Check,
   FileUp,
   FolderTree,
+  Heart,
   Inbox,
   Instagram,
   Plus,
   Search,
+  Send,
   Tag,
   Trash2,
   UploadCloud,
+  UserPlus,
   Play,
+  Sparkles,
   X,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Spinner } from '@/components/common/Spinner';
 import { AccountStep } from '@/components/common/AccountStep';
 import { Stepper } from '@/components/common/Stepper';
 import { SummaryCard } from '@/components/common/SummaryCard';
 import { EmptyPanel } from '@/components/common/EmptyPanel';
+import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
 import { useAccounts } from '@/context/AccountsContext';
 import { b2dm } from '@/lib/b2dm';
 import { cn } from '@/lib/cn';
@@ -30,13 +36,15 @@ import { formatDateTime } from '@/lib/format';
 import type {
   AccountPublic,
   LeadCategoryPublic,
+  MassDmInteractionsConfig,
   ScrapeResultPublic,
 } from '@/types/domain';
 
 const MAX_VARIANTS = 20;
-const STEP_LABELS = ['Account', 'Leads', 'Message', 'Review'] as const;
+const MAX_LIKE_COUNT = 5;
+const STEP_LABELS = ['Account', 'Leads', 'Message', 'Interactions', 'Review'] as const;
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
 
 type SourceKind = 'file' | 'job' | 'category';
 
@@ -48,14 +56,36 @@ interface Source {
   refIds?: string[];
 }
 
+interface InteractionsState {
+  enabled: boolean;
+  follow: boolean;
+  likeCount: number;
+}
+
+const DEFAULT_INTERACTIONS: InteractionsState = {
+  enabled: false,
+  follow: false,
+  likeCount: 0,
+};
+
+function interactionsHaveEffect(s: InteractionsState): boolean {
+  return s.enabled && (s.follow || s.likeCount > 0);
+}
+
+function interactionsPayload(s: InteractionsState): MassDmInteractionsConfig | null {
+  if (!interactionsHaveEffect(s)) return null;
+  return { follow: s.follow, likeCount: s.likeCount };
+}
+
 export function MassDMs() {
-  const { accounts } = useAccounts();
+  const { accounts: allAccounts, usableAccounts: accounts } = useAccounts();
 
   const [step, setStep] = useState<Step>(1);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [variants, setVariants] = useState<string[]>(['']);
   const [intervalSec, setIntervalSec] = useState(12);
+  const [interactions, setInteractions] = useState<InteractionsState>(DEFAULT_INTERACTIONS);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startedJobId, setStartedJobId] = useState<string | null>(null);
@@ -75,7 +105,8 @@ export function MassDMs() {
     1: !!accountId,
     2: !!source,
     3: nonEmptyVariants.length > 0 && intervalSec >= 3,
-    4: true,
+    4: !interactions.enabled || interactions.follow || interactions.likeCount > 0,
+    5: true,
   };
 
   function goTo(next: Step) {
@@ -83,7 +114,7 @@ export function MassDMs() {
   }
   function next() {
     if (!canContinue[step]) return;
-    if (step < 4) setStep((step + 1) as Step);
+    if (step < 5) setStep((step + 1) as Step);
   }
   function back() {
     if (step > 1) setStep((step - 1) as Step);
@@ -100,6 +131,7 @@ export function MassDMs() {
         usernamesCsvPath: source.path,
         messages: nonEmptyVariants,
         intervalMs: Math.max(3000, intervalSec * 1000),
+        interactions: interactionsPayload(interactions),
       });
       setWasEnqueued(enqueued);
       setStartedJobId(jobId);
@@ -116,9 +148,25 @@ export function MassDMs() {
     setSource(null);
     setVariants(['']);
     setIntervalSec(12);
+    setInteractions(DEFAULT_INTERACTIONS);
     setError(null);
     setStartedJobId(null);
     setWasEnqueued(false);
+  }
+
+  if (allAccounts.length === 0) {
+    return (
+      <EmptyState
+        icon={<Send className="h-10 w-10" />}
+        title="Add an Instagram account first"
+        description="Cold DMs run from a signed-in account."
+        action={
+          <EmptyStateLinkButton to="/accounts" icon={<ArrowLeft className="h-3.5 w-3.5" />}>
+            Add accounts
+          </EmptyStateLinkButton>
+        }
+      />
+    );
   }
 
   if (startedJobId) {
@@ -156,7 +204,7 @@ export function MassDMs() {
     <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-4">
       <h1 className="text-2xl font-semibold tracking-tight">Cold DM</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Four quick steps: pick the account, the leads, write your message, review and send.
+        Five steps: pick the account, the leads, the message, any pre-DM interactions, then review and send.
       </p>
       <Stepper
         labels={STEP_LABELS}
@@ -188,16 +236,22 @@ export function MassDMs() {
         ) : null}
 
         {step === 4 ? (
+          <InteractionsStep value={interactions} onChange={setInteractions} />
+        ) : null}
+
+        {step === 5 ? (
           <ReviewStep
             account={selectedAccount}
             source={source}
             variants={nonEmptyVariants}
             intervalSec={intervalSec}
+            interactions={interactions}
             error={error}
             willEnqueue={selectedAccount?.status === 'busy'}
             onEditAccount={() => setStep(1)}
             onEditLeads={() => setStep(2)}
             onEditMessage={() => setStep(3)}
+            onEditInteractions={() => setStep(4)}
           />
         ) : null}
       </div>
@@ -213,7 +267,7 @@ export function MassDMs() {
           Back
         </button>
         <div className="flex-1" />
-        {step < 4 ? (
+        {step < 5 ? (
           <button
             type="button"
             onClick={next}
@@ -544,7 +598,9 @@ function JobsPanel({
                       )}
                     >
                       <td className="px-3 py-1.5">
-                        <div className="text-sm font-medium leading-tight">{row.summary}</div>
+                        <div className="text-sm font-medium leading-tight">
+                          {row.summary.length > 20 ? `${row.summary.slice(0, 20)}…` : row.summary}
+                        </div>
                         <div className="text-[11px] leading-tight text-muted-foreground">
                           {row.kind}
                           {row.categoryName ? (
@@ -835,28 +891,140 @@ function MessageStep({
   );
 }
 
-/* ---------------- Step 4: Review ---------------- */
+/* ---------------- Step 4: Interactions ---------------- */
+
+function InteractionsStep({
+  value,
+  onChange,
+}: {
+  value: InteractionsState;
+  onChange: (s: InteractionsState) => void;
+}) {
+  function update(patch: Partial<InteractionsState>) {
+    onChange({ ...value, ...patch });
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="border border-border bg-background">
+        <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <Sparkles className="h-3 w-3" />
+            Pre-DM interactions
+          </span>
+          <span className="normal-case font-normal">Optional — off by default</span>
+        </div>
+        <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+          <div className="min-w-0">
+            <div className="font-medium">Warm the target before messaging</div>
+            <p className="text-[11px] text-muted-foreground">
+              Before each DM the account visits the target's profile, optionally follows them, and
+              can like a few of their recent posts. Already-followed targets are never unfollowed.
+            </p>
+          </div>
+          <Switch
+            checked={value.enabled}
+            onCheckedChange={(enabled) => update({ enabled })}
+          />
+        </div>
+      </div>
+
+      {value.enabled ? (
+        <>
+          <div className="border border-border bg-background">
+            <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              <div className="flex min-w-0 items-start gap-2">
+                <UserPlus className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
+                <div>
+                  <div className="font-medium">Follow the user</div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Sends a follow request. Skipped when already following / requested.
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={value.follow}
+                onCheckedChange={(follow) => update({ follow })}
+              />
+            </div>
+          </div>
+
+          <div className="border border-border bg-background">
+            <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              <div className="flex min-w-0 items-start gap-2">
+                <Heart className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
+                <div>
+                  <div className="font-medium">Like recent posts</div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Likes this many of their most recent posts. Skipped if the profile has no posts
+                    or is private.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                {[0, 1, 2, 3, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => update({ likeCount: n })}
+                    className={cn(
+                      'inline-flex h-8 min-w-[32px] items-center justify-center border border-border px-2 text-xs font-medium transition-colors',
+                      value.likeCount === n
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-muted-foreground hover:bg-accent hover:text-foreground'
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            Max {MAX_LIKE_COUNT} likes per target. A human-ish delay sits between the interactions
+            and the DM so the funnel reads as organic to Instagram's anti-spam checks.
+          </p>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function summariseInteractions(s: InteractionsState): string {
+  if (!interactionsHaveEffect(s)) return 'No interactions';
+  const parts: string[] = [];
+  if (s.follow) parts.push('Follow');
+  if (s.likeCount > 0) parts.push(`Like ${s.likeCount} post${s.likeCount === 1 ? '' : 's'}`);
+  return parts.join(' · ');
+}
+
+/* ---------------- Step 5: Review ---------------- */
 
 function ReviewStep({
   account,
   source,
   variants,
   intervalSec,
+  interactions,
   error,
   willEnqueue,
   onEditAccount,
   onEditLeads,
   onEditMessage,
+  onEditInteractions,
 }: {
   account: AccountPublic | null;
   source: Source | null;
   variants: string[];
   intervalSec: number;
+  interactions: InteractionsState;
   error: string | null;
   willEnqueue: boolean;
   onEditAccount: () => void;
   onEditLeads: () => void;
   onEditMessage: () => void;
+  onEditInteractions: () => void;
 }) {
   const sourceLabel =
     source?.kind === 'file'
@@ -895,7 +1063,9 @@ function ReviewStep({
         {source ? (
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="truncate font-medium">{source.label}</div>
+              <div className="truncate font-medium">
+                {source.label.length > 20 ? `${source.label.slice(0, 20)}…` : source.label}
+              </div>
               <div className="text-[11px] text-muted-foreground">{sourceLabel}</div>
             </div>
             <span className="tabular-nums text-sm">{source.count} usernames</span>
@@ -929,6 +1099,17 @@ function ReviewStep({
         <div className="text-sm">
           1 DM every <span className="font-medium">{intervalSec}s</span>
           <span className="ml-1 text-[11px] text-muted-foreground">(±25% jitter)</span>
+        </div>
+      </SummaryCard>
+
+      <SummaryCard title="Interactions" onEdit={onEditInteractions}>
+        <div className="flex items-center gap-2 text-sm">
+          {interactionsHaveEffect(interactions) ? (
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+          ) : null}
+          <span className={interactionsHaveEffect(interactions) ? 'font-medium' : 'text-muted-foreground'}>
+            {summariseInteractions(interactions)}
+          </span>
         </div>
       </SummaryCard>
 

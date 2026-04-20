@@ -14,7 +14,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { isCancelled, launchBrowser, jitter, onInit, sendError, sendLog, sendProgress, sendResult, waitFor } from './lib';
+import { isCancelled, launchBrowser, jitter, onInit, sendError, sendLog, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
 import {
   ensureLoggedIn,
   getCommenters,
@@ -42,6 +42,8 @@ interface ScrapeInit {
   csvPath: string;
   params: Record<string, unknown>;
   headless: boolean;
+  windowBounds?: WindowBounds;
+  maximizeWindow?: boolean;
 }
 
 interface CsvSink {
@@ -318,7 +320,7 @@ async function walkGrid(
 
 onInit<ScrapeInit>(async (init) => {
   const sink = openCsv(init.csvPath, readMax(init.params));
-  const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets });
+  const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets, windowBounds: init.windowBounds, maximizeWindow: init.maximizeWindow });
   const gridPage = await context.newPage();
   const postPage = await context.newPage();
   sendProgress(0);
