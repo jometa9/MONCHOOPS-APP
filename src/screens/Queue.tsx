@@ -69,7 +69,7 @@ export function Queue() {
       <EmptyState
         icon={<ListTodo className="h-10 w-10" />}
         title="Nothing running"
-        description="Scrapes, Cold DMs and logins show up here while they're in progress or waiting. Cancel any job and we keep whatever it gathered so far."
+        description="Jobs in progress or waiting show up here."
       />
     );
   }
