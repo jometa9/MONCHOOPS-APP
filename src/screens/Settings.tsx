@@ -50,6 +50,7 @@ export function Settings() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeletingAccounts, setIsDeletingAccounts] = useState(false);
   const [isDeletingScrapes, setIsDeletingScrapes] = useState(false);
+  const [isWipingAll, setIsWipingAll] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
 
   useEffect(() => {
@@ -89,6 +90,28 @@ export function Settings() {
       await b2dm.settings.deleteAllScrapes();
     } finally {
       setIsDeletingScrapes(false);
+    }
+  }, []);
+
+  const handleWipeAllData = useCallback(async () => {
+    if (
+      !confirm(
+        'This will erase ALL your data: accounts, scrapes, categories, history, schedules and preferences. You will stay logged in. Are you sure?'
+      )
+    ) {
+      return;
+    }
+    setIsWipingAll(true);
+    try {
+      await b2dm.settings.wipeAllData();
+      // Client-side caches (theme, sounds toggle, export dir) live in
+      // localStorage; blow them away too so the app really feels reset.
+      try {
+        localStorage.clear();
+      } catch {}
+      window.location.reload();
+    } finally {
+      setIsWipingAll(false);
     }
   }, []);
 
@@ -159,7 +182,7 @@ export function Settings() {
               <button
                 type="button"
                 onClick={() => void handleDeleteAccounts()}
-                disabled={isDeletingAccounts}
+                disabled={isDeletingAccounts || isWipingAll}
                 className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
               >
                 {isDeletingAccounts ? (
@@ -172,8 +195,8 @@ export function Settings() {
               <button
                 type="button"
                 onClick={() => void handleDeleteScrapes()}
-                disabled={isDeletingScrapes}
-                className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+                disabled={isDeletingScrapes || isWipingAll}
+                className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
               >
                 {isDeletingScrapes ? (
                   <Loader className="h-3.5 w-3.5 animate-spin" />
@@ -181,6 +204,19 @@ export function Settings() {
                   <Trash2 className="h-3.5 w-3.5" />
                 )}
                 Delete all scraped data
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleWipeAllData()}
+                disabled={isDeletingAccounts || isDeletingScrapes || isWipingAll}
+                className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground disabled:opacity-60"
+              >
+                {isWipingAll ? (
+                  <Loader className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                Delete all my data
               </button>
             </div>
           </div>

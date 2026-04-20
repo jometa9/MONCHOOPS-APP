@@ -398,6 +398,45 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     getDb().prepare('DELETE FROM scrape_results').run();
   });
 
+  // Wipe every trace of user data except the authenticated session (license
+  // key + cached profile/subscription stay so the user doesn't get kicked
+  // out). Cancels running jobs, deletes all DB rows across feature tables,
+  // removes CSV artifacts, and resets preference meta keys.
+  ipcMain.handle('settings:wipeAllData', async () => {
+    const running = listRunningJobs();
+    for (const job of running) cancelJob(job.id);
+
+    const scrapeRows = listScrapeResults();
+    for (const row of scrapeRows) {
+      try { fs.unlinkSync(row.csvPath); } catch {}
+    }
+
+    const db = getDb();
+    const wipe = db.transaction(() => {
+      db.prepare('DELETE FROM leads').run();
+      db.prepare('DELETE FROM category_scrapes').run();
+      db.prepare('DELETE FROM lead_categories').run();
+      db.prepare('DELETE FROM mass_dm_results').run();
+      db.prepare('DELETE FROM warmup_results').run();
+      db.prepare('DELETE FROM warmup_schedules').run();
+      db.prepare('DELETE FROM scrape_results').run();
+      db.prepare('DELETE FROM jobs').run();
+      db.prepare('DELETE FROM accounts').run();
+      // Preserve login state. Everything else in meta (preferences, cached
+      // dirs, etc.) goes away so the app feels truly reset.
+      db.prepare(
+        `DELETE FROM meta
+         WHERE key NOT IN ('license_key_encrypted', 'profile', 'subscription')`
+      ).run();
+    });
+    wipe();
+
+    broadcast('accounts:changed');
+    broadcast('jobs:changed');
+    broadcast('categories:changed');
+    broadcast('warmupSchedules:changed');
+  });
+
   ipcMain.handle('app:selectDirectory', async () => {
     const res = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
     if (res.canceled || res.filePaths.length === 0) return null;
