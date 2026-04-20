@@ -172,37 +172,45 @@ async function runLogin(page: any, context: any, row: BulkRowInit): Promise<void
   );
   if (!hasSession) throw new Error('Timed out waiting for login to complete');
 
-  // Read the canonical username from /accounts/edit/.
-  let canonicalUsername: string | null = null;
-  try {
-    await page.goto('https://www.instagram.com/accounts/edit/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await waitFor(2500);
-    canonicalUsername = await readUsernameFromEdit(page);
-  } catch {}
-  if (!canonicalUsername) canonicalUsername = row.username;
+  // Extract the canonical username using the same robust pipeline as the
+  // manual login worker: home → avatar-link in the nav first, /accounts/edit/
+  // as fallback.
+  const identity = await extractIdentity(page);
+  const canonicalUsername = identity?.username || row.username;
 
-  // Optional: harvest display name + avatar from the profile page.
-  let displayName: string | null = null;
-  let profilePicUrl: string | null = null;
-  try {
-    await page.goto(`https://www.instagram.com/${encodeURIComponent(canonicalUsername)}/`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30_000,
-    });
-    await waitFor(2000);
-    const info = await page.evaluate(() => {
-      const h2 = document.querySelector('header section h2, header section h1');
-      const avatar = document.querySelector<HTMLImageElement>(
-        'header img[alt*="profile picture" i], header img'
-      );
-      return {
-        displayName: h2 ? (h2.textContent || '').trim() : null,
-        pic: avatar?.getAttribute('src') ?? null,
-      };
-    });
-    displayName = info.displayName || null;
-    profilePicUrl = info.pic || null;
-  } catch {}
+  let displayName: string | null = identity?.displayName ?? null;
+  let profilePicUrl: string | null = isPersistableUrl(identity?.profilePicUrl ?? null)
+    ? (identity!.profilePicUrl as string)
+    : null;
+
+  if (!displayName || !profilePicUrl) {
+    try {
+      await page.goto(`https://www.instagram.com/${encodeURIComponent(canonicalUsername)}/`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30_000,
+      });
+      await waitFor(2000);
+      const info = await page.evaluate(() => {
+        const h2 = document.querySelector('header section h2, header section h1');
+        const avatar = document.querySelector<HTMLImageElement>(
+          'header img[alt*="profile picture" i], header img'
+        );
+        return {
+          name: h2 ? (h2.textContent || '').trim() : null,
+          pic: avatar?.getAttribute('src') ?? null,
+        };
+      });
+      displayName = displayName ?? (info.name || null);
+      if (!profilePicUrl && isPersistableUrl(info.pic)) profilePicUrl = info.pic;
+    } catch {}
+  }
+
+  // IG CDN URLs expire (HMAC'd via oh/oe) — snapshot the bytes now and store
+  // them inline as a data URL so the avatar survives past the token TTL.
+  if (profilePicUrl) {
+    const dataUrl = await downloadAsDataUrl(context, profilePicUrl);
+    if (dataUrl) profilePicUrl = dataUrl;
+  }
 
   const userAgent =
     (await page.evaluate(() => navigator.userAgent).catch(() => '')) ||
@@ -330,21 +338,121 @@ async function dismissCookieBanner(page: any): Promise<void> {
   }
 }
 
-async function readUsernameFromEdit(page: any): Promise<string | null> {
-  for (let i = 0; i < 5; i++) {
-    const found = await page.evaluate(() => {
-      const input = document.querySelector<HTMLInputElement>('input[name="username"]');
-      if (input && input.value) return input.value;
-      const allInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input'));
-      for (const inp of allInputs) {
-        if ((inp.name === 'username' || inp.placeholder?.toLowerCase().includes('username')) && inp.value) {
-          return inp.value;
+const IDENTITY_DEADLINE_MS = 25_000;
+const RESERVED = [
+  'p', 'reel', 'reels', 'explore', 'direct', 'accounts', 'stories', 'tv',
+  'challenge', 'about', 'legal', 'press', 'terms', 'privacy',
+];
+
+interface Identity {
+  username: string;
+  displayName: string | null;
+  profilePicUrl: string | null;
+}
+
+async function extractIdentity(page: any): Promise<Identity | null> {
+  const fromHome = await readIdentityFromHome(page);
+  if (fromHome) return fromHome;
+  const fromEdit = await readUsernameFromEdit(page);
+  if (fromEdit) return { username: fromEdit, displayName: null, profilePicUrl: null };
+  return null;
+}
+
+async function readIdentityFromHome(page: any): Promise<Identity | null> {
+  try {
+    await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  } catch {
+    return null;
+  }
+
+  const deadline = Date.now() + IDENTITY_DEADLINE_MS;
+  while (Date.now() < deadline) {
+    if (page.isClosed()) return null;
+    const found = await page
+      .evaluate((reserved: string[]) => {
+        const scopes: ParentNode[] = [
+          ...Array.from(document.querySelectorAll('nav, [role="navigation"]')),
+          document,
+        ];
+        for (const scope of scopes) {
+          const anchors = Array.from(
+            scope.querySelectorAll<HTMLAnchorElement>('a[role="link"][href^="/"], a[href^="/"]')
+          );
+          for (const a of anchors) {
+            const path = a.pathname || '';
+            const m = path.match(/^\/([A-Za-z0-9._]+)\/?$/);
+            if (!m) continue;
+            const username = m[1];
+            if (!username || reserved.includes(username)) continue;
+            const img = a.querySelector('img');
+            if (!img) continue;
+            return {
+              username,
+              pic: (img as HTMLImageElement).src || null,
+            };
+          }
         }
-      }
-      return null;
-    });
-    if (typeof found === 'string' && found.length > 0) return found;
-    await waitFor(1500);
+        return null;
+      }, RESERVED)
+      .catch(() => null);
+
+    if (found && found.username) {
+      return { username: found.username, displayName: null, profilePicUrl: found.pic };
+    }
+    await waitFor(1000);
   }
   return null;
+}
+
+async function readUsernameFromEdit(page: any): Promise<string | null> {
+  try {
+    await page.goto('https://www.instagram.com/accounts/edit/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  } catch {
+    return null;
+  }
+
+  const deadline = Date.now() + IDENTITY_DEADLINE_MS;
+  while (Date.now() < deadline) {
+    if (page.isClosed()) return null;
+    try {
+      await page.waitForSelector('input[name="username"]', { state: 'visible', timeout: 3000 });
+    } catch {
+      // Selector not yet there; keep polling.
+    }
+    const found = await page
+      .evaluate(() => {
+        const input = document.querySelector<HTMLInputElement>('input[name="username"]');
+        if (input && input.value) return input.value;
+        const allInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input'));
+        for (const inp of allInputs) {
+          if ((inp.name === 'username' || inp.placeholder?.toLowerCase().includes('username')) && inp.value) {
+            return inp.value;
+          }
+        }
+        return null;
+      })
+      .catch(() => null);
+    if (typeof found === 'string' && found.length > 0) return found;
+    await waitFor(1000);
+  }
+  return null;
+}
+
+function isPersistableUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  return /^https?:\/\//i.test(url);
+}
+
+async function downloadAsDataUrl(context: any, url: string): Promise<string | null> {
+  try {
+    const res = await context.request.get(url, { timeout: 15_000 });
+    if (!res.ok()) return null;
+    const body = await res.body();
+    if (!body || body.length === 0) return null;
+    const rawType = (res.headers()['content-type'] || 'image/jpeg').split(';')[0]!.trim();
+    const mime = rawType || 'image/jpeg';
+    return `data:${mime};base64,${body.toString('base64')}`;
+  } catch {
+    return null;
+  }
 }

@@ -14,7 +14,11 @@ interface LoginInit {
 }
 
 const LOGIN_DEADLINE_MS = 10 * 60_000;
-const RESERVED = new Set(['explore', 'direct', 'accounts', 'reels', 'reel', 'p', 'stories', 'tv', 'about', 'legal']);
+const IDENTITY_DEADLINE_MS = 25_000;
+const RESERVED = [
+  'p', 'reel', 'reels', 'explore', 'direct', 'accounts', 'stories', 'tv',
+  'challenge', 'about', 'legal', 'press', 'terms', 'privacy',
+];
 
 onInit<LoginInit>(async (init) => {
   const { browser, context } = await launchBrowser({ headless: false, proxy: init.proxy, windowBounds: init.windowBounds, maximizeWindow: init.maximizeWindow });
@@ -52,41 +56,50 @@ onInit<LoginInit>(async (init) => {
     return;
   }
 
-  // Go to settings/edit to read the actual username from the account form
-  try {
-    await page.goto('https://www.instagram.com/accounts/edit/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-  } catch {}
-  await waitFor(2500);
-
-  const username = await readUsernameFromEdit(page);
-  if (!username) {
-    sendError('Logged in, but could not read your username from settings. Try again.');
+  const identity = await extractIdentity(page);
+  if (!identity) {
+    sendError('Signed in, but could not read your username. Instagram may be slow or have changed its layout — try again.');
     try { await browser.close(); } catch {}
     return;
   }
 
-  // Visit the profile page to harvest display name + avatar.
-  let displayName: string | null = null;
-  let profilePicUrl: string | null = null;
-  try {
-    await page.goto(`https://www.instagram.com/${encodeURIComponent(username)}/`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30_000,
-    });
-    await waitFor(2000);
-    const info = await page.evaluate(() => {
-      const h2 = document.querySelector('header section h2, header section h1');
-      const displayName = h2 ? (h2.textContent || '').trim() : null;
-      const avatar = document.querySelector<HTMLImageElement>(
-        'header img[alt*="profile picture" i], header img'
-      );
-      const pic = avatar?.getAttribute('src') ?? null;
-      return { displayName, pic };
-    });
-    displayName = info.displayName || null;
-    profilePicUrl = info.pic || null;
-  } catch {
-    // Non-fatal: we can persist the account without a display name / pfp.
+  // Enrich with display name + avatar from the profile page when missing.
+  // blob:/data: URLs only live inside the Chromium context — they can't be
+  // persisted and re-rendered later, so treat them as missing and fall
+  // through to the profile-page scrape.
+  let displayName: string | null = identity.displayName;
+  let profilePicUrl: string | null = isPersistableUrl(identity.profilePicUrl) ? identity.profilePicUrl : null;
+  if (!displayName || !profilePicUrl) {
+    try {
+      await page.goto(`https://www.instagram.com/${encodeURIComponent(identity.username)}/`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30_000,
+      });
+      await waitFor(2000);
+      const info = await page.evaluate(() => {
+        const h2 = document.querySelector('header section h2, header section h1');
+        const name = h2 ? (h2.textContent || '').trim() : null;
+        const avatar = document.querySelector<HTMLImageElement>(
+          'header img[alt*="profile picture" i], header img'
+        );
+        const pic = avatar?.getAttribute('src') ?? null;
+        return { name, pic };
+      });
+      displayName = displayName ?? (info.name || null);
+      if (!profilePicUrl && isPersistableUrl(info.pic)) {
+        profilePicUrl = info.pic;
+      }
+    } catch {
+      // Non-fatal: we can persist the account without a display name / pfp.
+    }
+  }
+
+  // IG CDN URLs carry a short-lived HMAC (oh/oe params) and will 403 once
+  // they expire. Snapshot the bytes now and store them inline as a data URL
+  // so the UI doesn't end up rendering a broken avatar days later.
+  if (profilePicUrl) {
+    const dataUrl = await downloadAsDataUrl(context, profilePicUrl);
+    if (dataUrl) profilePicUrl = dataUrl;
   }
 
   const cookies = (await context.cookies()) as InstagramCookie[];
@@ -94,7 +107,7 @@ onInit<LoginInit>(async (init) => {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
 
   sendResult({
-    username,
+    username: identity.username,
     displayName,
     profilePicUrl,
     cookies,
@@ -105,27 +118,129 @@ onInit<LoginInit>(async (init) => {
   process.exit(0);
 });
 
-// Reads the username from the account edit/settings page
-async function readUsernameFromEdit(page: any): Promise<string | null> {
-  for (let i = 0; i < 5; i++) {
-    const found = await page.evaluate(() => {
-      // Look for the username input field on /accounts/edit/
-      const input = document.querySelector<HTMLInputElement>('input[name="username"]');
-      if (input && input.value) return input.value;
+interface Identity {
+  username: string;
+  displayName: string | null;
+  profilePicUrl: string | null;
+}
 
-      // Alternative: look for username in any input field with username-like attributes
-      const allInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input'));
-      for (const inp of allInputs) {
-        if ((inp.name === 'username' || inp.placeholder?.toLowerCase().includes('username')) && inp.value) {
-          return inp.value;
+// Tries two strategies in order: reading the avatar link from IG's own
+// navigation on the home feed, then falling back to the legacy account-edit
+// form. Each strategy polls patiently because IG's SPA hydrates lazily and
+// can redirect through intermediate pages (Account Center, two-factor prompts)
+// before settling — bailing early was the root cause of failed manual logins.
+async function extractIdentity(page: any): Promise<Identity | null> {
+  const fromHome = await readIdentityFromHome(page);
+  if (fromHome) return fromHome;
+
+  const fromEdit = await readUsernameFromEdit(page);
+  if (fromEdit) return { username: fromEdit, displayName: null, profilePicUrl: null };
+
+  return null;
+}
+
+async function readIdentityFromHome(page: any): Promise<Identity | null> {
+  try {
+    await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  } catch {
+    return null;
+  }
+
+  const deadline = Date.now() + IDENTITY_DEADLINE_MS;
+  while (Date.now() < deadline) {
+    if (page.isClosed()) return null;
+    const found = await page
+      .evaluate((reserved: string[]) => {
+        const scopes: ParentNode[] = [
+          ...Array.from(document.querySelectorAll('nav, [role="navigation"]')),
+          document,
+        ];
+        for (const scope of scopes) {
+          const anchors = Array.from(
+            scope.querySelectorAll<HTMLAnchorElement>('a[role="link"][href^="/"], a[href^="/"]')
+          );
+          for (const a of anchors) {
+            const path = a.pathname || '';
+            const m = path.match(/^\/([A-Za-z0-9._]+)\/?$/);
+            if (!m) continue;
+            const username = m[1];
+            if (!username || reserved.includes(username)) continue;
+            const img = a.querySelector('img');
+            if (!img) continue;
+            return {
+              username,
+              pic: (img as HTMLImageElement).src || null,
+              alt: (img as HTMLImageElement).alt || '',
+            };
+          }
         }
-      }
+        return null;
+      }, RESERVED)
+      .catch(() => null);
 
-      return null;
-    });
+    if (found && found.username) {
+      // Some IG layouts use "<username>'s profile photo" as alt — use it as
+      // a hint for display name only when it clearly isn't the username.
+      return {
+        username: found.username,
+        displayName: null,
+        profilePicUrl: found.pic,
+      };
+    }
+    await waitFor(1000);
+  }
+  return null;
+}
 
+function isPersistableUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  return /^https?:\/\//i.test(url);
+}
+
+async function downloadAsDataUrl(context: any, url: string): Promise<string | null> {
+  try {
+    const res = await context.request.get(url, { timeout: 15_000 });
+    if (!res.ok()) return null;
+    const body = await res.body();
+    if (!body || body.length === 0) return null;
+    const rawType = (res.headers()['content-type'] || 'image/jpeg').split(';')[0]!.trim();
+    const mime = rawType || 'image/jpeg';
+    return `data:${mime};base64,${body.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
+async function readUsernameFromEdit(page: any): Promise<string | null> {
+  try {
+    await page.goto('https://www.instagram.com/accounts/edit/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  } catch {
+    return null;
+  }
+
+  const deadline = Date.now() + IDENTITY_DEADLINE_MS;
+  while (Date.now() < deadline) {
+    if (page.isClosed()) return null;
+    try {
+      await page.waitForSelector('input[name="username"]', { state: 'visible', timeout: 3000 });
+    } catch {
+      // Selector not yet there; keep polling.
+    }
+    const found = await page
+      .evaluate(() => {
+        const input = document.querySelector<HTMLInputElement>('input[name="username"]');
+        if (input && input.value) return input.value;
+        const allInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input'));
+        for (const inp of allInputs) {
+          if ((inp.name === 'username' || inp.placeholder?.toLowerCase().includes('username')) && inp.value) {
+            return inp.value;
+          }
+        }
+        return null;
+      })
+      .catch(() => null);
     if (typeof found === 'string' && found.length > 0) return found;
-    await waitFor(1500);
+    await waitFor(1000);
   }
   return null;
 }

@@ -15,6 +15,13 @@ import type { AccountPublic } from '@/types/domain';
 
 type StatusFilter = 'all' | AccountPublic['status'] | 'warmed';
 
+function normalizeProxyUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^(https?|socks5):\/\//i.test(trimmed)) return trimmed;
+  return `http://${trimmed}`;
+}
+
 function StatusBadge({ status }: { status: AccountPublic['status'] }) {
   if (status === 'busy') return <Badge variant="warning">Running</Badge>;
   if (status === 'error') return <Badge variant="destructive">Error</Badge>;
@@ -75,16 +82,11 @@ function AccountRow({
       </td>
       <td className="px-3 py-1.5">
         {account.proxyUrl ? (
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-xs">
-              <Globe className="h-3 w-3 flex-none text-muted-foreground" />
-              <span className="font-mono">{account.proxyUrl}</span>
-            </div>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs">
+            <Globe className="h-3 w-3 flex-none text-muted-foreground" />
+            <span className="font-mono">{account.proxyUrl}</span>
             {account.proxyUsername ? (
-              <div className="pl-[18px] text-[11px] text-muted-foreground">
-                {account.proxyUsername}
-                {account.hasProxyPassword ? ' · ••••' : ''}
-              </div>
+              <span className="font-mono text-muted-foreground">· {account.proxyUsername}</span>
             ) : null}
           </div>
         ) : (
@@ -254,9 +256,10 @@ function ProxyDialog({
     setSaving(true);
     setError(null);
     try {
+      const normalized = normalizeProxyUrl(url);
       await b2dm.accounts.updateProxy({
         id: account.id,
-        url: url.trim() || null,
+        url: normalized || null,
         username: username.trim() || null,
         password: password.length > 0 ? password : null,
       });
@@ -466,7 +469,7 @@ function AddAccountDialog({
 
   function buildProxy(): ProxyInput | null {
     if (!proxyEnabled) return null;
-    const url = proxyUrl.trim();
+    const url = normalizeProxyUrl(proxyUrl);
     if (!url) return null;
     return {
       url,
@@ -477,7 +480,7 @@ function AddAccountDialog({
 
   function validateProxy(): string | null {
     if (!proxyEnabled) return null;
-    const url = proxyUrl.trim();
+    const url = normalizeProxyUrl(proxyUrl);
     if (!url) return 'Enter a proxy URL or disable the proxy toggle';
     if (!/^(https?|socks5):\/\/[^\s]+:\d+/.test(url)) {
       return 'Proxy URL must look like http://host:port or socks5://host:port';
@@ -924,12 +927,13 @@ function splitCsvLine(line: string, rowNumber: number): ParsedRow {
   fields.push(buf);
 
   const [username, password, proxyUrl, proxyUsername, proxyPassword] = fields.map((f) => f.trim());
+  const normalizedProxyUrl = proxyUrl ? normalizeProxyUrl(proxyUrl) : '';
 
   const row: ParsedRow = {
     rowNumber,
     username: username ?? '',
     password: password ?? '',
-    proxyUrl: proxyUrl || undefined,
+    proxyUrl: normalizedProxyUrl || undefined,
     proxyUsername: proxyUsername || undefined,
     proxyPassword: proxyPassword || undefined,
   };

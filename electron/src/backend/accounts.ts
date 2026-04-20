@@ -333,7 +333,8 @@ export function updateProxy(id: string, cfg: ProxyConfig): AccountPublic {
     .get(id);
   if (!row) throw new Error('Account not found');
 
-  const trimmed = (cfg.url ?? '').trim();
+  const raw = (cfg.url ?? '').trim();
+  const trimmed = raw && !/^(https?|socks5):\/\//i.test(raw) ? `http://${raw}` : raw;
   if (trimmed && !/^(https?|socks5):\/\/[^\s]+:\d+/.test(trimmed)) {
     throw new Error('Proxy URL must look like http(s)://host:port or socks5://host:port');
   }

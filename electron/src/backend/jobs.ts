@@ -567,34 +567,17 @@ export interface StartAutoLoginArgs {
 }
 
 export function startAutoLogin(args: StartAutoLoginArgs): string {
-  for (const [, meta] of runningMeta) {
-    if (meta.kind === 'login') {
-      throw new Error('A login window is already open. Complete or close it first.');
-    }
-  }
-  const jobId = insertJob('login', null, { type: 'auto' });
-  const scriptPath = workerScriptPath('autoLogin');
-  const headless = getHeadlessPref();
-  const child = spawnWorker(
-    scriptPath,
-    jobId,
+  // Single-credential auto-login is just a bulk import with one row. Keeps
+  // both paths on the same worker + persistence pipeline.
+  return startBulkAutoLogin([
     {
-      type: 'init',
-      payload: {
-        jobId,
-        username: args.username,
-        password: args.password,
-        headless,
-        proxy: toWorkerProxy(args.proxy),
-      },
+      username: args.username,
+      password: args.password,
+      proxyUrl: args.proxy?.url ?? undefined,
+      proxyUsername: args.proxy?.username ?? undefined,
+      proxyPassword: args.proxy?.password ?? undefined,
     },
-    { headed: !headless }
-  );
-  runningChildren.set(jobId, child);
-  runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });
-  if (args.proxy && args.proxy.url) pendingLoginProxies.set(jobId, args.proxy);
-  emit({ type: 'jobs:changed' });
-  return jobId;
+  ]);
 }
 
 export interface BulkLoginRow {

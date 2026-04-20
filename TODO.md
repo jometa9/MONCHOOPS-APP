@@ -1,16 +1,12 @@
-- login app
-- msj si no tengo subscripcion
-====================
-
 ======
 LUNES
 ======
+- add account manual
+- consguir algun proxy por ahi gratis
+- add manual con propxy
+- add account con credenciales (cuadno temrine pongo que esta siempre sea headless lo misoi para el bulk)
 - login con soporte de proxy desde el login (y ya asociamos a ese proxy)
 - todo caso manejado de login
-- login con estilos
-- accounts estilos
-- account si no tengo ninguna
-- msj si o teng o ninguna cuenta
 - FULL ACCOUNT SCREEN
 ======
 MARTES
@@ -45,4 +41,3 @@ NICE TO HAVE
 WARM UP ACCOUNTS
 ENGAGEMENT FUNCTION
 BULK EXPORT
-
