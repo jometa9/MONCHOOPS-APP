@@ -166,6 +166,14 @@ const categoriesApi = {
   onChange: (cb: () => void) => listen<void>('categories:changed', () => cb()),
 };
 
+const updaterApi = {
+  getState: () => invoke<import('./backend/updater').UpdateStatus>('updater:getState'),
+  checkForUpdates: () => invoke<void>('updater:check'),
+  installAndRestart: () => invoke<void>('updater:install'),
+  onStateChange: (cb: (state: import('./backend/updater').UpdateStatus) => void) =>
+    listen<import('./backend/updater').UpdateStatus>('updater:state', cb),
+};
+
 const settingsApi = {
   refreshSession: () => invoke<import('./backend/types').SessionSnapshot>('session:refresh'),
   deleteAllAccounts: () => invoke<void>('accounts:deleteAll'),
@@ -192,6 +200,7 @@ contextBridge.exposeInMainWorld('b2dm', {
   csv: csvApi,
   settings: settingsApi,
   stats: statsApi,
+  updater: updaterApi,
 });
 
 contextBridge.exposeInMainWorld('electronAPI', platformApi);

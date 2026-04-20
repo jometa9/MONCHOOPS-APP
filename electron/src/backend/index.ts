@@ -53,6 +53,12 @@ import {
   stopWarmupScheduler,
 } from './warmupSchedules';
 import type { SessionSnapshot } from './types';
+import {
+  checkForUpdatesManual,
+  getUpdateStatus,
+  initUpdater,
+  installUpdateAndRestart,
+} from './updater';
 
 interface BackendOptions {
   onDeepLink?: (url: string) => void;
@@ -102,6 +108,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
 
   subscribeToJobs(broadcastJobEvent);
   startWarmupScheduler();
+  initUpdater(broadcast);
 
   ipcMain.handle('session:get', async () => getSession());
   ipcMain.handle('license:validate', async (_e, key: string) => {
@@ -398,6 +405,15 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   });
 
   ipcMain.handle('app:getVersion', () => app.getVersion());
+
+  // Auto-updater
+  ipcMain.handle('updater:getState', () => getUpdateStatus());
+  ipcMain.handle('updater:check', () => {
+    checkForUpdatesManual();
+  });
+  ipcMain.handle('updater:install', () => {
+    installUpdateAndRestart();
+  });
 
   ipcMain.handle('settings:getScrapeExportDir', () => metaGet('scrape_export_dir') ?? '');
   ipcMain.handle('settings:setScrapeExportDir', (_e, dir: string) => {

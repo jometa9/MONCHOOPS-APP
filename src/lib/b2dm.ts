@@ -134,6 +134,29 @@ export interface StatsApi {
   }>;
 }
 
+export type UpdateStatus =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'available'; version: string }
+  | {
+      kind: 'downloading';
+      version: string;
+      percent: number;
+      bytesPerSecond: number;
+      transferred: number;
+      total: number;
+    }
+  | { kind: 'downloaded'; version: string }
+  | { kind: 'not-available' }
+  | { kind: 'error'; message: string };
+
+export interface UpdaterApi {
+  getState(): Promise<UpdateStatus>;
+  checkForUpdates(): Promise<void>;
+  installAndRestart(): Promise<void>;
+  onStateChange(cb: (state: UpdateStatus) => void): Unsubscribe;
+}
+
 export interface SettingsApi {
   refreshSession(): Promise<import('@/types/session').SessionSnapshot>;
   deleteAllAccounts(): Promise<void>;
@@ -179,6 +202,7 @@ export interface B2dmApi {
   csv: CsvApi;
   settings: SettingsApi;
   stats: StatsApi;
+  updater: UpdaterApi;
 }
 
 declare global {

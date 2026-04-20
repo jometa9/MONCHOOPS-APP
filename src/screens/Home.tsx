@@ -4,6 +4,7 @@ import { Send, Users } from 'lucide-react';
 import { useSession } from '@/context/SessionContext';
 import { useAccounts } from '@/context/AccountsContext';
 import { b2dm } from '@/lib/b2dm';
+import { UpdateBanner } from '@/components/common/UpdateBanner';
 
 interface Stats {
   totalJobs: number;
@@ -75,7 +76,8 @@ export function Home() {
   return (
     <div className="relative flex min-h-full items-center justify-center overflow-hidden">
       <div className="relative z-10 mx-auto w-full max-w-4xl pb-40 p-16">
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {name}</h1>
+        <UpdateBanner />
+        <h1 className="text-2xl font-semibold tracking-tight pt-2">Welcome back, {name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">What do you want to do today?</p>
 
         <div className="mt-8 grid grid-cols-2 border-l border-t border-border">

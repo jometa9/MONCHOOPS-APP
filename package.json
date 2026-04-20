@@ -32,6 +32,7 @@
     "better-sqlite3": "^11.3.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.3",
     "lucide-react": "^0.511.0",
     "papaparse": "^5.4.1",
     "playwright-core": "^1.49.0",
@@ -93,11 +94,25 @@
       "node_modules/better-sqlite3/**/*",
       "node_modules/playwright-core/**/*"
     ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://b2dm.app/updates",
+        "channel": "latest",
+        "useMultipleRangeRequest": false
+      }
+    ],
     "mac": {
       "category": "public.app-category.social-networking",
       "target": [
         {
           "target": "pkg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "arm64"
           ]
