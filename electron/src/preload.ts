@@ -171,6 +171,7 @@ const settingsApi = {
   deleteAllAccounts: () => invoke<void>('accounts:deleteAll'),
   deleteAllScrapes: () => invoke<void>('scrapes:deleteAll'),
   selectDirectory: () => invoke<string | null>('app:selectDirectory'),
+  getAppVersion: () => invoke<string>('app:getVersion'),
   getScrapeExportDir: () => invoke<string>('settings:getScrapeExportDir'),
   setScrapeExportDir: (dir: string) => invoke<void>('settings:setScrapeExportDir', dir),
   getHeadless: () => invoke<boolean>('settings:getHeadless'),

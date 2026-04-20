@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Loader, RefreshCw, Trash2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useSession } from '@/context/SessionContext';
@@ -50,6 +50,17 @@ export function Settings() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeletingAccounts, setIsDeletingAccounts] = useState(false);
   const [isDeletingScrapes, setIsDeletingScrapes] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void b2dm.settings.getAppVersion().then((v) => {
+      if (!cancelled) setAppVersion(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -81,12 +92,10 @@ export function Settings() {
     }
   }, []);
 
-  const planLabel = session.subscription
-    ? `${session.subscription.plan}${session.subscription.version ? ` · v${session.subscription.version}` : ''}`
-    : '—';
+  const planLabel = session.subscription?.plan ?? '—';
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-4">
+    <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-4 pb-30">
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Manage your account, preferences, and stored data.
@@ -99,6 +108,7 @@ export function Settings() {
             <InfoRow label="Name" value={session.profile?.name} />
             <InfoRow label="Email" value={session.profile?.email} />
             <InfoRow label="Plan" value={<span className="capitalize">{planLabel}</span>} />
+            <InfoRow label="App version" value={appVersion ? `V${appVersion}` : '—'} />
             <div className="flex items-stretch border-t border-border">
               <button
                 type="button"

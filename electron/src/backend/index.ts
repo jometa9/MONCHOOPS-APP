@@ -397,6 +397,8 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     return res.filePaths[0] ?? null;
   });
 
+  ipcMain.handle('app:getVersion', () => app.getVersion());
+
   ipcMain.handle('settings:getScrapeExportDir', () => metaGet('scrape_export_dir') ?? '');
   ipcMain.handle('settings:setScrapeExportDir', (_e, dir: string) => {
     metaSet('scrape_export_dir', dir || null);

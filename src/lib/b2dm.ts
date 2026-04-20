@@ -139,6 +139,7 @@ export interface SettingsApi {
   deleteAllAccounts(): Promise<void>;
   deleteAllScrapes(): Promise<void>;
   selectDirectory(): Promise<string | null>;
+  getAppVersion(): Promise<string>;
   getScrapeExportDir(): Promise<string>;
   setScrapeExportDir(dir: string): Promise<void>;
   getHeadless(): Promise<boolean>;
