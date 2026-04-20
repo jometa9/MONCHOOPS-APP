@@ -91,6 +91,8 @@ const jobsApi = {
     listen<{ jobId: string; status: string }>('jobs:done', cb),
   onAccountDrained: (cb: (evt: { accountId: string; status: string }) => void) =>
     listen<{ accountId: string; status: string }>('jobs:accountDrained', cb),
+  onLoginFinished: (cb: (evt: { jobId: string; status: string }) => void) =>
+    listen<{ jobId: string; status: string }>('jobs:loginFinished', cb),
 };
 
 const statsApi = {

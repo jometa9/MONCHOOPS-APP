@@ -78,6 +78,7 @@ export interface JobsApi {
   ): Unsubscribe;
   onDone(cb: (evt: { jobId: string; status: string }) => void): Unsubscribe;
   onAccountDrained(cb: (evt: { accountId: string; status: string }) => void): Unsubscribe;
+  onLoginFinished(cb: (evt: { jobId: string; status: string }) => void): Unsubscribe;
 }
 
 export interface ScrapesApi {

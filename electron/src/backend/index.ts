@@ -92,6 +92,8 @@ function broadcastJobEvent(event: JobEvent): void {
     broadcast('categories:changed');
   } else if (event.type === 'jobs:accountDrained') {
     broadcast('jobs:accountDrained', event);
+  } else if (event.type === 'jobs:loginFinished') {
+    broadcast('jobs:loginFinished', event);
   }
 }
 

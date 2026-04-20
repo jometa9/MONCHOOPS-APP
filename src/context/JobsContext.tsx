@@ -62,12 +62,21 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         playCompletionSound();
       }
     });
+    // Login jobs (individual or bulk) don't have an accountId so they never
+    // fire `onAccountDrained`. Play the completion cue directly when a login
+    // job finishes.
+    const offLoginFinished = b2dm.jobs.onLoginFinished((evt) => {
+      if (evt.status === 'completed' && soundsEnabledRef.current) {
+        playCompletionSound();
+      }
+    });
     return () => {
       mountedRef.current = false;
       offChange();
       offProgress();
       offDone();
       offDrained();
+      offLoginFinished();
     };
   }, [refresh]);
 

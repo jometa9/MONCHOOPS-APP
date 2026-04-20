@@ -136,7 +136,8 @@ export type JobEvent =
   | { type: 'jobs:changed' }
   | { type: 'jobs:progress'; jobId: string; done: number; total: number | null; item?: string }
   | { type: 'jobs:done'; jobId: string; status: JobStatus }
-  | { type: 'jobs:accountDrained'; accountId: string; status: JobStatus };
+  | { type: 'jobs:accountDrained'; accountId: string; status: JobStatus }
+  | { type: 'jobs:loginFinished'; jobId: string; status: JobStatus };
 
 const listeners = new Set<Listener>();
 const runningChildren = new Map<string, ChildProcess>();
@@ -1249,6 +1250,15 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
   pendingLoginProxies.delete(jobId);
 
   emit({ type: 'jobs:done', jobId, status: finalStatus });
+
+  // Login jobs don't carry an accountId (the account row is created *after*
+  // the worker succeeds), so they never trigger `jobs:accountDrained` and the
+  // renderer wouldn't get a completion cue. Emit a dedicated signal so the
+  // UI can play the completion sound when a login job — individual or bulk —
+  // finishes.
+  if (meta?.kind === 'login') {
+    emit({ type: 'jobs:loginFinished', jobId, status: finalStatus });
+  }
 
   // Per-account FIFO: if more jobs are queued for this account, dispatch the
   // next one and keep the account flagged 'busy'. Only when the queue drains
