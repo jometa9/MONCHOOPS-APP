@@ -5,69 +5,69 @@ import fs from 'fs';
 import path from 'path';
 import type { AccountSecrets, InstagramCookie } from '../accounts';
 
-// Find a usable chromium binary without relying on PLAYWRIGHT_BROWSERS_PATH.
-// Searches the default playwright cache dirs and the @playwright/browser-chromium
-// package's own .local-browsers folder. Returns `undefined` if nothing is
-// found, which makes playwright fall back to its default resolution and emit
-// a descriptive error that we re-wrap upstream.
+// Find a usable chromium binary. In packaged builds we bundle Chrome for
+// Testing under <Resources>/chromium/ via electron-builder.extraResources, and
+// the main process exposes that location via the B2DM_CHROMIUM_DIR env var.
+// In dev we fall through to playwright-core's own cache resolution by
+// returning undefined.
 function resolveChromiumExecutable(): string | undefined {
-  const candidates: string[] = [];
-
-  // @playwright/browser-chromium drops binaries alongside its package.
-  try {
-    const pkgJson = require.resolve('@playwright/browser-chromium/package.json');
-    candidates.push(path.join(path.dirname(pkgJson), '.local-browsers'));
-  } catch {}
-
-  // Default Playwright cache locations per platform.
-  const home = process.env.HOME || process.env.USERPROFILE || '';
-  if (process.platform === 'darwin' && home) {
-    candidates.push(path.join(home, 'Library', 'Caches', 'ms-playwright'));
-  } else if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    candidates.push(path.join(process.env.LOCALAPPDATA, 'ms-playwright'));
-  } else if (home) {
-    candidates.push(path.join(home, '.cache', 'ms-playwright'));
-  }
-
-  for (const root of candidates) {
-    const exe = findChromiumUnder(root);
+  const bundled = process.env.B2DM_CHROMIUM_DIR;
+  if (bundled) {
+    const exe = findChromiumIn(bundled);
     if (exe) return exe;
   }
   return undefined;
 }
 
-function findChromiumUnder(root: string): string | undefined {
+// Looks for a chrome binary directly under `root` (the layout extraResources
+// produces) or one level deeper inside a chromium-<rev>/ folder (the layout
+// playwright's own cache uses).
+function findChromiumIn(root: string): string | undefined {
   if (!fs.existsSync(root)) return undefined;
-  let entries: string[];
+  const direct = chromiumBinaryPaths(root);
+  for (const candidate of direct) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  let entries: string[] = [];
   try {
     entries = fs.readdirSync(root);
   } catch {
     return undefined;
   }
-  // Latest first — folder names look like "chromium-1091".
   entries.sort().reverse();
   for (const entry of entries) {
     if (!entry.startsWith('chromium')) continue;
-    const base = path.join(root, entry);
-    const platformPaths =
-      process.platform === 'darwin'
-        ? [
-            path.join(base, 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
-            path.join(base, 'chrome-mac-arm64', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
-          ]
-        : process.platform === 'win32'
-        ? [
-            path.join(base, 'chrome-win', 'chrome.exe'),
-            path.join(base, 'chrome-win64', 'chrome.exe'),
-          ]
-        : [
-            path.join(base, 'chrome-linux', 'chrome'),
-          ];
-    for (const candidate of platformPaths) {
+    const nested = chromiumBinaryPaths(path.join(root, entry));
+    for (const candidate of nested) {
       if (fs.existsSync(candidate)) return candidate;
     }
   }
   return undefined;
+}
+
+// Possible locations of the launchable chromium binary inside an extracted
+// Chrome-for-Testing tree. The folder name comes from the zip name and the
+// .app name has shifted across Chrome versions (Chromium.app vs. Google Chrome
+// for Testing.app), so we list every variant we have seen.
+function chromiumBinaryPaths(base: string): string[] {
+  if (process.platform === 'darwin') {
+    return [
+      path.join(base, 'chrome-mac-arm64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
+      path.join(base, 'chrome-mac', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
+      path.join(base, 'chrome-mac-arm64', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
+      path.join(base, 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
+    ];
+  }
+  if (process.platform === 'win32') {
+    return [
+      path.join(base, 'chrome-win64', 'chrome.exe'),
+      path.join(base, 'chrome-win', 'chrome.exe'),
+    ];
+  }
+  return [
+    path.join(base, 'chrome-linux64', 'chrome'),
+    path.join(base, 'chrome-linux', 'chrome'),
+  ];
 }
 
 // Lazy require so the Electron main process can reference the type graph
@@ -110,7 +110,9 @@ export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browse
     const msg = err instanceof Error ? err.message : String(err);
     if (/Executable doesn't exist|browserType\.launch/i.test(msg)) {
       throw new Error(
-        'Chromium for Playwright is missing. Run `npx playwright install chromium` once from the project root.'
+        process.env.B2DM_CHROMIUM_DIR
+          ? `Bundled Chromium not found under ${process.env.B2DM_CHROMIUM_DIR}. The build is incomplete.`
+          : 'Chromium for Playwright is missing. Run `npx playwright install chromium` once from the project root.'
       );
     }
     throw err;

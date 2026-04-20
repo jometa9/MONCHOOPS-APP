@@ -18,6 +18,7 @@ release/
 out/
 .cache/
 .electron-dev-data/
+build-resources/
 
 # Local runtime state (SQLite, logs, cached cookies, scrape CSVs)
 userData/

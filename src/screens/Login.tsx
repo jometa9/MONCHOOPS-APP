@@ -1,10 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Key } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Spinner } from '@/components/common/Spinner';
-import { TitleBar } from '@/components/layout/TitleBar';
+import { AuthLayout } from '@/components/layout/AuthLayout';
 import { useSession } from '@/context/SessionContext';
 import { b2dm } from '@/lib/b2dm';
 
@@ -31,66 +28,102 @@ export function Login() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <TitleBar />
-      <div className="flex flex-1 items-center justify-center p-6">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle>Welcome to MonchoOps</CardTitle>
-            <CardDescription>Sign in with your license key or your Google account.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <form className="space-y-2" onSubmit={onSubmit}>
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="license-key">
-                License key
-              </label>
-              <div className="relative">
-                <Key className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="license-key"
-                  value={licenseKey}
-                  onChange={(e) => setLicenseKey(e.target.value)}
-                  placeholder="Paste your license key"
-                  className="pl-9"
-                  autoFocus
-                />
-              </div>
-              {error ? <p className="text-xs text-destructive">{error}</p> : null}
-              <Button type="submit" className="w-full" disabled={submitting || !licenseKey.trim()}>
-                {submitting ? <Spinner /> : null}
-                {submitting ? 'Validating…' : 'Continue'}
-              </Button>
-            </form>
+    <AuthLayout>
+      <div className="w-full max-w-sm pb-30">
+        <h1 className="text-2xl font-semibold tracking-tight">Welcome to MonchoOps</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Sign in with your license key or your Google account.
+        </p>
 
-            <div className="flex items-center gap-2">
-              <span className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted-foreground">or</span>
-              <span className="h-px flex-1 bg-border" />
+        <div className="mt-8 grid grid-cols-1 border-l border-t border-border">
+          <form
+            onSubmit={onSubmit}
+            className="space-y-3 border-b border-r border-border bg-muted/30 p-5"
+          >
+            <label className="text-xs uppercase text-muted-foreground" htmlFor="license-key">
+              License key
+            </label>
+            <div className="relative">
+              <Key className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="license-key"
+                value={licenseKey}
+                onChange={(e) => setLicenseKey(e.target.value)}
+                placeholder="Paste your license key"
+                className="pl-9"
+                autoFocus
+                disabled={submitting}
+              />
             </div>
+            {error ? <p className="text-xs text-destructive">{error}</p> : null}
+            <SubmitButton submitting={submitting} disabled={!licenseKey.trim()} />
+          </form>
 
-            <Button
-              variant="outline"
-              className="w-full"
+          <div className="border-b border-r border-border bg-muted/30 p-5">
+            <button
+              type="button"
+              disabled={submitting}
               onClick={() => {
                 void b2dm.openExternalLink(GOOGLE_LOGIN_URL);
               }}
+              className="inline-flex h-9 w-full items-center justify-center border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
             >
               Sign in with Google
-            </Button>
-          </CardContent>
-          <CardFooter className="justify-center pt-0">
-            <button
-              type="button"
-              onClick={() => {
-                void b2dm.openExternalLink('https://b2dm.app');
-              }}
-              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-            >
-              Need an account? Visit b2dm.app
             </button>
-          </CardFooter>
-        </Card>
+          </div>
+        </div>
+
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              void b2dm.openExternalLink('https://b2dm.app');
+            }}
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            No account? Visit b2dm.app
+          </button>
+        </div>
       </div>
-    </div>
+    </AuthLayout>
+  );
+}
+
+function SubmitButton({ submitting, disabled }: { submitting: boolean; disabled: boolean }) {
+  return (
+    <button
+      type="submit"
+      disabled={submitting || disabled}
+      className="inline-flex h-9 w-full items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+    >
+      {submitting ? (
+        <>
+          Logging in<LoadingDots />
+        </>
+      ) : (
+        'Continue'
+      )}
+    </button>
+  );
+}
+
+export function LoadingDots() {
+  return (
+    <span aria-hidden className="ml-0.5 inline-flex">
+      <Dot delay="0ms" />
+      <Dot delay="150ms" />
+      <Dot delay="300ms" />
+    </span>
+  );
+}
+
+function Dot({ delay }: { delay: string }) {
+  return (
+    <span
+      className="inline-block animate-pulse"
+      style={{ animationDelay: delay, animationDuration: '1s' }}
+    >
+      .
+    </span>
   );
 }

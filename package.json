@@ -91,8 +91,7 @@
       "public/iconTrayTemplate.png",
       "public/iconTrayTemplate@2x.png",
       "node_modules/better-sqlite3/**/*",
-      "node_modules/playwright-core/**/*",
-      "node_modules/@playwright/browser-chromium/**/*"
+      "node_modules/playwright-core/**/*"
     ],
     "mac": {
       "category": "public.app-category.social-networking",
@@ -109,6 +108,12 @@
       "hardenedRuntime": true,
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.plist",
+      "extraResources": [
+        {
+          "from": "build-resources/mac-arm64",
+          "to": "chromium"
+        }
+      ],
       "extendInfo": {
         "CFBundleDisplayName": "B2DM",
         "CFBundleName": "B2DM"
@@ -134,7 +139,13 @@
         }
       ],
       "artifactName": "B2DM.${ext}",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "extraResources": [
+        {
+          "from": "build-resources/win64",
+          "to": "chromium"
+        }
+      ]
     },
     "nsis": {
       "artifactName": "${productName}-Setup.${ext}",

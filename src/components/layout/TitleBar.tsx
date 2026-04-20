@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react';
 import { b2dm } from '@/lib/b2dm';
 import { cn } from '@/lib/cn';
 
+interface TitleBarProps {
+  title?: string;
+  transparent?: boolean;
+}
+
 // Draggable title-bar region for the frameless window. On macOS the traffic
 // lights are provided by Electron (hiddenInset). On Windows the overlay is
 // provided by `titleBarOverlay` in main.ts.
-export function TitleBar({ title = 'MonchoOps' }: { title?: string }) {
+export function TitleBar({ title = 'MonchoOps', transparent = false }: TitleBarProps) {
   const [platform, setPlatform] = useState<NodeJS.Platform | null>(null);
   const [fullScreen, setFullScreen] = useState(false);
 
@@ -23,11 +28,14 @@ export function TitleBar({ title = 'MonchoOps' }: { title?: string }) {
   return (
     <div
       className={cn(
-        'titlebar flex items-center justify-center border-b border-border bg-background/90 backdrop-blur',
+        'titlebar flex items-center justify-center',
+        transparent ? 'bg-transparent' : 'border-b border-border bg-background/90 backdrop-blur',
         isMac ? 'pl-20' : ''
       )}
     >
-      <span className="text-xs font-medium text-muted-foreground">{title}</span>
+      {transparent ? null : (
+        <span className="text-xs font-medium text-muted-foreground">{title}</span>
+      )}
     </div>
   );
 }

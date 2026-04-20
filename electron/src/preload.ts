@@ -41,9 +41,13 @@ const sessionApi = {
 const accountsApi = {
   list: () => invoke<import('./backend/accounts').AccountPublic[]>('accounts:list'),
   get: (id: string) => invoke<import('./backend/accounts').AccountPublic | null>('accounts:get', id),
-  startLogin: () => invoke<{ jobId: string }>('accounts:startLogin'),
-  startAutoLogin: (username: string, password: string) =>
-    invoke<{ jobId: string }>('accounts:startAutoLogin', username, password),
+  startLogin: (proxy?: { url: string; username?: string | null; password?: string | null }) =>
+    invoke<{ jobId: string }>('accounts:startLogin', proxy ?? null),
+  startAutoLogin: (
+    username: string,
+    password: string,
+    proxy?: { url: string; username?: string | null; password?: string | null }
+  ) => invoke<{ jobId: string }>('accounts:startAutoLogin', { username, password, proxy: proxy ?? null }),
   retryLogin: (id: string, password?: string | null) =>
     invoke<{ jobId: string }>('accounts:retryLogin', { id, password: password ?? null }),
   startBulkAutoLogin: (rows: import('./backend/jobs').BulkLoginRow[]) =>

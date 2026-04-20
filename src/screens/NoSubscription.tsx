@@ -1,7 +1,4 @@
-import { CreditCard } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { TitleBar } from '@/components/layout/TitleBar';
-import { EmptyState } from '@/components/common/EmptyState';
+import { AuthLayout } from '@/components/layout/AuthLayout';
 import { useSession } from '@/context/SessionContext';
 import { b2dm } from '@/lib/b2dm';
 
@@ -11,44 +8,47 @@ export function NoSubscription() {
   const { session, logout, refresh } = useSession();
 
   return (
-    <div className="flex h-full flex-col">
-      <TitleBar />
-      <EmptyState
-        icon={<CreditCard className="h-10 w-10" />}
-        title="No active subscription"
-        description={
-          session.profile?.email
-            ? `We couldn't find an active MonchoOps subscription on ${session.profile.email}. Activate a plan to start using the app.`
-            : 'Activate a MonchoOps plan to start using the app.'
-        }
-        action={
-          <div className="flex items-center gap-2">
-            <Button
+    <AuthLayout>
+      <div className="w-full max-w-sm">
+        <h1 className="text-2xl font-semibold tracking-tight">No active subscription</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {session.profile?.email
+            ? `We couldn't find an active MonchoOps subscription on ${session.profile.email}. Visit the website to activate a plan.`
+            : 'Visit the website to activate a MonchoOps plan and start using the app.'}
+        </p>
+
+        <div className="mt-8 grid grid-cols-1 border-l border-t border-border">
+          <div className="space-y-2 border-b border-r border-border bg-muted/30 p-5">
+            <button
+              type="button"
               onClick={() => {
                 void b2dm.openExternalLink(BILLING_URL);
               }}
+              className="inline-flex h-9 w-full items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Go to billing
-            </Button>
-            <Button
-              variant="outline"
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 void refresh();
               }}
+              className="inline-flex h-9 w-full items-center justify-center border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               I just paid — refresh
-            </Button>
-            <Button
-              variant="ghost"
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 void logout();
               }}
+              className="inline-flex h-9 w-full items-center justify-center px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               Log out
-            </Button>
+            </button>
           </div>
-        }
-      />
-    </div>
+        </div>
+      </div>
+    </AuthLayout>
   );
 }

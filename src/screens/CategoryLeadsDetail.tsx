@@ -49,8 +49,8 @@ export function CategoryLeadsDetail() {
   }
 
   return (
-    <div className="bg-background">
-      <div className="sticky top-0 z-20 flex items-stretch border-b border-border bg-background">
+    <div className="flex h-full flex-col bg-background">
+      <div className="flex items-stretch border-b border-border bg-background">
         <button
           type="button"
           onClick={goBack}
@@ -84,8 +84,9 @@ export function CategoryLeadsDetail() {
           description="Run a scrape tagged with this category to populate it."
         />
       ) : (
+        <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full whitespace-nowrap text-sm">
-          <thead className="sticky top-9 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-1.5 text-left">Username</th>
               <th className="px-3 py-1.5 text-left">Source</th>
@@ -138,6 +139,7 @@ export function CategoryLeadsDetail() {
             )}
           </tbody>
         </table>
+        </div>
       )}
 
       {leads.length >= 1000 ? (

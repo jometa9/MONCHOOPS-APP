@@ -22,6 +22,7 @@ interface BulkInit {
 }
 
 const PER_ROW_DEADLINE_MS = 90_000;
+const POST_SUBMIT_DEADLINE_MS = 15_000;
 
 interface RowResult {
   username: string;
@@ -101,27 +102,36 @@ async function processRow(row: BulkRowInit, headless: boolean): Promise<void> {
 }
 
 async function runLogin(page: any, context: any, row: BulkRowInit): Promise<void> {
-  await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-  await waitFor(1500);
+  await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
 
-  const usernameInput = await page.$('input[name="username"]');
-  if (!usernameInput) throw new Error('Could not find username field');
-  await usernameInput.fill(row.username);
+  await dismissCookieBanner(page);
 
-  const passwordInput = await page.$('input[name="password"]');
-  if (!passwordInput) throw new Error('Could not find password field');
-  await passwordInput.fill(row.password);
+  const USERNAME_SEL =
+    'input[autocomplete*="username"], input[name="email"], input[name="username"]';
+  const PASSWORD_SEL = 'input[type="password"]';
 
-  const loginButton = await page.$('button[type="submit"], button:has-text("Log in")');
-  if (loginButton) {
-    await loginButton.click();
-  } else {
-    await page.press('input[name="password"]', 'Enter');
+  try {
+    await fillLoginField(page, USERNAME_SEL, row.username);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not enter username (${msg}, at ${page.url()})`);
+  }
+
+  try {
+    await fillLoginField(page, PASSWORD_SEL, row.password);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not enter password (${msg})`);
+  }
+
+  const submitted = await submitLoginForm(page);
+  if (!submitted) {
+    await page.keyboard.press('Enter').catch(() => {});
   }
 
   // Poll until sessionid lands or we hit a known error / timeout.
   const start = Date.now();
-  while (Date.now() - start < PER_ROW_DEADLINE_MS) {
+  while (Date.now() - start < POST_SUBMIT_DEADLINE_MS) {
     if (page.isClosed()) throw new Error('Login page closed unexpectedly');
 
     const cookies = (await context.cookies()) as InstagramCookie[];
@@ -224,6 +234,98 @@ function delayThenThrow(ms: number, msg: string): Promise<never> {
   return new Promise((_, reject) => {
     setTimeout(() => reject(new Error(msg)), ms);
   });
+}
+
+async function fillLoginField(page: any, selector: string, value: string): Promise<void> {
+  // Locator re-resolves on every action, so we survive the React re-renders
+  // that drop cached ElementHandle keystrokes. Verify the DOM value after
+  // each attempt and retry with a different technique if it didn't stick.
+  const loc = page.locator(selector).first();
+  await loc.waitFor({ state: 'visible', timeout: 20_000 });
+
+  let lastValue = '';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { await loc.click(); } catch {}
+    try {
+      await loc.press('ControlOrMeta+A');
+      await loc.press('Delete');
+    } catch {}
+    try { await loc.fill(value); } catch {}
+
+    lastValue = await loc.inputValue().catch(() => '');
+    if (lastValue === value) return;
+
+    try { await loc.click(); } catch {}
+    try {
+      await loc.press('ControlOrMeta+A');
+      await loc.press('Delete');
+    } catch {}
+    try { await loc.pressSequentially(value, { delay: 35 }); } catch {}
+
+    lastValue = await loc.inputValue().catch(() => '');
+    if (lastValue === value) return;
+
+    await waitFor(400);
+  }
+
+  throw new Error(`value did not persist (got "${lastValue}", expected "${value}")`);
+}
+
+async function submitLoginForm(page: any): Promise<boolean> {
+  const btn = await page.$(
+    'div[role="button"][aria-label="Log In"], div[role="button"][aria-label="Log in"], button[type="submit"], button:has-text("Log in")'
+  );
+  if (btn) {
+    const disabled = await btn.getAttribute('aria-disabled').catch(() => null);
+    if (disabled !== 'true') {
+      try {
+        await btn.click();
+        return true;
+      } catch {}
+    }
+  }
+  const viaForm = await page.evaluate(() => {
+    const form = document.querySelector<HTMLFormElement>('form#login_form, form[method="POST"]');
+    if (!form) return false;
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+    return true;
+  }).catch(() => false);
+  return !!viaForm;
+}
+
+async function dismissCookieBanner(page: any): Promise<void> {
+  try {
+    const clicked = await page.evaluate(() => {
+      const variants = [
+        'allow all cookies',
+        'allow all',
+        'accept all',
+        'accept',
+        'permitir todas las cookies',
+        'permitir todas',
+        'aceptar todo',
+        'aceptar',
+        'only allow essential cookies',
+        'permitir solo las cookies esenciales',
+      ];
+      const buttons = Array.from(document.querySelectorAll('button'));
+      for (const btn of buttons) {
+        const text = (btn.textContent || '').trim().toLowerCase();
+        if (variants.some((v) => text === v || text.includes(v))) {
+          (btn as HTMLButtonElement).click();
+          return true;
+        }
+      }
+      return false;
+    });
+    if (clicked) await waitFor(800);
+  } catch {
+    // Non-fatal.
+  }
 }
 
 async function readUsernameFromEdit(page: any): Promise<string | null> {

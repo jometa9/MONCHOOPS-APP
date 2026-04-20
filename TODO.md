@@ -1,17 +1,17 @@
-======DEAD=2HS======
+- login app
+- msj si no tengo subscripcion
 ====================
+
+======
+LUNES
+======
 - login con soporte de proxy desde el login (y ya asociamos a ese proxy)
 - todo caso manejado de login
 - login con estilos
 - accounts estilos
 - account si no tengo ninguna
 - msj si o teng o ninguna cuenta
-======
-LUNES
-======
-- home co estilos acorde a leads / accounts / actions
-- login app
-- msj si no tengo subscripcion
+- FULL ACCOUNT SCREEN
 ======
 MARTES
 ======

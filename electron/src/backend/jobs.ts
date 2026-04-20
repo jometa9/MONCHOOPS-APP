@@ -411,11 +411,30 @@ function finaliseJob(jobId: string, status: JobStatus, error?: string | null): v
     .run(status, Date.now(), error ?? null, jobId);
 }
 
-export interface StartLoginArgs {
-  accountId?: string;
+export interface LoginProxyInput {
+  url: string;
+  username?: string | null;
+  password?: string | null;
 }
 
-export function startLogin(_args: StartLoginArgs = {}): string {
+// jobId -> proxy to apply to the account that login creates on success.
+const pendingLoginProxies = new Map<string, LoginProxyInput>();
+
+function toWorkerProxy(proxy: LoginProxyInput | null | undefined) {
+  if (!proxy || !proxy.url) return undefined;
+  return {
+    server: proxy.url,
+    username: proxy.username ?? undefined,
+    password: proxy.password ?? undefined,
+  };
+}
+
+export interface StartLoginArgs {
+  accountId?: string;
+  proxy?: LoginProxyInput | null;
+}
+
+export function startLogin(args: StartLoginArgs = {}): string {
   for (const [, meta] of runningMeta) {
     if (meta.kind === 'login') {
       throw new Error('A login window is already open. Complete or close it first.');
@@ -425,10 +444,11 @@ export function startLogin(_args: StartLoginArgs = {}): string {
   const scriptPath = workerScriptPath('login');
   const child = spawnWorker(scriptPath, jobId, {
     type: 'init',
-    payload: { jobId },
+    payload: { jobId, proxy: toWorkerProxy(args.proxy) },
   });
   runningChildren.set(jobId, child);
   runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });
+  if (args.proxy && args.proxy.url) pendingLoginProxies.set(jobId, args.proxy);
   emit({ type: 'jobs:changed' });
   return jobId;
 }
@@ -436,6 +456,7 @@ export function startLogin(_args: StartLoginArgs = {}): string {
 export interface StartAutoLoginArgs {
   username: string;
   password: string;
+  proxy?: LoginProxyInput | null;
 }
 
 export function startAutoLogin(args: StartAutoLoginArgs): string {
@@ -453,10 +474,12 @@ export function startAutoLogin(args: StartAutoLoginArgs): string {
       username: args.username,
       password: args.password,
       headless: getHeadlessPref(),
+      proxy: toWorkerProxy(args.proxy),
     },
   });
   runningChildren.set(jobId, child);
   runningMeta.set(jobId, { startedAt: Date.now(), accountId: null, kind: 'login' });
+  if (args.proxy && args.proxy.url) pendingLoginProxies.set(jobId, args.proxy);
   emit({ type: 'jobs:changed' });
   return jobId;
 }
@@ -853,7 +876,18 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
           userAgent: r.userAgent || 'Mozilla/5.0',
           password: typeof r.password === 'string' ? r.password : null,
         });
-        void acc;
+        const pendingProxy = pendingLoginProxies.get(jobId);
+        if (pendingProxy && pendingProxy.url) {
+          try {
+            updateProxy(acc.id, {
+              url: pendingProxy.url,
+              username: pendingProxy.username ?? null,
+              password: pendingProxy.password ?? null,
+            });
+          } catch (err) {
+            console.error(`[jobs ${jobId}] failed to apply proxy for ${acc.username}:`, err);
+          }
+        }
       } catch (err) {
         console.error('[jobs] failed to persist login result:', err);
       }
@@ -918,6 +952,8 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
       }
     }
   }
+
+  pendingLoginProxies.delete(jobId);
 
   emit({ type: 'jobs:done', jobId, status: finalStatus });
 

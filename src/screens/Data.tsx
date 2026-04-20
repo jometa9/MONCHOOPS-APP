@@ -79,8 +79,8 @@ export function Data() {
   }
 
   return (
-    <div className="bg-background">
-        <div className="sticky top-0 z-20 flex items-stretch bg-background">
+    <div className="flex h-full flex-col bg-background">
+        <div className="flex items-stretch bg-background">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -91,8 +91,9 @@ export function Data() {
             />
           </div>
         </div>
+        <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full whitespace-nowrap text-sm">
-          <thead className="sticky top-9 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-1.5 text-left">Summary</th>
               <th className="px-3 py-1.5 text-left">Category</th>
@@ -164,6 +165,7 @@ export function Data() {
             ))}
           </tbody>
         </table>
+        </div>
     </div>
   );
 }

@@ -34,6 +34,12 @@ import('node:fs').then(({ writeFileSync, mkdirSync }) => {
   writeFileSync(path.join(outDir, 'package.json'), JSON.stringify({ type: 'commonjs' }));
 });
 
+const bundleArgs = [path.join('scripts', 'bundle-chromium.mjs')];
+if (wantMac) bundleArgs.push('--mac');
+if (wantWin) bundleArgs.push('--win');
+console.log('[build] bundle-chromium', bundleArgs.slice(1).join(' '));
+run(process.execPath, bundleArgs);
+
 const builderArgs = ['electron-builder'];
 if (wantMac) builderArgs.push('--mac');
 if (wantWin) builderArgs.push('--win');

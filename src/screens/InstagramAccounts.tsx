@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
 import { useAccounts } from '@/context/AccountsContext';
@@ -32,7 +33,7 @@ function AccountRow({
   onRetry: () => void;
 }) {
   return (
-    <tr className="border-t border-border even:bg-muted/30 last:border-b hover:bg-accent/40">
+    <tr className="border-t border-border bg-background even:bg-muted last:border-b hover:bg-accent">
       <td className="px-3 py-1.5">
         <div className="flex items-center gap-2.5">
           {account.profilePicUrl ? (
@@ -58,18 +59,7 @@ function AccountRow({
         </div>
       </td>
       <td className="px-3 py-1.5">
-        <div className="flex flex-col gap-0.5">
-          <StatusBadge status={account.status} />
-          {account.status === 'error' && account.lastError ? (
-            <div
-              className="flex items-start gap-1 text-[11px] leading-tight text-destructive"
-              title={account.lastError}
-            >
-              <AlertTriangle className="h-3 w-3 flex-none translate-y-0.5" />
-              <span className="line-clamp-2">{account.lastError}</span>
-            </div>
-          ) : null}
-        </div>
+        <StatusBadge status={account.status} />
       </td>
       <td className="px-3 py-1.5">
         {account.proxyUrl ? (
@@ -427,6 +417,12 @@ function SquareIconInput({
   );
 }
 
+interface ProxyInput {
+  url: string;
+  username: string | null;
+  password: string | null;
+}
+
 function AddAccountDialog({
   onClose,
   onChooseManual,
@@ -434,8 +430,12 @@ function AddAccountDialog({
   onStartBulk,
 }: {
   onClose: () => void;
-  onChooseManual: () => void;
-  onChooseAuto: (username: string, password: string) => Promise<void> | void;
+  onChooseManual: (proxy: ProxyInput | null) => Promise<void> | void;
+  onChooseAuto: (
+    username: string,
+    password: string,
+    proxy: ProxyInput | null
+  ) => Promise<void> | void;
   onStartBulk: (rows: BulkRow[]) => Promise<void>;
 }) {
   const [mode, setMode] = useState<AddMode>('manual');
@@ -444,6 +444,33 @@ function AddAccountDialog({
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [proxyEnabled, setProxyEnabled] = useState(false);
+  const [proxyUrl, setProxyUrl] = useState('');
+  const [proxyUser, setProxyUser] = useState('');
+  const [proxyPass, setProxyPass] = useState('');
+  const [showProxyPass, setShowProxyPass] = useState(false);
+
+  function buildProxy(): ProxyInput | null {
+    if (!proxyEnabled) return null;
+    const url = proxyUrl.trim();
+    if (!url) return null;
+    return {
+      url,
+      username: proxyUser.trim() || null,
+      password: proxyPass.length > 0 ? proxyPass : null,
+    };
+  }
+
+  function validateProxy(): string | null {
+    if (!proxyEnabled) return null;
+    const url = proxyUrl.trim();
+    if (!url) return 'Enter a proxy URL or disable the proxy toggle';
+    if (!/^(https?|socks5):\/\/[^\s]+:\d+/.test(url)) {
+      return 'Proxy URL must look like http://host:port or socks5://host:port';
+    }
+    return null;
+  }
 
   const [bulkInput, setBulkInput] = useState<'paste' | 'file'>('paste');
   const [bulkText, setBulkText] = useState('');
@@ -483,7 +510,19 @@ function AddAccountDialog({
   async function handleContinue() {
     setError(null);
     if (mode === 'manual') {
-      onChooseManual();
+      const proxyErr = validateProxy();
+      if (proxyErr) {
+        setError(proxyErr);
+        return;
+      }
+      setBusy(true);
+      try {
+        await onChooseManual(buildProxy());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not start login');
+      } finally {
+        setBusy(false);
+      }
       return;
     }
     if (mode === 'credentials') {
@@ -491,9 +530,14 @@ function AddAccountDialog({
         setError('Please enter both username and password');
         return;
       }
+      const proxyErr = validateProxy();
+      if (proxyErr) {
+        setError(proxyErr);
+        return;
+      }
       setBusy(true);
       try {
-        await onChooseAuto(username, password);
+        await onChooseAuto(username, password, buildProxy());
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not start login');
       } finally {
@@ -630,6 +674,66 @@ function AddAccountDialog({
                 }
               />
             </div>
+          </div>
+        ) : null}
+
+        {mode !== 'bulk' ? (
+          <div className="space-y-2 border border-border bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <div className="flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="font-medium">Route login through a proxy</span>
+              </div>
+              <Switch
+                checked={proxyEnabled}
+                onCheckedChange={setProxyEnabled}
+                disabled={busy}
+              />
+            </div>
+            {proxyEnabled ? (
+              <div className="space-y-2 pt-1">
+                <SquareIconInput
+                  icon={Globe}
+                  placeholder="http://host:port or socks5://host:port"
+                  value={proxyUrl}
+                  onChange={setProxyUrl}
+                  disabled={busy}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <SquareIconInput
+                    icon={AtSign}
+                    placeholder="Username (optional)"
+                    value={proxyUser}
+                    onChange={setProxyUser}
+                    disabled={busy}
+                  />
+                  <SquareIconInput
+                    icon={KeyRound}
+                    type={showProxyPass ? 'text' : 'password'}
+                    placeholder="Password (optional)"
+                    value={proxyPass}
+                    onChange={setProxyPass}
+                    disabled={busy}
+                    trailing={
+                      <button
+                        type="button"
+                        onClick={() => setShowProxyPass((s) => !s)}
+                        disabled={busy}
+                        className="flex w-10 flex-none items-center justify-center border-l border-border text-muted-foreground transition-colors hover:text-foreground"
+                        title={showProxyPass ? 'Hide password' : 'Show password'}
+                        aria-label={showProxyPass ? 'Hide password' : 'Show password'}
+                      >
+                        {showProxyPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    }
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  The proxy is used for the login attempt and saved to the account for all future
+                  sessions.
+                </p>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -868,12 +972,12 @@ export function InstagramAccounts() {
     });
   }, [accounts, query, statusFilter]);
 
-  async function handleStartManualLogin() {
+  async function handleStartManualLogin(proxy: ProxyInput | null) {
     setAdding(true);
     setAddError(null);
     setShowLoginMethod(false);
     try {
-      await b2dm.accounts.startLogin();
+      await b2dm.accounts.startLogin(proxy ?? undefined);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'Could not start login');
     } finally {
@@ -881,12 +985,16 @@ export function InstagramAccounts() {
     }
   }
 
-  async function handleStartAutoLogin(username: string, password: string) {
+  async function handleStartAutoLogin(
+    username: string,
+    password: string,
+    proxy: ProxyInput | null
+  ) {
     setAdding(true);
     setAddError(null);
     setShowLoginMethod(false);
     try {
-      await b2dm.accounts.startAutoLogin(username, password);
+      await b2dm.accounts.startAutoLogin(username, password, proxy ?? undefined);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'Could not start login');
     } finally {
@@ -928,10 +1036,15 @@ export function InstagramAccounts() {
           description="Link an Instagram account to start sending DMs or scraping usernames."
           action={
             <div className="flex flex-col items-center gap-2">
-              <Button onClick={openLoginMethod} disabled={adding}>
-                {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              <button
+                type="button"
+                onClick={openLoginMethod}
+                disabled={adding}
+                className="inline-flex h-9 items-center gap-1.5 border border-border bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+              >
+                {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                 {adding ? 'Working…' : 'Add account'}
-              </Button>
+              </button>
               {addError ? <p className="text-xs text-destructive">{addError}</p> : null}
             </div>
           }
@@ -949,8 +1062,8 @@ export function InstagramAccounts() {
   }
 
   return (
-    <div className="bg-background">
-        <div className="sticky top-0 z-20 flex items-stretch bg-background">
+    <div className="flex h-full flex-col">
+        <div className="flex items-stretch bg-background">
           <button
             type="button"
             onClick={openLoginMethod}
@@ -960,7 +1073,7 @@ export function InstagramAccounts() {
             {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             {adding ? 'Working…' : 'Add account'}
           </button>
-          <div className="relative min-w-0 flex-1 border-r border-border">
+          <div className="relative min-w-0 flex-1 border-r border-border bg-background">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               value={query}
@@ -987,36 +1100,40 @@ export function InstagramAccounts() {
           ))}
         </div>
 
-        <table className="w-full whitespace-nowrap border-collapse text-left">
-          <thead className="sticky top-9 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-1.5 text-left">Account</th>
-              <th className="px-3 py-1.5 text-left">Status</th>
-              <th className="px-3 py-1.5 text-left">Proxy</th>
-              <th className="px-3 py-1.5 text-right">Updated</th>
-              <th className="px-2 py-1.5 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAccounts.length === 0 ? (
-              <tr className="border-t border-border last:border-b">
-                <td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">
-                  No accounts match your filters.
-                </td>
-              </tr>
-            ) : (
-              filteredAccounts.map((account) => (
-                <AccountRow
-                  key={account.id}
-                  account={account}
-                  onDelete={() => setDeleteTarget(account)}
-                  onConfigureProxy={() => setProxyTarget(account)}
-                  onRetry={() => setRetryTarget(account)}
-                />
-              ))
-            )}
-          </tbody>
-        </table>
+        {filteredAccounts.length === 0 ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <EmptyState
+              icon={<Search className="h-10 w-10" />}
+              title="No accounts match your filters"
+              description="Adjust your search or status filter to find the account you're looking for."
+            />
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-auto">
+            <table className="w-full whitespace-nowrap border-collapse text-left">
+              <thead className="sticky top-0 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-1.5 text-left">Account</th>
+                  <th className="px-3 py-1.5 text-left">Status</th>
+                  <th className="px-3 py-1.5 text-left">Proxy</th>
+                  <th className="px-3 py-1.5 text-right">Updated</th>
+                  <th className="px-2 py-1.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAccounts.map((account) => (
+                  <AccountRow
+                    key={account.id}
+                    account={account}
+                    onDelete={() => setDeleteTarget(account)}
+                    onConfigureProxy={() => setProxyTarget(account)}
+                    onRetry={() => setRetryTarget(account)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
       {proxyTarget ? (
         <ProxyDialog account={proxyTarget} onClose={() => setProxyTarget(null)} />

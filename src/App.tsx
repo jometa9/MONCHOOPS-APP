@@ -5,7 +5,8 @@ import { JobsProvider } from '@/context/JobsContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { PreferencesProvider } from '@/context/PreferencesContext';
 import { AppShell } from '@/components/layout/AppShell';
-import { Login } from '@/screens/Login';
+import { AuthLayout } from '@/components/layout/AuthLayout';
+import { Login, LoadingDots } from '@/screens/Login';
 import { NoSubscription } from '@/screens/NoSubscription';
 import { Home } from '@/screens/Home';
 import { InstagramAccounts } from '@/screens/InstagramAccounts';
@@ -18,16 +19,30 @@ import { LeadsDetail } from '@/screens/LeadsDetail';
 import { Categories } from '@/screens/Categories';
 import { CategoryLeadsDetail } from '@/screens/CategoryLeadsDetail';
 import { Settings } from '@/screens/Settings';
-import { Spinner } from '@/components/common/Spinner';
 
 function Gate() {
   const { status, session } = useSession();
 
   if (status === 'loading') {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Spinner className="h-6 w-6 text-muted-foreground" />
-      </div>
+      <AuthLayout>
+        <div className="w-full max-w-sm">
+          <h1 className="text-2xl font-semibold tracking-tight">Welcome to MonchoOps</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Checking your license.</p>
+
+          <div className="mt-8 grid grid-cols-1 border-l border-t border-border">
+            <div className="border-b border-r border-border bg-muted/30 p-5">
+              <button
+                type="button"
+                disabled
+                className="inline-flex h-9 w-full items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground opacity-50"
+              >
+                Logging in<LoadingDots />
+              </button>
+            </div>
+          </div>
+        </div>
+      </AuthLayout>
     );
   }
 

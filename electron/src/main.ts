@@ -114,6 +114,13 @@ if (!app.isPackaged) {
   app.setPath('userData', path.join(app.getPath('appData'), PRODUCT_NAME));
 }
 
+if (app.isPackaged) {
+  // Forked Playwright workers run in ELECTRON_RUN_AS_NODE mode where
+  // process.resourcesPath isn't populated. Surface the bundled chromium dir
+  // through an env var that workers can read.
+  process.env.B2DM_CHROMIUM_DIR = path.join(process.resourcesPath, 'chromium');
+}
+
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();

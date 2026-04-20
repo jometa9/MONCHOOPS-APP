@@ -20,11 +20,21 @@ export interface BulkLoginRow {
   proxyPassword?: string;
 }
 
+export interface ProxyInput {
+  url: string;
+  username?: string | null;
+  password?: string | null;
+}
+
 export interface AccountsApi {
   list(): Promise<AccountPublic[]>;
   get(id: string): Promise<AccountPublic | null>;
-  startLogin(): Promise<{ jobId: string }>;
-  startAutoLogin(username: string, password: string): Promise<{ jobId: string }>;
+  startLogin(proxy?: ProxyInput): Promise<{ jobId: string }>;
+  startAutoLogin(
+    username: string,
+    password: string,
+    proxy?: ProxyInput
+  ): Promise<{ jobId: string }>;
   retryLogin(id: string, password?: string | null): Promise<{ jobId: string }>;
   startBulkAutoLogin(rows: BulkLoginRow[]): Promise<{ jobId: string }>;
   delete(id: string): Promise<void>;

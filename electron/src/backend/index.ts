@@ -105,14 +105,34 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   // Accounts
   ipcMain.handle('accounts:list', async () => listAccounts());
   ipcMain.handle('accounts:get', async (_e, id: string) => getAccount(id));
-  ipcMain.handle('accounts:startLogin', async () => {
-    const jobId = startLogin();
-    return { jobId };
-  });
-  ipcMain.handle('accounts:startAutoLogin', async (_e, username: string, password: string) => {
-    const jobId = startAutoLogin({ username, password });
-    return { jobId };
-  });
+  ipcMain.handle(
+    'accounts:startLogin',
+    async (
+      _e,
+      proxy: { url: string; username?: string | null; password?: string | null } | null
+    ) => {
+      const jobId = startLogin({ proxy: proxy ?? null });
+      return { jobId };
+    }
+  );
+  ipcMain.handle(
+    'accounts:startAutoLogin',
+    async (
+      _e,
+      payload: {
+        username: string;
+        password: string;
+        proxy: { url: string; username?: string | null; password?: string | null } | null;
+      }
+    ) => {
+      const jobId = startAutoLogin({
+        username: payload.username,
+        password: payload.password,
+        proxy: payload.proxy ?? null,
+      });
+      return { jobId };
+    }
+  );
   // Retry a failed auto-login. If `password` is provided, use it (and persist
   // it on success). Otherwise fall back to the password stored on the account
   // from the original attempt.

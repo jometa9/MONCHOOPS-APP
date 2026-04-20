@@ -11,7 +11,7 @@ interface AutoLoginInit {
   proxy?: { server: string; username?: string; password?: string };
 }
 
-const LOGIN_DEADLINE_MS = 10 * 60_000;
+const LOGIN_DEADLINE_MS = 15_000;
 
 onInit<AutoLoginInit>(async (init) => {
   // Helper: flag the attempt as failed with a user-visible error AND ask
@@ -26,35 +26,45 @@ onInit<AutoLoginInit>(async (init) => {
   const page = await context.newPage();
 
   try {
-    await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'domcontentloaded' });
-    await waitFor(1500);
+    await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
 
-    // Fill username field
-    const usernameInput = await page.$('input[name="username"]');
-    if (!usernameInput) {
-      fail('Could not find username field on Instagram login page');
+    // Instagram sometimes shows a cookie consent banner before rendering the
+    // login form. Click it away so the form can mount.
+    await dismissCookieBanner(page);
+
+    // Instagram renamed the form fields in 2026: the username input is now
+    // name="email" (still autocomplete="username") and the password is
+    // name="pass". Keep the old names as fallbacks.
+    const USERNAME_SEL =
+      'input[autocomplete*="username"], input[name="email"], input[name="username"]';
+    const PASSWORD_SEL = 'input[type="password"]';
+
+    try {
+      await fillLoginField(page, USERNAME_SEL, init.username);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      fail(`Could not enter username on Instagram login page: ${msg} (at ${page.url()})`);
       try { await browser.close(); } catch {}
       process.exit(1);
       return;
     }
-    await usernameInput.fill(init.username);
 
-    // Fill password field
-    const passwordInput = await page.$('input[name="password"]');
-    if (!passwordInput) {
-      fail('Could not find password field on Instagram login page');
+    try {
+      await fillLoginField(page, PASSWORD_SEL, init.password);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      fail(`Could not enter password on Instagram login page: ${msg}`);
       try { await browser.close(); } catch {}
       process.exit(1);
       return;
     }
-    await passwordInput.fill(init.password);
 
-    // Click login button or press Enter
-    const loginButton = await page.$('button[type="button"]:has-text("Log in"), button:has-text("Log in")');
-    if (loginButton) {
-      await loginButton.click();
-    } else {
-      await page.press('input[name="password"]', 'Enter');
+    // Submit: the login button is a div[role="button"] in the new layout, and
+    // there's still a hidden <input type="submit">. Pressing Enter on the
+    // password field is the most reliable trigger across variants.
+    const submitted = await submitLoginForm(page);
+    if (!submitted) {
+      await page.keyboard.press('Enter').catch(() => {});
     }
 
     // Poll for sessionid cookie
@@ -181,6 +191,115 @@ onInit<AutoLoginInit>(async (init) => {
     process.exit(1);
   }
 });
+
+async function fillLoginField(page: any, selector: string, value: string): Promise<void> {
+  // Instagram's login form is a React controlled input that re-renders during
+  // typing, which invalidates cached ElementHandles and drops keystrokes (we
+  // saw a 14-char username land as just the trailing 2 chars). Using a Locator
+  // re-resolves the element on every action, and we verify + retry until the
+  // DOM value matches what we intended to type.
+  const loc = page.locator(selector).first();
+  await loc.waitFor({ state: 'visible', timeout: 20_000 });
+
+  let lastValue = '';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { await loc.click(); } catch {}
+    // Select-all + delete is more resilient than fill('') against controlled
+    // inputs that reject programmatic value sets.
+    try {
+      await loc.press('ControlOrMeta+A');
+      await loc.press('Delete');
+    } catch {}
+    try {
+      await loc.fill(value);
+    } catch {
+      // fill() can throw if the element detaches mid-call — fall through to
+      // verification and retry.
+    }
+
+    lastValue = await loc.inputValue().catch(() => '');
+    if (lastValue === value) return;
+
+    // fill() didn't stick — try typing character-by-character instead.
+    try { await loc.click(); } catch {}
+    try {
+      await loc.press('ControlOrMeta+A');
+      await loc.press('Delete');
+    } catch {}
+    try {
+      await loc.pressSequentially(value, { delay: 35 });
+    } catch {}
+
+    lastValue = await loc.inputValue().catch(() => '');
+    if (lastValue === value) return;
+
+    await waitFor(400);
+  }
+
+  throw new Error(`value did not persist in field (got "${lastValue}", expected "${value}")`);
+}
+
+async function submitLoginForm(page: any): Promise<boolean> {
+  // Try the visible button first (div[role="button"] in the new layout,
+  // <button> in the old one). If it's aria-disabled, fall back to requesting
+  // form submit programmatically.
+  const btn = await page.$(
+    'div[role="button"][aria-label="Log In"], div[role="button"][aria-label="Log in"], button[type="submit"], button:has-text("Log in")'
+  );
+  if (btn) {
+    const disabled = await btn.getAttribute('aria-disabled').catch(() => null);
+    if (disabled !== 'true') {
+      try {
+        await btn.click();
+        return true;
+      } catch {}
+    }
+  }
+  const viaForm = await page.evaluate(() => {
+    const form = document.querySelector<HTMLFormElement>('form#login_form, form[method="POST"]');
+    if (!form) return false;
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+    return true;
+  }).catch(() => false);
+  return !!viaForm;
+}
+
+async function dismissCookieBanner(page: any): Promise<void> {
+  // Instagram's EU/ROW consent banner uses localized copy. Click the first
+  // button whose text matches a known "accept/allow" variant.
+  try {
+    const clicked = await page.evaluate(() => {
+      const variants = [
+        'allow all cookies',
+        'allow all',
+        'accept all',
+        'accept',
+        'permitir todas las cookies',
+        'permitir todas',
+        'aceptar todo',
+        'aceptar',
+        'only allow essential cookies',
+        'permitir solo las cookies esenciales',
+      ];
+      const buttons = Array.from(document.querySelectorAll('button'));
+      for (const btn of buttons) {
+        const text = (btn.textContent || '').trim().toLowerCase();
+        if (variants.some((v) => text === v || text.includes(v))) {
+          (btn as HTMLButtonElement).click();
+          return true;
+        }
+      }
+      return false;
+    });
+    if (clicked) await waitFor(800);
+  } catch {
+    // Non-fatal — if the banner isn't present, nothing to do.
+  }
+}
 
 async function readUsernameFromEdit(page: any): Promise<string | null> {
   for (let i = 0; i < 5; i++) {
