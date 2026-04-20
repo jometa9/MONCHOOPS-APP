@@ -1,4 +1,5 @@
-======
+======DEAD=2HS======
+====================
 - login con soporte de proxy desde el login (y ya asociamos a ese proxy)
 - todo caso manejado de login
 - login con estilos
