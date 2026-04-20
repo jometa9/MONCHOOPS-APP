@@ -78,8 +78,8 @@ export function Categories() {
           }
         />
       ) : (
-        <div className="flex h-full flex-col bg-background">
-          <div className="flex items-stretch bg-background">
+        <div className="flex h-full flex-col">
+          <div className="flex items-stretch">
             <div className="relative min-w-0 flex-1 border-r border-border">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -112,7 +112,7 @@ export function Categories() {
             </thead>
             <tbody>
               {filteredRows!.length === 0 ? (
-                <tr className="border-t border-border last:border-b">
+                <tr className="border-t border-border bg-background last:border-b">
                   <td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">
                     No categories match your search.
                   </td>
@@ -121,7 +121,7 @@ export function Categories() {
                 filteredRows!.map((row) => (
                   <tr
                     key={row.id}
-                    className="cursor-pointer border-t border-border even:bg-muted/30 last:border-b hover:bg-accent/40"
+                    className="cursor-pointer border-t border-border bg-background even:bg-muted last:border-b hover:bg-accent"
                     onClick={() => navigate(`/categories/${row.id}`)}
                   >
                     <td className="px-3 py-1.5">
