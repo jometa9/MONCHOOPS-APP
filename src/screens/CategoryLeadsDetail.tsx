@@ -124,7 +124,7 @@ export function CategoryLeadsDetail() {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); openProfile(); }}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
                           title={`Open @${lead.username} on Instagram`}
                           aria-label={`Open @${lead.username} on Instagram`}
                         >

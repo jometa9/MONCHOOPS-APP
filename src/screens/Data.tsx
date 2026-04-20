@@ -133,7 +133,7 @@ export function Data() {
                     <button
                       type="button"
                       onClick={() => navigate(`/data/${row.jobId}`)}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
                       title="View usernames"
                       aria-label="View usernames"
                     >
@@ -143,7 +143,7 @@ export function Data() {
                       type="button"
                       onClick={() => void download(row.jobId)}
                       disabled={downloading === row.jobId}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                      className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
                       title="Download CSV"
                       aria-label="Download CSV"
                     >
@@ -152,7 +152,7 @@ export function Data() {
                     <button
                       type="button"
                       onClick={() => void b2dm.scrapes.revealInFolder(row.jobId)}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
                       title="Reveal file in folder"
                       aria-label="Reveal file in folder"
                     >

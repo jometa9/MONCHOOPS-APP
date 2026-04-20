@@ -1,11 +1,27 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Folder, Loader, RefreshCw, Trash2 } from 'lucide-react';
+import { useCallback, useState } from 'react';
+import { Loader, RefreshCw, Trash2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useSession } from '@/context/SessionContext';
 import { useTheme } from '@/context/ThemeContext';
 import { usePreferences } from '@/context/PreferencesContext';
 import { b2dm } from '@/lib/b2dm';
-import { cn } from '@/lib/cn';
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      {title}
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-1.5 text-sm first:border-t-0">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="truncate font-medium">{value ?? '—'}</span>
+    </div>
+  );
+}
 
 function SwitchRow({
   label,
@@ -19,36 +35,21 @@ function SwitchRow({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex h-9 items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 text-sm">
+    <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-1.5 text-sm first:border-t-0">
       <span className="text-foreground">{label}</span>
       <Switch checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3 border-t border-border p-6">
-      <h2 className="text-base font-semibold text-foreground">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
 export function Settings() {
   const { session, refresh } = useSession();
   const { resolvedTheme, setTheme } = useTheme();
-  const { prefs, setHeadless, setSoundsEnabled, setScrapeExportDir } = usePreferences();
+  const { prefs, setHeadless, setSoundsEnabled } = usePreferences();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeletingAccounts, setIsDeletingAccounts] = useState(false);
   const [isDeletingScrapes, setIsDeletingScrapes] = useState(false);
-  const [scrapeDir, setScrapeDir] = useState('');
-  const [isDirLoading, setIsDirLoading] = useState(false);
-
-  useEffect(() => {
-    void b2dm.settings.getScrapeExportDir().then(setScrapeDir);
-  }, []);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -80,70 +81,45 @@ export function Settings() {
     }
   }, []);
 
-  const handleBrowseDir = useCallback(async () => {
-    setIsDirLoading(true);
-    try {
-      const dir = await b2dm.settings.selectDirectory();
-      if (dir) {
-        setScrapeDir(dir);
-        setScrapeExportDir(dir);
-        await b2dm.settings.setScrapeExportDir(dir);
-      }
-    } finally {
-      setIsDirLoading(false);
-    }
-  }, [setScrapeExportDir]);
-
-  const handleClearDir = useCallback(async () => {
-    setScrapeDir('');
-    setScrapeExportDir('');
-    await b2dm.settings.setScrapeExportDir('');
-  }, [setScrapeExportDir]);
+  const planLabel = session.subscription
+    ? `${session.subscription.plan}${session.subscription.version ? ` · v${session.subscription.version}` : ''}`
+    : '—';
 
   return (
-    <div className="h-full overflow-auto bg-muted/20">
-      <div className="flex flex-col">
+    <div className="h-full overflow-auto">
+      <div className="mx-auto flex w-full max-w-2xl flex-col px-4 py-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Manage your account, preferences, and stored data.
+        </p>
 
-        {/* Account */}
-        <Section title="Account">
-          <div className="flex flex-col gap-1.5">
-            {session.profile && (
-              <>
-                <div className="text-sm font-medium text-foreground">{session.profile.name || session.profile.email}</div>
-                {session.profile.name && (
-                  <div className="text-xs text-muted-foreground">{session.profile.email}</div>
+        <div className="mt-4 flex flex-col gap-2">
+          {/* Account */}
+          <div className="border border-border bg-background">
+            <SectionHeader title="Account" />
+            <InfoRow label="Name" value={session.profile?.name} />
+            <InfoRow label="Email" value={session.profile?.email} />
+            <InfoRow label="Plan" value={<span className="capitalize">{planLabel}</span>} />
+            <div className="flex items-stretch border-t border-border">
+              <button
+                type="button"
+                onClick={() => void handleRefresh()}
+                disabled={isRefreshing}
+                className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+              >
+                {isRefreshing ? (
+                  <Loader className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
                 )}
-              </>
-            )}
-            {session.subscription && (
-              <div className="text-xs text-muted-foreground capitalize">
-                Plan: <span className="text-foreground font-medium">{session.subscription.plan}</span>
-                {session.subscription.version && (
-                  <span className="ml-2 text-muted-foreground">v{session.subscription.version}</span>
-                )}
-              </div>
-            )}
+                Refresh subscription
+              </button>
+            </div>
           </div>
-          <div className="flex overflow-hidden rounded-lg border border-border bg-background self-start">
-            <button
-              type="button"
-              onClick={() => void handleRefresh()}
-              disabled={isRefreshing}
-              className="inline-flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-60"
-            >
-              {isRefreshing ? (
-                <Loader className="h-4 w-4 animate-spin shrink-0" />
-              ) : (
-                <RefreshCw className="h-4 w-4 shrink-0" />
-              )}
-              Refresh subscription
-            </button>
-          </div>
-        </Section>
 
-        {/* App config */}
-        <Section title="App config">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Preferences */}
+          <div className="border border-border bg-background">
+            <SectionHeader title="Preferences" />
             <SwitchRow
               label="Headless mode"
               checked={prefs.headless}
@@ -160,64 +136,21 @@ export function Settings() {
               onCheckedChange={setSoundsEnabled}
             />
           </div>
-        </Section>
 
-        {/* Data */}
-        <Section title="Data management">
-          <div className="flex flex-col gap-3">
-            {/* Scrape export dir */}
-            <div>
-              <p className="mb-1.5 text-xs text-muted-foreground">
-                Auto-export scraped CSVs to folder
-              </p>
-              <div className="flex overflow-hidden rounded-lg border border-border bg-background">
-                <input
-                  type="text"
-                  readOnly
-                  value={scrapeDir || 'Not configured — files stay in app data'}
-                  className={cn(
-                    'h-9 flex-1 bg-transparent px-3 text-sm outline-none truncate',
-                    scrapeDir ? 'text-foreground' : 'text-muted-foreground'
-                  )}
-                />
-                {scrapeDir && (
-                  <button
-                    type="button"
-                    onClick={() => void handleClearDir()}
-                    className="inline-flex h-9 w-9 items-center justify-center border-l border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                    title="Clear"
-                  >
-                    ×
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void handleBrowseDir()}
-                  disabled={isDirLoading}
-                  className="inline-flex h-9 items-center gap-2 border-l border-border px-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-60"
-                >
-                  {isDirLoading ? (
-                    <Loader className="h-4 w-4 animate-spin shrink-0" />
-                  ) : (
-                    <Folder className="h-4 w-4 shrink-0" />
-                  )}
-                  Browse
-                </button>
-              </div>
-            </div>
-
-            {/* Danger zone */}
-            <div className="flex flex-wrap gap-2">
+          {/* Data */}
+          <div className="border border-border bg-background">
+            <SectionHeader title="Data" />
+            <div className="flex items-stretch">
               <button
                 type="button"
                 onClick={() => void handleDeleteAccounts()}
                 disabled={isDeletingAccounts}
-                className="inline-flex items-center gap-2 rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-60"
+                className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
               >
                 {isDeletingAccounts ? (
-                  <Loader className="h-4 w-4 animate-spin shrink-0" />
+                  <Loader className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <Trash2 className="h-4 w-4 shrink-0" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 )}
                 Delete all IG accounts
               </button>
@@ -225,19 +158,18 @@ export function Settings() {
                 type="button"
                 onClick={() => void handleDeleteScrapes()}
                 disabled={isDeletingScrapes}
-                className="inline-flex items-center gap-2 rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-60"
+                className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
               >
                 {isDeletingScrapes ? (
-                  <Loader className="h-4 w-4 animate-spin shrink-0" />
+                  <Loader className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <Trash2 className="h-4 w-4 shrink-0" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 )}
                 Delete all scraped data
               </button>
             </div>
           </div>
-        </Section>
-
+        </div>
       </div>
     </div>
   );

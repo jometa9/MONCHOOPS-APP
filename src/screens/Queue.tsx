@@ -171,7 +171,7 @@ function QueueRow({ job, accountUsername, progress, cancelling, onCancel }: Queu
             type="button"
             onClick={onCancel}
             disabled={cancelling}
-            className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+            className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
             title={
               cancelling
                 ? 'Cancelling…'

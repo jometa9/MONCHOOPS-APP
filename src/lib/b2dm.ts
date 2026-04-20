@@ -87,7 +87,9 @@ export interface CsvApi {
   pickAndPersist(): Promise<{ path: string; count: number } | null>;
   persistFromPath(srcPath: string): Promise<{ path: string; count: number }>;
   persistFromCategory(categoryId: string): Promise<{ path: string; count: number }>;
+  persistFromCategories(categoryIds: string[]): Promise<{ path: string; count: number }>;
   persistFromScrape(jobId: string): Promise<{ path: string; count: number }>;
+  persistFromScrapes(jobIds: string[]): Promise<{ path: string; count: number }>;
 }
 
 export interface StatsApi {

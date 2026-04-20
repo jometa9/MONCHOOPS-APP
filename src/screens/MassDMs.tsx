@@ -45,6 +45,7 @@ interface Source {
   path: string;
   count: number;
   label: string;
+  refIds?: string[];
 }
 
 export function MassDMs() {
@@ -152,23 +153,19 @@ export function MassDMs() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="mx-auto w-full max-w-2xl px-4 pt-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Cold DM</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Four quick steps: pick the account, the leads, write your message, review and send.
-          </p>
-        </div>
-        <Stepper
-          labels={STEP_LABELS}
-          current={step}
-          onJump={(s) => goTo(s as Step)}
-          canJump={(s) => s < step || canContinue[step]}
-        />
-      </div>
+    <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-4">
+      <h1 className="text-2xl font-semibold tracking-tight">Cold DM</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Four quick steps: pick the account, the leads, write your message, review and send.
+      </p>
+      <Stepper
+        labels={STEP_LABELS}
+        current={step}
+        onJump={(s) => goTo(s as Step)}
+        canJump={(s) => s < step || canContinue[step]}
+      />
 
-      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4 py-4">
+      <div className="py-4">
         {step === 1 ? (
           <AccountStep
             accounts={accounts}
@@ -197,9 +194,7 @@ export function MassDMs() {
             variants={nonEmptyVariants}
             intervalSec={intervalSec}
             error={error}
-            submitting={submitting}
             willEnqueue={selectedAccount?.status === 'busy'}
-            onConfirm={confirmAndStart}
             onEditAccount={() => setStep(1)}
             onEditLeads={() => setStep(2)}
             onEditMessage={() => setStep(3)}
@@ -207,12 +202,12 @@ export function MassDMs() {
         ) : null}
       </div>
 
-      <div className="mx-auto flex w-full max-w-2xl items-stretch border-t border-border">
+      <div className="flex items-stretch">
         <button
           type="button"
           onClick={back}
           disabled={step === 1}
-          className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+          className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back
@@ -228,7 +223,23 @@ export function MassDMs() {
             Continue
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            onClick={confirmAndStart}
+            disabled={submitting || !accountId || !source || nonEmptyVariants.length === 0}
+            className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
+            {submitting ? <Spinner /> : <Play className="h-3.5 w-3.5" />}
+            {submitting
+              ? selectedAccount?.status === 'busy'
+                ? 'Enqueuing…'
+                : 'Starting…'
+              : selectedAccount?.status === 'busy'
+              ? 'Add to queue'
+              : 'Start Cold DM job'}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -256,7 +267,7 @@ function LeadsStep({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-border bg-background">
+    <div className="overflow-hidden border border-border bg-background">
       <div className="flex items-stretch border-b border-border">
         {LEADS_TABS.map((t, idx) => {
           const Icon = t.icon;
@@ -281,7 +292,7 @@ function LeadsStep({
         })}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-col">
         {tab === 'file' ? <FilePanel value={value} onChange={onChange} /> : null}
         {tab === 'job' ? <JobsPanel value={value} onChange={onChange} /> : null}
         {tab === 'category' ? <CategoryPanel value={value} onChange={onChange} /> : null}
@@ -343,50 +354,59 @@ function FilePanel({
   }
 
   return (
-    <div
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragOver(true);
-      }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={onDrop}
-      className={cn(
-        'flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center transition-colors',
-        dragOver ? 'bg-primary/5' : 'bg-background'
-      )}
-    >
-      <UploadCloud className="h-8 w-8 text-muted-foreground" />
-      <div className="mt-2 text-sm font-medium">Drop a usernames file here</div>
-      <div className="mt-0.5 text-xs text-muted-foreground">
-        CSV, TXT, XLSX or XLS — first column is the username.
-      </div>
-      <div className="mt-4">
-        <button
-          type="button"
-          onClick={pickDialog}
-          disabled={loading}
-          className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
-        >
-          {loading ? <Spinner /> : <FileUp className="h-3.5 w-3.5" />}
-          Browse files
-        </button>
-      </div>
-      {active ? (
-        <div className="mt-4 flex items-center gap-2 border border-border bg-muted px-3 py-1.5 text-xs">
-          <Check className="h-3.5 w-3.5 text-primary" />
-          <span className="font-medium">{active.label}</span>
-          <span className="text-muted-foreground">· {active.count} usernames</span>
+    <div className="p-3">
+      <div
+        role="button"
+        tabIndex={loading ? -1 : 0}
+        onClick={() => !loading && void pickDialog()}
+        onKeyDown={(e) => {
+          if (!loading && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            void pickDialog();
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        className={cn(
+          'flex min-h-[50vh] cursor-pointer flex-col items-center justify-center gap-2 border-2 border-dashed border-border p-6 text-center transition-colors hover:bg-accent',
+          dragOver && 'border-primary bg-primary/5',
+          loading && 'cursor-wait opacity-60'
+        )}
+      >
+        {loading ? (
+          <Spinner className="h-6 w-6 text-muted-foreground" />
+        ) : active ? (
+          <Check className="h-8 w-8 text-primary" />
+        ) : (
+          <UploadCloud className="h-8 w-8 text-muted-foreground" />
+        )}
+        <div className="text-sm font-medium">
+          {active ? active.label : 'Drop a usernames file or click to browse'}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {active
+            ? `${active.count} usernames`
+            : 'CSV, TXT, XLSX or XLS — first column is the username.'}
+        </div>
+        {active ? (
           <button
             type="button"
-            onClick={() => onChange(null)}
-            className="ml-1 text-muted-foreground hover:text-foreground"
-            aria-label="Clear file"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange(null);
+            }}
+            className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-3 w-3" />
+            Clear
           </button>
-        </div>
-      ) : null}
-      {err ? <p className="mt-3 text-xs text-destructive">{err}</p> : null}
+        ) : null}
+      </div>
+      {err ? <p className="mt-2 text-xs text-destructive">{err}</p> : null}
     </div>
   );
 }
@@ -400,8 +420,13 @@ function JobsPanel({
 }) {
   const [rows, setRows] = useState<ScrapeResultPublic[] | null>(null);
   const [query, setQuery] = useState('');
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const selectedIds = useMemo(
+    () => new Set(value?.kind === 'job' ? value.refIds ?? [] : []),
+    [value]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -428,26 +453,44 @@ function JobsPanel({
     );
   }, [rows, query]);
 
-  async function select(row: ScrapeResultPublic) {
-    setBusyId(row.jobId);
+  async function toggle(row: ScrapeResultPublic) {
+    const next = new Set(selectedIds);
+    if (next.has(row.jobId)) next.delete(row.jobId);
+    else next.add(row.jobId);
+
+    if (next.size === 0) {
+      onChange(null);
+      return;
+    }
+
+    setBusy(true);
     setErr(null);
     try {
-      const res = await b2dm.csv.persistFromScrape(row.jobId);
+      const ids = Array.from(next);
+      const res = await b2dm.csv.persistFromScrapes(ids);
+      const labels = ids
+        .map((id) => (rows ?? []).find((r) => r.jobId === id)?.summary)
+        .filter((s): s is string => !!s);
+      const label =
+        labels.length === 1
+          ? labels[0]!
+          : `${labels.length} scrapes`;
       onChange({
         kind: 'job',
         path: res.path,
         count: res.count,
-        label: row.summary,
+        label,
+        refIds: ids,
       });
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not load scrape');
     } finally {
-      setBusyId(null);
+      setBusy(false);
     }
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex flex-col overflow-hidden">
       <div className="flex items-stretch border-b border-border bg-background">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -459,9 +502,9 @@ function JobsPanel({
           />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="h-[50vh] overflow-auto">
         {rows === null ? (
-          <div className="flex h-full items-center justify-center">
+          <div className="flex items-center justify-center p-6">
             <Spinner className="h-5 w-5 text-muted-foreground" />
           </div>
         ) : rows.length === 0 ? (
@@ -477,31 +520,32 @@ function JobsPanel({
                 <th className="px-3 py-1.5 text-left">Summary</th>
                 <th className="px-3 py-1.5 text-right">Usernames</th>
                 <th className="px-3 py-1.5 text-left">Completed</th>
+                <th className="w-8 px-2 py-1.5" />
               </tr>
             </thead>
             <tbody>
               {filtered!.length === 0 ? (
                 <tr className="border-t border-border last:border-b">
-                  <td colSpan={3} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={4} className="px-3 py-10 text-center text-sm text-muted-foreground">
                     No scrapes match your search.
                   </td>
                 </tr>
               ) : (
                 filtered!.map((row) => {
-                  const selected = value?.kind === 'job' && value.label === row.summary;
+                  const selected = selectedIds.has(row.jobId);
                   return (
                     <tr
                       key={row.jobId}
-                      onClick={() => void select(row)}
+                      onClick={() => void toggle(row)}
                       className={cn(
                         'cursor-pointer border-t border-border transition-colors even:bg-muted/30 last:border-b hover:bg-accent/40',
                         selected && 'bg-primary/5 hover:bg-primary/10',
-                        busyId === row.jobId && 'opacity-60'
+                        busy && 'opacity-60'
                       )}
                     >
-                      <td className="px-3 py-2">
-                        <div className="font-medium">{row.summary}</div>
-                        <div className="text-[11px] text-muted-foreground">
+                      <td className="px-3 py-1.5">
+                        <div className="text-sm font-medium leading-tight">{row.summary}</div>
+                        <div className="text-[11px] leading-tight text-muted-foreground">
                           {row.kind}
                           {row.categoryName ? (
                             <span className="ml-1 inline-flex items-center gap-1">
@@ -511,14 +555,13 @@ function JobsPanel({
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{row.usernameCount}</td>
-                      <td className="px-3 py-2 text-muted-foreground">
+                      <td className="px-3 py-1.5 text-right tabular-nums">{row.usernameCount}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground">
                         {formatDateTime(row.completedAt)}
+                      </td>
+                      <td className="w-8 px-2 py-1.5 text-right">
                         {selected ? (
-                          <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-primary">
-                            <Check className="h-3 w-3" />
-                            Selected
-                          </span>
+                          <Check className="ml-auto h-3.5 w-3.5 text-primary" />
                         ) : null}
                       </td>
                     </tr>
@@ -543,8 +586,13 @@ function CategoryPanel({
 }) {
   const [rows, setRows] = useState<LeadCategoryPublic[] | null>(null);
   const [query, setQuery] = useState('');
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const selectedIds = useMemo(
+    () => new Set(value?.kind === 'category' ? value.refIds ?? [] : []),
+    [value]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -567,27 +615,45 @@ function CategoryPanel({
     return rows.filter((r) => r.name.toLowerCase().includes(q));
   }, [rows, query]);
 
-  async function select(row: LeadCategoryPublic) {
+  async function toggle(row: LeadCategoryPublic) {
     if (row.leadCount === 0) return;
-    setBusyId(row.id);
+    const next = new Set(selectedIds);
+    if (next.has(row.id)) next.delete(row.id);
+    else next.add(row.id);
+
+    if (next.size === 0) {
+      onChange(null);
+      return;
+    }
+
+    setBusy(true);
     setErr(null);
     try {
-      const res = await b2dm.csv.persistFromCategory(row.id);
+      const ids = Array.from(next);
+      const res = await b2dm.csv.persistFromCategories(ids);
+      const labels = ids
+        .map((id) => (rows ?? []).find((r) => r.id === id)?.name)
+        .filter((s): s is string => !!s);
+      const label =
+        labels.length === 1
+          ? labels[0]!
+          : `${labels.length} categories`;
       onChange({
         kind: 'category',
         path: res.path,
         count: res.count,
-        label: row.name,
+        label,
+        refIds: ids,
       });
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not load category');
     } finally {
-      setBusyId(null);
+      setBusy(false);
     }
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex flex-col overflow-hidden">
       <div className="flex items-stretch border-b border-border bg-background">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -599,9 +665,9 @@ function CategoryPanel({
           />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="h-[50vh] overflow-auto">
         {rows === null ? (
-          <div className="flex h-full items-center justify-center">
+          <div className="flex items-center justify-center p-6">
             <Spinner className="h-5 w-5 text-muted-foreground" />
           </div>
         ) : rows.length === 0 ? (
@@ -617,45 +683,45 @@ function CategoryPanel({
                 <th className="px-3 py-1.5 text-left">Name</th>
                 <th className="px-3 py-1.5 text-right">Leads</th>
                 <th className="px-3 py-1.5 text-left">Last activity</th>
+                <th className="w-8 px-2 py-1.5" />
               </tr>
             </thead>
             <tbody>
               {filtered!.length === 0 ? (
                 <tr className="border-t border-border last:border-b">
-                  <td colSpan={3} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={4} className="px-3 py-10 text-center text-sm text-muted-foreground">
                     No categories match your search.
                   </td>
                 </tr>
               ) : (
                 filtered!.map((row) => {
-                  const selected = value?.kind === 'category' && value.label === row.name;
+                  const selected = selectedIds.has(row.id);
                   const disabled = row.leadCount === 0;
                   return (
                     <tr
                       key={row.id}
-                      onClick={() => !disabled && void select(row)}
+                      onClick={() => !disabled && void toggle(row)}
                       className={cn(
                         'border-t border-border transition-colors even:bg-muted/30 last:border-b',
                         !disabled && 'cursor-pointer hover:bg-accent/40',
                         selected && 'bg-primary/5 hover:bg-primary/10',
                         disabled && 'cursor-not-allowed opacity-50',
-                        busyId === row.id && 'opacity-60'
+                        busy && 'opacity-60'
                       )}
                     >
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-1.5">
                         <div className="flex items-center gap-2">
                           <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="font-medium">{row.name}</span>
+                          <span className="text-sm font-medium leading-tight">{row.name}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{row.leadCount}</td>
-                      <td className="px-3 py-2 text-muted-foreground">
+                      <td className="px-3 py-1.5 text-right tabular-nums">{row.leadCount}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground">
                         {formatDateTime(row.lastActivityAt)}
+                      </td>
+                      <td className="w-8 px-2 py-1.5 text-right">
                         {selected ? (
-                          <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-primary">
-                            <Check className="h-3 w-3" />
-                            Selected
-                          </span>
+                          <Check className="ml-auto h-3.5 w-3.5 text-primary" />
                         ) : null}
                       </td>
                     </tr>
@@ -701,8 +767,8 @@ function MessageStep({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex min-h-0 flex-1 flex-col border border-border bg-background">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col border border-border bg-background">
         <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           <span>Message variants</span>
           <span className="normal-case font-normal">
@@ -710,7 +776,7 @@ function MessageStep({
             <code className="rounded bg-background px-1 py-0.5 text-[10px]">{'{{username}}'}</code>
           </span>
         </div>
-        <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-auto p-3">
+        <div ref={scrollRef} className="max-h-[50vh] space-y-2 overflow-auto p-3">
           {variants.map((value, i) => (
             <div key={i} className="flex items-start gap-2">
               <Textarea
@@ -777,9 +843,7 @@ function ReviewStep({
   variants,
   intervalSec,
   error,
-  submitting,
   willEnqueue,
-  onConfirm,
   onEditAccount,
   onEditLeads,
   onEditMessage,
@@ -789,9 +853,7 @@ function ReviewStep({
   variants: string[];
   intervalSec: number;
   error: string | null;
-  submitting: boolean;
   willEnqueue: boolean;
-  onConfirm: () => void;
   onEditAccount: () => void;
   onEditLeads: () => void;
   onEditMessage: () => void;
@@ -806,23 +868,23 @@ function ReviewStep({
       : '—';
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+    <div className="flex flex-col gap-2">
       <SummaryCard title="Account" onEdit={onEditAccount}>
         {account ? (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {account.profilePicUrl ? (
               <img
                 src={account.profilePicUrl}
                 alt={account.username}
                 referrerPolicy="no-referrer"
-                className="h-8 w-8 rounded-full object-cover"
+                className="h-6 w-6 rounded-full object-cover"
               />
             ) : (
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Instagram className="h-4 w-4" />
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Instagram className="h-3 w-3" />
               </div>
             )}
-            <span className="font-medium">@{account.username}</span>
+            <span className="text-sm font-medium">@{account.username}</span>
           </div>
         ) : (
           <span className="text-sm text-muted-foreground">—</span>
@@ -877,24 +939,6 @@ function ReviewStep({
         </p>
       ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
-
-      <div>
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={submitting}
-          className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
-        >
-          {submitting ? <Spinner /> : <Play className="h-3.5 w-3.5" />}
-          {submitting
-            ? willEnqueue
-              ? 'Enqueuing…'
-              : 'Starting…'
-            : willEnqueue
-            ? 'Add to queue'
-            : 'Start Cold DM job'}
-        </button>
-      </div>
     </div>
   );
 }

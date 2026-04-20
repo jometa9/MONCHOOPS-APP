@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Globe, Instagram, Loader2, Plus, RefreshCw, Search, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, AtSign, Eye, EyeOff, FileUp, Globe, Instagram, KeyRound, Loader2, MousePointerClick, Plus, RefreshCw, Search, Trash2, Upload, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
@@ -99,7 +98,7 @@ function AccountRow({
             <button
               type="button"
               onClick={onRetry}
-              className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
               title="Retry login"
               aria-label="Retry login"
             >
@@ -109,7 +108,7 @@ function AccountRow({
           <button
             type="button"
             onClick={onConfigureProxy}
-            className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
             title="Configure proxy"
             aria-label="Configure proxy"
           >
@@ -119,7 +118,7 @@ function AccountRow({
             type="button"
             onClick={onDelete}
             disabled={account.status === 'busy'}
-            className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+            className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground"
             title="Delete account"
             aria-label="Delete account"
           >
@@ -139,6 +138,7 @@ function RetryLoginDialog({
   onClose: () => void;
 }) {
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasStored = account.hasStoredPassword;
@@ -189,7 +189,7 @@ function RetryLoginDialog({
     >
       <div className="space-y-3">
         {account.lastError ? (
-          <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+          <div className="flex items-start gap-2 border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
             <AlertTriangle className="h-3.5 w-3.5 flex-none translate-y-0.5" />
             <span>{account.lastError}</span>
           </div>
@@ -198,13 +198,26 @@ function RetryLoginDialog({
           <Label htmlFor="retry-password">
             {hasStored ? 'New password (leave empty to use saved)' : 'Password'}
           </Label>
-          <Input
+          <SquareIconInput
             id="retry-password"
-            type="password"
+            icon={KeyRound}
+            type={showPassword ? 'text' : 'password'}
             placeholder={hasStored ? '•••••••• (saved)' : '••••••••'}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
             disabled={busy}
+            trailing={
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                disabled={busy}
+                className="flex w-10 flex-none items-center justify-center border-l border-border text-muted-foreground transition-colors hover:text-foreground"
+                title={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            }
           />
         </div>
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
@@ -230,6 +243,7 @@ function ProxyDialog({
   const [url, setUrl] = useState(account.proxyUrl ?? '');
   const [username, setUsername] = useState(account.proxyUsername ?? '');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -272,28 +286,48 @@ function ProxyDialog({
       <div className="space-y-3">
         <div className="space-y-1">
           <Label htmlFor="proxy-url">Proxy URL</Label>
-          <Input
+          <SquareIconInput
             id="proxy-url"
+            icon={Globe}
             placeholder="http://host:port or socks5://host:port"
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={setUrl}
+            disabled={saving}
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="proxy-user">Username (optional)</Label>
-            <Input id="proxy-user" value={username} onChange={(e) => setUsername(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="proxy-pass">Password (optional)</Label>
-            <Input
-              id="proxy-pass"
-              type="password"
-              placeholder={account.hasProxyPassword ? '•••••••• (stored)' : ''}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
+        <div className="space-y-1">
+          <Label htmlFor="proxy-user">Username (optional)</Label>
+          <SquareIconInput
+            id="proxy-user"
+            icon={AtSign}
+            value={username}
+            onChange={setUsername}
+            disabled={saving}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="proxy-pass">Password (optional)</Label>
+          <SquareIconInput
+            id="proxy-pass"
+            icon={KeyRound}
+            type={showPassword ? 'text' : 'password'}
+            placeholder={account.hasProxyPassword ? '•••••••• (stored)' : ''}
+            value={password}
+            onChange={setPassword}
+            disabled={saving}
+            trailing={
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                disabled={saving}
+                className="flex w-10 flex-none items-center justify-center border-l border-border text-muted-foreground transition-colors hover:text-foreground"
+                title={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            }
+          />
         </div>
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
@@ -335,7 +369,7 @@ function ConfirmDeleteDialog({
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={confirm} disabled={busy}>
+          <Button onClick={confirm} disabled={busy}>
             {busy ? <Spinner /> : null}
             {busy ? 'Deleting…' : 'Delete account'}
           </Button>
@@ -347,31 +381,117 @@ function ConfirmDeleteDialog({
   );
 }
 
-function LoginMethodDialog({
+type AddMode = 'manual' | 'credentials' | 'bulk';
+
+const ADD_MODES: { id: AddMode; label: string; icon: typeof MousePointerClick }[] = [
+  { id: 'manual', label: 'Manual', icon: MousePointerClick },
+  { id: 'credentials', label: 'Credentials', icon: KeyRound },
+  { id: 'bulk', label: 'Bulk import', icon: Users },
+];
+
+function SquareIconInput({
+  id,
+  icon: Icon,
+  type = 'text',
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  trailing,
+}: {
+  id?: string;
+  icon: typeof AtSign;
+  type?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <div className="flex h-10 items-stretch border border-border bg-background">
+      <div className="flex w-10 flex-none items-center justify-center border-r border-border text-muted-foreground">
+        <Icon className="h-4 w-4" />
+      </div>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+      />
+      {trailing}
+    </div>
+  );
+}
+
+function AddAccountDialog({
   onClose,
   onChooseManual,
   onChooseAuto,
+  onStartBulk,
 }: {
   onClose: () => void;
   onChooseManual: () => void;
-  onChooseAuto: (username: string, password: string) => void;
+  onChooseAuto: (username: string, password: string) => Promise<void> | void;
+  onStartBulk: (rows: BulkRow[]) => Promise<void>;
 }) {
-  const [choice, setChoice] = useState<'manual' | 'credentials'>('manual');
+  const [mode, setMode] = useState<AddMode>('manual');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [bulkInput, setBulkInput] = useState<'paste' | 'file'>('paste');
+  const [bulkText, setBulkText] = useState('');
+  const [bulkParsed, setBulkParsed] = useState<ParsedRow[]>([]);
+  const [bulkFileName, setBulkFileName] = useState<string | null>(null);
+
+  useEffect(() => {
+    setBulkParsed(parseBulkText(bulkText));
+  }, [bulkText]);
+
+  const validRows = useMemo(() => bulkParsed.filter((r) => !r.error), [bulkParsed]);
+  const errorRows = useMemo(() => bulkParsed.filter((r) => r.error), [bulkParsed]);
+
+  async function handleFile(file: File) {
+    setError(null);
+    setBulkFileName(file.name);
+    const lower = file.name.toLowerCase();
+    try {
+      if (lower.endsWith('.csv') || lower.endsWith('.txt')) {
+        setBulkText(await file.text());
+        return;
+      }
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+        const buf = await file.arrayBuffer();
+        const XLSX = await import('xlsx');
+        const wb = XLSX.read(buf, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]!]!;
+        setBulkText(XLSX.utils.sheet_to_csv(sheet));
+        return;
+      }
+      setError('Unsupported file type. Use .csv, .txt, .xlsx, or .xls');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read file');
+    }
+  }
+
   async function handleContinue() {
-    if (choice === 'manual') {
+    setError(null);
+    if (mode === 'manual') {
       onChooseManual();
-    } else {
+      return;
+    }
+    if (mode === 'credentials') {
       if (!username.trim() || !password.trim()) {
         setError('Please enter both username and password');
         return;
       }
       setBusy(true);
-      setError(null);
       try {
         await onChooseAuto(username, password);
       } catch (err) {
@@ -379,85 +499,263 @@ function LoginMethodDialog({
       } finally {
         setBusy(false);
       }
+      return;
+    }
+    // bulk
+    if (validRows.length === 0) {
+      setError('No valid rows to import');
+      return;
+    }
+    setBusy(true);
+    try {
+      await onStartBulk(
+        validRows.map((r) => ({
+          username: r.username,
+          password: r.password,
+          proxyUrl: r.proxyUrl,
+          proxyUsername: r.proxyUsername,
+          proxyPassword: r.proxyPassword,
+        }))
+      );
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start bulk login');
+    } finally {
+      setBusy(false);
     }
   }
+
+  const continueLabel =
+    mode === 'manual'
+      ? 'Continue'
+      : mode === 'credentials'
+      ? busy
+        ? 'Signing in…'
+        : 'Sign in'
+      : busy
+      ? 'Starting…'
+      : `Import ${validRows.length} ${validRows.length === 1 ? 'account' : 'accounts'}`;
+
+  const disabled =
+    busy ||
+    (mode === 'credentials' && (!username.trim() || !password.trim())) ||
+    (mode === 'bulk' && validRows.length === 0);
 
   return (
     <Dialog
       open
       onClose={onClose}
       title="Link Instagram Account"
-      description="Choose how you want to sign in to your Instagram account."
+      description="Choose how you want to sign in."
+      className="max-w-2xl"
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={handleContinue} disabled={busy}>
+          <Button onClick={handleContinue} disabled={disabled}>
             {busy ? <Spinner /> : null}
-            {busy ? 'Signing in…' : 'Continue'}
+            {continueLabel}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <div className="space-y-3">
-          <label className="flex items-center gap-3 cursor-pointer p-3 border border-border rounded-lg hover:bg-accent transition-colors" onClick={() => setChoice('manual')}>
-            <input
-              type="radio"
-              name="login-method"
-              value="manual"
-              checked={choice === 'manual'}
-              onChange={() => setChoice('manual')}
-              className="w-4 h-4"
-            />
-            <div>
-              <div className="font-medium">Manual Login</div>
-              <div className="text-sm text-muted-foreground">A browser window will open for you to sign in</div>
-            </div>
-          </label>
-
-          <label className="flex items-center gap-3 cursor-pointer p-3 border border-border rounded-lg hover:bg-accent transition-colors" onClick={() => setChoice('credentials')}>
-            <input
-              type="radio"
-              name="login-method"
-              value="credentials"
-              checked={choice === 'credentials'}
-              onChange={() => setChoice('credentials')}
-              className="w-4 h-4"
-            />
-            <div>
-              <div className="font-medium">Use Username & Password</div>
-              <div className="text-sm text-muted-foreground">We'll handle the login automatically</div>
-            </div>
-          </label>
+        <div className="flex items-stretch border border-border">
+          {ADD_MODES.map((m, idx) => {
+            const Icon = m.icon;
+            const active = mode === m.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setMode(m.id)}
+                disabled={busy}
+                className={cn(
+                  'inline-flex h-9 flex-1 items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
+                  idx !== ADD_MODES.length - 1 && 'border-r border-border',
+                  active
+                    ? 'bg-accent text-accent-foreground'
+                    : 'bg-background text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {m.label}
+              </button>
+            );
+          })}
         </div>
 
-        {choice === 'credentials' && (
-          <div className="space-y-3 mt-4 pt-4 border-t border-border">
+        {mode === 'manual' ? (
+          <div className="border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+            A browser window will open so you can sign in to Instagram yourself. The session is
+            then saved to this device.
+          </div>
+        ) : null}
+
+        {mode === 'credentials' ? (
+          <div className="space-y-3">
             <div className="space-y-1">
-              <Label htmlFor="username">Username or Email</Label>
-              <Input
-                id="username"
-                placeholder="your.username or your.email@example.com"
+              <Label htmlFor="ig-username">Username or Email</Label>
+              <SquareIconInput
+                id="ig-username"
+                icon={AtSign}
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={setUsername}
+                placeholder="your.username or your.email@example.com"
                 disabled={busy}
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
+              <Label htmlFor="ig-password">Password</Label>
+              <SquareIconInput
+                id="ig-password"
+                icon={KeyRound}
+                type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={setPassword}
+                placeholder="••••••••"
                 disabled={busy}
+                trailing={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((s) => !s)}
+                    disabled={busy}
+                    className="flex w-10 flex-none items-center justify-center border-l border-border text-muted-foreground transition-colors hover:text-foreground"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                }
               />
             </div>
           </div>
-        )}
+        ) : null}
+
+        {mode === 'bulk' ? (
+          <div className="space-y-3">
+            <div className="flex items-stretch border border-border">
+              <button
+                type="button"
+                onClick={() => setBulkInput('paste')}
+                disabled={busy}
+                className={cn(
+                  'inline-flex h-9 flex-1 items-center justify-center gap-1.5 border-r border-border px-3 text-xs font-medium transition-colors',
+                  bulkInput === 'paste'
+                    ? 'bg-accent text-accent-foreground'
+                    : 'bg-background text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                )}
+              >
+                <FileUp className="h-3.5 w-3.5" />
+                Paste CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulkInput('file')}
+                disabled={busy}
+                className={cn(
+                  'inline-flex h-9 flex-1 items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
+                  bulkInput === 'file'
+                    ? 'bg-accent text-accent-foreground'
+                    : 'bg-background text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                )}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Upload file
+              </button>
+            </div>
+
+            <div className="border border-border bg-muted/30 p-3 text-xs">
+              <div className="mb-1 font-medium">Expected columns (header optional):</div>
+              <code className="block font-mono text-[11px] text-muted-foreground">{BULK_TEMPLATE}</code>
+              <div className="mt-1 text-muted-foreground">
+                Proxy fields are optional. Proxy URL must be <code>http://host:port</code> or{' '}
+                <code>socks5://host:port</code>.
+              </div>
+            </div>
+
+            {bulkInput === 'paste' ? (
+              <Textarea
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                placeholder={`username,password,proxy_url,proxy_username,proxy_password\nalice,secret123,,,\nbob,hunter2,http://proxy.io:8080,bob,proxypass`}
+                rows={6}
+                disabled={busy}
+                className="font-mono text-xs"
+              />
+            ) : (
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 border-2 border-dashed border-border p-6 text-sm text-muted-foreground hover:bg-accent">
+                <Upload className="h-6 w-6" />
+                <span>
+                  {bulkFileName
+                    ? `Selected: ${bulkFileName}`
+                    : 'Click to choose a .csv, .txt, .xlsx, or .xls file'}
+                </span>
+                <input
+                  type="file"
+                  accept=".csv,.txt,.xlsx,.xls"
+                  className="hidden"
+                  disabled={busy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void handleFile(f);
+                  }}
+                />
+              </label>
+            )}
+
+            {bulkParsed.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>
+                    <span className="font-medium text-foreground">{validRows.length}</span> valid
+                  </span>
+                  {errorRows.length > 0 ? (
+                    <span>
+                      <span className="font-medium text-destructive">{errorRows.length}</span> invalid
+                    </span>
+                  ) : null}
+                </div>
+                <div className="max-h-40 overflow-auto border border-border">
+                  <table className="w-full whitespace-nowrap text-xs">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="px-2 py-1 text-left font-medium">#</th>
+                        <th className="px-2 py-1 text-left font-medium">Username</th>
+                        <th className="px-2 py-1 text-left font-medium">Proxy</th>
+                        <th className="px-2 py-1 text-left font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkParsed.slice(0, 50).map((r) => (
+                        <tr key={r.rowNumber} className="border-t border-border even:bg-muted/30 last:border-b">
+                          <td className="px-2 py-1 text-muted-foreground">{r.rowNumber}</td>
+                          <td className="px-2 py-1 font-mono">{r.username || '—'}</td>
+                          <td className="px-2 py-1 font-mono text-muted-foreground">
+                            {r.proxyUrl ?? '—'}
+                          </td>
+                          <td className="px-2 py-1">
+                            {r.error ? (
+                              <span className="text-destructive">{r.error}</span>
+                            ) : (
+                              <span className="text-emerald-600">OK</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {bulkParsed.length > 50 ? (
+                    <div className="px-2 py-1 text-[11px] text-muted-foreground">
+                      …and {bulkParsed.length - 50} more
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
@@ -542,209 +840,6 @@ function parseBulkText(raw: string): ParsedRow[] {
   return dataLines.map((line, i) => splitCsvLine(line, hasHeader ? i + 2 : i + 1));
 }
 
-function BulkLoginDialog({
-  onClose,
-  onStart,
-}: {
-  onClose: () => void;
-  onStart: (rows: BulkRow[]) => Promise<void>;
-}) {
-  const [mode, setMode] = useState<'paste' | 'file'>('paste');
-  const [text, setText] = useState('');
-  const [parsed, setParsed] = useState<ParsedRow[]>([]);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setParsed(parseBulkText(text));
-  }, [text]);
-
-  async function handleFile(file: File) {
-    setError(null);
-    setFileName(file.name);
-    const lower = file.name.toLowerCase();
-    try {
-      if (lower.endsWith('.csv') || lower.endsWith('.txt')) {
-        setText(await file.text());
-        return;
-      }
-      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
-        const buf = await file.arrayBuffer();
-        const XLSX = await import('xlsx');
-        const wb = XLSX.read(buf, { type: 'array' });
-        const sheet = wb.Sheets[wb.SheetNames[0]!]!;
-        setText(XLSX.utils.sheet_to_csv(sheet));
-        return;
-      }
-      setError('Unsupported file type. Use .csv, .txt, .xlsx, or .xls');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not read file');
-    }
-  }
-
-  const validRows = useMemo(() => parsed.filter((r) => !r.error), [parsed]);
-  const errorRows = useMemo(() => parsed.filter((r) => r.error), [parsed]);
-
-  async function start() {
-    if (validRows.length === 0) {
-      setError('No valid rows to import');
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await onStart(
-        validRows.map((r) => ({
-          username: r.username,
-          password: r.password,
-          proxyUrl: r.proxyUrl,
-          proxyUsername: r.proxyUsername,
-          proxyPassword: r.proxyPassword,
-        }))
-      );
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start bulk login');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Bulk import accounts"
-      description="Sign in to multiple Instagram accounts. Each row is processed sequentially in a hidden browser."
-      className="max-w-2xl"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={start} disabled={busy || validRows.length === 0}>
-            {busy ? <Spinner /> : null}
-            {busy
-              ? 'Starting…'
-              : `Import ${validRows.length} ${validRows.length === 1 ? 'account' : 'accounts'}`}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <div className="flex gap-2">
-          <Button
-            variant={mode === 'paste' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setMode('paste')}
-            disabled={busy}
-          >
-            Paste CSV
-          </Button>
-          <Button
-            variant={mode === 'file' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setMode('file')}
-            disabled={busy}
-          >
-            Upload .csv / .xlsx
-          </Button>
-        </div>
-
-        <div className="rounded-md border border-border bg-muted/30 p-3 text-xs">
-          <div className="mb-1 font-medium">Expected columns (header optional):</div>
-          <code className="block font-mono text-[11px] text-muted-foreground">{BULK_TEMPLATE}</code>
-          <div className="mt-1 text-muted-foreground">
-            Proxy fields are optional. Proxy URL must be{' '}
-            <code>http://host:port</code> or <code>socks5://host:port</code>.
-          </div>
-        </div>
-
-        {mode === 'paste' ? (
-          <Textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={`username,password,proxy_url,proxy_username,proxy_password\nalice,secret123,,,\nbob,hunter2,http://proxy.io:8080,bob,proxypass`}
-            rows={6}
-            disabled={busy}
-            className="font-mono text-xs"
-          />
-        ) : (
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-6 text-sm text-muted-foreground hover:bg-accent">
-            <Upload className="h-6 w-6" />
-            <span>
-              {fileName ? `Selected: ${fileName}` : 'Click to choose a .csv, .txt, .xlsx, or .xls file'}
-            </span>
-            <input
-              type="file"
-              accept=".csv,.txt,.xlsx,.xls"
-              className="hidden"
-              disabled={busy}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void handleFile(f);
-              }}
-            />
-          </label>
-        )}
-
-        {parsed.length > 0 ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span>
-                <span className="font-medium text-foreground">{validRows.length}</span> valid
-              </span>
-              {errorRows.length > 0 ? (
-                <span>
-                  <span className="font-medium text-destructive">{errorRows.length}</span> invalid
-                </span>
-              ) : null}
-            </div>
-            <div className="max-h-40 overflow-auto rounded-md border border-border">
-              <table className="w-full whitespace-nowrap text-xs">
-                <thead className="bg-muted/40">
-                  <tr>
-                    <th className="px-2 py-1 text-left font-medium">#</th>
-                    <th className="px-2 py-1 text-left font-medium">Username</th>
-                    <th className="px-2 py-1 text-left font-medium">Proxy</th>
-                    <th className="px-2 py-1 text-left font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {parsed.slice(0, 50).map((r) => (
-                    <tr key={r.rowNumber} className="border-t border-border even:bg-muted/30 last:border-b">
-                      <td className="px-2 py-1 text-muted-foreground">{r.rowNumber}</td>
-                      <td className="px-2 py-1 font-mono">{r.username || '—'}</td>
-                      <td className="px-2 py-1 font-mono text-muted-foreground">
-                        {r.proxyUrl ?? '—'}
-                      </td>
-                      <td className="px-2 py-1">
-                        {r.error ? (
-                          <span className="text-destructive">{r.error}</span>
-                        ) : (
-                          <span className="text-emerald-600">OK</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {parsed.length > 50 ? (
-                <div className="px-2 py-1 text-[11px] text-muted-foreground">
-                  …and {parsed.length - 50} more
-                </div>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {error ? <p className="text-xs text-destructive">{error}</p> : null}
-      </div>
-    </Dialog>
-  );
-}
-
 export function InstagramAccounts() {
   const { accounts, loading } = useAccounts();
   const [adding, setAdding] = useState(false);
@@ -753,7 +848,6 @@ export function InstagramAccounts() {
   const [deleteTarget, setDeleteTarget] = useState<AccountPublic | null>(null);
   const [retryTarget, setRetryTarget] = useState<AccountPublic | null>(null);
   const [showLoginMethod, setShowLoginMethod] = useState(false);
-  const [showBulk, setShowBulk] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
@@ -834,29 +928,21 @@ export function InstagramAccounts() {
           description="Link an Instagram account to start sending DMs or scraping usernames."
           action={
             <div className="flex flex-col items-center gap-2">
-              <div className="flex flex-wrap justify-center gap-2">
-                <Button onClick={openLoginMethod} disabled={adding}>
-                  {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  {adding ? 'Working…' : 'Link Instagram account'}
-                </Button>
-                <Button variant="outline" onClick={() => setShowBulk(true)} disabled={adding}>
-                  <Upload className="h-4 w-4" />
-                  Bulk import
-                </Button>
-              </div>
+              <Button onClick={openLoginMethod} disabled={adding}>
+                {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {adding ? 'Working…' : 'Add account'}
+              </Button>
               {addError ? <p className="text-xs text-destructive">{addError}</p> : null}
             </div>
           }
         />
         {showLoginMethod ? (
-          <LoginMethodDialog
+          <AddAccountDialog
             onClose={() => setShowLoginMethod(false)}
             onChooseManual={handleStartManualLogin}
             onChooseAuto={handleStartAutoLogin}
+            onStartBulk={handleStartBulk}
           />
-        ) : null}
-        {showBulk ? (
-          <BulkLoginDialog onClose={() => setShowBulk(false)} onStart={handleStartBulk} />
         ) : null}
       </div>
     );
@@ -865,6 +951,15 @@ export function InstagramAccounts() {
   return (
     <div className="bg-background">
         <div className="sticky top-0 z-20 flex items-stretch bg-background">
+          <button
+            type="button"
+            onClick={openLoginMethod}
+            disabled={adding}
+            className="inline-flex h-9 items-center gap-1.5 border-r border-border bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
+            {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            {adding ? 'Working…' : 'Add account'}
+          </button>
           <div className="relative min-w-0 flex-1 border-r border-border">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -874,13 +969,14 @@ export function InstagramAccounts() {
               className="h-9 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
-          {STATUS_FILTERS.map((option) => (
+          {STATUS_FILTERS.map((option, idx) => (
             <button
               key={option.value}
               type="button"
               onClick={() => setStatusFilter(option.value)}
               className={cn(
-                'h-9 border-r border-border px-3 text-xs font-medium transition-colors',
+                'h-9 px-3 text-xs font-medium transition-colors',
+                idx !== STATUS_FILTERS.length - 1 && 'border-r border-border',
                 statusFilter === option.value
                   ? 'bg-accent text-accent-foreground'
                   : 'bg-background text-muted-foreground hover:bg-accent/50'
@@ -889,24 +985,6 @@ export function InstagramAccounts() {
               {option.label}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => setShowBulk(true)}
-            disabled={adding}
-            className="inline-flex h-9 items-center gap-1.5 border-r border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
-          >
-            <Upload className="h-3.5 w-3.5" />
-            Bulk import
-          </button>
-          <button
-            type="button"
-            onClick={openLoginMethod}
-            disabled={adding}
-            className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
-          >
-            {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-            {adding ? 'Working…' : 'Add account'}
-          </button>
         </div>
 
         <table className="w-full whitespace-nowrap border-collapse text-left">
@@ -950,14 +1028,12 @@ export function InstagramAccounts() {
         <RetryLoginDialog account={retryTarget} onClose={() => setRetryTarget(null)} />
       ) : null}
       {showLoginMethod ? (
-        <LoginMethodDialog
+        <AddAccountDialog
           onClose={() => setShowLoginMethod(false)}
           onChooseManual={handleStartManualLogin}
           onChooseAuto={handleStartAutoLogin}
+          onStartBulk={handleStartBulk}
         />
-      ) : null}
-      {showBulk ? (
-        <BulkLoginDialog onClose={() => setShowBulk(false)} onStart={handleStartBulk} />
       ) : null}
     </div>
   );

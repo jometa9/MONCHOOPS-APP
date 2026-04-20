@@ -193,7 +193,7 @@ export function Categories() {
                         <button
                           type="button"
                           onClick={() => navigate(`/categories/${row.id}`)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
                           title="View leads"
                           aria-label="View leads"
                         >
@@ -203,7 +203,7 @@ export function Categories() {
                           type="button"
                           onClick={() => void exportCsv(row.id)}
                           disabled={busy === row.id || row.leadCount === 0}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
                           title="Download CSV"
                           aria-label="Download CSV"
                         >
@@ -213,7 +213,7 @@ export function Categories() {
                           type="button"
                           onClick={() => void remove(row.id)}
                           disabled={busy === row.id}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
                           title="Delete category"
                           aria-label="Delete category"
                         >

@@ -35,10 +35,10 @@ export function Sidebar() {
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     cn(
-      'flex items-center gap-2 rounded-md border px-2.5 py-2 text-sm transition-colors',
+      'flex items-center gap-2.5 px-4 py-2 text-sm transition-colors',
       isActive
-        ? 'border-border bg-background font-medium text-foreground'
-        : 'border-transparent text-muted-foreground hover:border-border hover:bg-background hover:text-foreground'
+        ? 'border-y border-border bg-background font-medium text-foreground'
+        : 'border-y border-transparent text-muted-foreground hover:bg-background hover:text-foreground'
     );
 
   const scrapeJobs = running.filter((j) => SCRAPE_KINDS.includes(j.kind));
@@ -59,7 +59,7 @@ export function Sidebar() {
         ) : null}
       </div>
 
-      <nav className="flex-1 space-y-0.5 px-2 py-2">
+      <nav className="flex-1 py-1">
         {items.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} end={to === '/'} className={navClass}>
             <Icon className="h-4 w-4" />
@@ -68,13 +68,13 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="space-y-0.5 px-2 pb-2">
+      <div className="pb-1">
         {hasRunning ? (
           <NavLink to="/queue" className={navClass}>
             <Spinner className="h-4 w-4 text-muted-foreground" />
             <span>{statusLabel}</span>
             {isScraping ? (
-              <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
+              <span className="ml-auto bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
                 {scrapedCount}
               </span>
             ) : null}
@@ -88,7 +88,7 @@ export function Sidebar() {
         ))}
         <button
           onClick={() => { void logout(); }}
-          className="flex w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-foreground"
+          className="flex w-full items-center gap-2.5 border-y border-transparent px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
         >
           <LogOut className="h-4 w-4" />
           <span>Log out</span>

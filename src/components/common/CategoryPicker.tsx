@@ -173,7 +173,7 @@ function Chip({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60',
         active
           ? 'border-primary bg-primary/10 text-foreground'
           : 'border-border bg-background text-muted-foreground hover:bg-accent'

@@ -21,7 +21,7 @@ export function Dialog({ open, onClose, title, description, children, footer, cl
       />
       <div
         className={cn(
-          'relative z-10 w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-lg',
+          'relative z-10 w-full max-w-md border border-border bg-background p-6 shadow-lg',
           className
         )}
       >

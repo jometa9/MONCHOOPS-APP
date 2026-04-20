@@ -253,6 +253,56 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     return { path: row.csvPath, count: row.usernameCount };
   });
 
+  ipcMain.handle('csv:persistFromScrapes', async (_e, jobIds: string[]) => {
+    if (!Array.isArray(jobIds) || jobIds.length === 0) {
+      throw new Error('No scrapes selected');
+    }
+    const seen = new Set<string>();
+    for (const jobId of jobIds) {
+      const row = getScrapeResult(jobId);
+      if (!row) continue;
+      let content: string;
+      try {
+        content = fs.readFileSync(row.csvPath, 'utf8');
+      } catch {
+        continue;
+      }
+      for (const line of content.split(/\r?\n/)) {
+        const first = (line.split(',')[0] ?? '').trim().replace(/^[@#]+/, '');
+        if (!first || first.toLowerCase() === 'username') continue;
+        seen.add(first);
+      }
+    }
+    const usernames = Array.from(seen);
+    const tempDir = path.join(app.getPath('userData'), 'uploads');
+    fs.mkdirSync(tempDir, { recursive: true });
+    const dest = path.join(tempDir, `scrapes-${Date.now()}.csv`);
+    fs.writeFileSync(dest, `username\n${usernames.join('\n')}${usernames.length ? '\n' : ''}`);
+    return { path: dest, count: usernames.length };
+  });
+
+  ipcMain.handle('csv:persistFromCategories', async (_e, categoryIds: string[]) => {
+    if (!Array.isArray(categoryIds) || categoryIds.length === 0) {
+      throw new Error('No categories selected');
+    }
+    const seen = new Set<string>();
+    for (const id of categoryIds) {
+      const content = exportCategoryCsv(id);
+      const lines = content.split(/\r?\n/).slice(1);
+      for (const line of lines) {
+        const first = (line.split(',')[0] ?? '').trim().replace(/^[@#]+/, '');
+        if (!first) continue;
+        seen.add(first);
+      }
+    }
+    const usernames = Array.from(seen);
+    const tempDir = path.join(app.getPath('userData'), 'uploads');
+    fs.mkdirSync(tempDir, { recursive: true });
+    const dest = path.join(tempDir, `categories-${Date.now()}.csv`);
+    fs.writeFileSync(dest, `username\n${usernames.join('\n')}${usernames.length ? '\n' : ''}`);
+    return { path: dest, count: usernames.length };
+  });
+
   // Settings
   ipcMain.handle('session:refresh', async () => {
     const snapshot = await refreshSession();

@@ -10,7 +10,7 @@ interface StepperProps {
 
 export function Stepper({ labels, current, onJump, canJump }: StepperProps) {
   return (
-    <div className="mt-4 flex items-stretch border-y border-border">
+    <div className="mt-4 flex items-stretch border border-border">
       {labels.map((label, i) => {
         const num = i + 1;
         const active = num === current;

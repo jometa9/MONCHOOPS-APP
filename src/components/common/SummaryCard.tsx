@@ -24,7 +24,7 @@ export function SummaryCard({ title, onEdit, children, className }: Props) {
           </button>
         ) : null}
       </div>
-      <div className="p-3">{children}</div>
+      <div className="px-3 py-2">{children}</div>
     </div>
   );
 }

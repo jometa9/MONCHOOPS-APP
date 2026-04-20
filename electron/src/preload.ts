@@ -114,8 +114,12 @@ const csvApi = {
     invoke<{ path: string; count: number }>('csv:persistFromPath', srcPath),
   persistFromCategory: (categoryId: string) =>
     invoke<{ path: string; count: number }>('csv:persistFromCategory', categoryId),
+  persistFromCategories: (categoryIds: string[]) =>
+    invoke<{ path: string; count: number }>('csv:persistFromCategories', categoryIds),
   persistFromScrape: (jobId: string) =>
     invoke<{ path: string; count: number }>('csv:persistFromScrape', jobId),
+  persistFromScrapes: (jobIds: string[]) =>
+    invoke<{ path: string; count: number }>('csv:persistFromScrapes', jobIds),
 };
 
 const categoriesApi = {

@@ -60,26 +60,11 @@ export function Home() {
 
   return (
     <div className="relative flex min-h-full items-center justify-center overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute bottom-0 left-0 z-0 h-[50vh] bg-foreground/[0.03]"
-        style={{
-          aspectRatio: '1280 / 1116',
-          WebkitMaskImage: 'url(/home-bg.svg)',
-          maskImage: 'url(/home-bg.svg)',
-          WebkitMaskRepeat: 'no-repeat',
-          maskRepeat: 'no-repeat',
-          WebkitMaskPosition: 'bottom left',
-          maskPosition: 'bottom left',
-          WebkitMaskSize: 'contain',
-          maskSize: 'contain',
-        }}
-      />
-      <div className="relative z-10 mx-auto w-full max-w-3xl pb-40 p-16">
+      <div className="relative z-10 mx-auto w-full max-w-4xl pb-40 p-16">
         <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">What do you want to do today?</p>
 
-        <div className="mt-8 grid grid-cols-2 gap-4">
+        <div className="mt-8 grid grid-cols-2 border-l border-t border-border">
           <ActionCard
             to="/scrape"
             icon={<Users className="h-5 w-5" />}
@@ -96,7 +81,7 @@ export function Home() {
           />
         </div>
 
-        <div className="mt-4 grid gap-4 grid-cols-4">
+        <div className="grid grid-cols-4 border-l border-border">
           <StatCard label="Accounts" value={formatCount(accounts.length)} />
           <StatCard label="Leads" value={formatCount(stats.totalLeads)} />
           <StatCard label="Messages" value={formatCount(stats.totalMessages)} />
@@ -109,8 +94,8 @@ export function Home() {
 
 function StatCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-border bg-muted/30 p-5">
-      <div className="text-xs uppercase  text-muted-foreground">{label}</div>
+    <div className="border-b border-r border-border bg-muted/30 p-5">
+      <div className="text-xs uppercase text-muted-foreground">{label}</div>
       <div className="mt-1 text-base font-medium tabular-nums">{value}</div>
     </div>
   );
@@ -132,7 +117,7 @@ function ActionCard({
   return (
     <Link
       to={to}
-      className="group flex cursor-pointer flex-col justify-between rounded-xl border border-border bg-muted/30 p-5 transition-colors hover:bg-muted/60"
+      className="group flex cursor-pointer flex-col justify-between border-b border-r border-border bg-muted/30 p-5 transition-colors hover:bg-muted/60"
     >
       <div>
         <div className="flex items-center gap-2 text-foreground">
@@ -141,7 +126,7 @@ function ActionCard({
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </div>
-      <span className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors group-hover:bg-primary/90">
+      <span className="mt-4 inline-flex h-9 items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors group-hover:bg-primary/90">
         {cta}
       </span>
     </Link>

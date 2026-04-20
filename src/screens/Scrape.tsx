@@ -12,7 +12,6 @@ import {
   Tag,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/common/Spinner';
 import { AccountStep } from '@/components/common/AccountStep';
 import { Stepper } from '@/components/common/Stepper';
@@ -200,21 +199,19 @@ export function Scrape() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="mx-auto w-full max-w-2xl px-4 pt-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Scrape leads</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Three quick steps: pick the account, configure the scrape, review and start.
-        </p>
-        <Stepper
-          labels={STEP_LABELS}
-          current={step}
-          onJump={(s) => goTo(s as Step)}
-          canJump={(s) => s < step || canContinue[step]}
-        />
-      </div>
+    <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-4">
+      <h1 className="text-2xl font-semibold tracking-tight">Scrape leads</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Three quick steps: pick the account, configure the scrape, review and start.
+      </p>
+      <Stepper
+        labels={STEP_LABELS}
+        current={step}
+        onJump={(s) => goTo(s as Step)}
+        canJump={(s) => s < step || canContinue[step]}
+      />
 
-      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4 py-4">
+      <div className="py-4">
         {step === 1 ? (
           <AccountStep accounts={accounts} value={accountId} onChange={setAccountId} />
         ) : null}
@@ -242,21 +239,19 @@ export function Scrape() {
             config={config}
             category={category}
             error={error}
-            submitting={submitting}
             willEnqueue={selectedAccount?.status === 'busy'}
             onEditAccount={() => setStep(1)}
             onEditScrape={() => setStep(2)}
-            onConfirm={confirmAndStart}
           />
         ) : null}
       </div>
 
-      <div className="mx-auto flex w-full max-w-2xl items-stretch border-t border-border">
+      <div className="flex items-stretch">
         <button
           type="button"
           onClick={back}
           disabled={step === 1}
-          className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+          className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back
@@ -272,7 +267,23 @@ export function Scrape() {
             Continue
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            onClick={confirmAndStart}
+            disabled={submitting || !canContinue[step]}
+            className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
+            {submitting ? <Spinner /> : <Play className="h-3.5 w-3.5" />}
+            {submitting
+              ? selectedAccount?.status === 'busy'
+                ? 'Enqueuing…'
+                : 'Starting…'
+              : selectedAccount?.status === 'busy'
+              ? 'Add to queue'
+              : 'Start scrape'}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -315,7 +326,7 @@ function ScrapeConfigStep({
 }) {
   const activeHint = MODES.find((m) => m.id === mode)?.hint;
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+    <div className="flex flex-col gap-3">
       <div className="border border-border bg-background">
         <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           Method
@@ -349,76 +360,78 @@ function ScrapeConfigStep({
           </div>
         ) : null}
 
-        <div className="p-3">
+        <div className="space-y-2 p-3">
           {mode === 'scrape_by_username' ? (
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="sc-user">Target username</Label>
-                <Input
-                  id="sc-user"
-                  value={config.username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="@nike"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="sc-max">Max leads (blank = all)</Label>
-                <Input
-                  id="sc-max"
-                  type="number"
-                  min={1}
-                  value={config.maxInput}
-                  onChange={(e) => setMaxInput(e.target.value)}
-                  placeholder="e.g. 2000"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  We pull followers first, then post &amp; reel engagers, stopping once the
-                  cap is reached (or everything is exhausted).
-                </p>
-              </div>
-            </div>
+            <>
+              <Input
+                id="sc-user"
+                className="rounded-none"
+                value={config.username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Target username (e.g. @nike)"
+              />
+              <Input
+                id="sc-max"
+                type="number"
+                min={1}
+                className="rounded-none"
+                value={config.maxInput}
+                onChange={(e) => setMaxInput(e.target.value)}
+                placeholder="Max leads (blank = all)"
+              />
+            </>
           ) : null}
 
           {mode === 'scrape_by_post' ? (
-            <div className="space-y-1">
-              <Label htmlFor="sc-post">Post or reel URL</Label>
-              <Input
-                id="sc-post"
-                value={config.postUrl}
-                onChange={(e) => setPostUrl(e.target.value)}
-                placeholder="https://www.instagram.com/p/… or /reel/…"
-              />
-            </div>
+            <Input
+              id="sc-post"
+              className="rounded-none"
+              value={config.postUrl}
+              onChange={(e) => setPostUrl(e.target.value)}
+              placeholder="Post or reel URL (https://www.instagram.com/p/… or /reel/…)"
+            />
           ) : null}
 
           {mode === 'scrape_by_hashtag' ? (
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="sc-tag">Hashtag (no #)</Label>
-                <Input
-                  id="sc-tag"
-                  value={config.hashtag}
-                  onChange={(e) => setHashtag(e.target.value)}
-                  placeholder="travel"
-                />
-              </div>
-              <MaxLeadsField value={config.maxInput} onChange={setMaxInput} />
-            </div>
+            <>
+              <Input
+                id="sc-tag"
+                className="rounded-none"
+                value={config.hashtag}
+                onChange={(e) => setHashtag(e.target.value)}
+                placeholder="Hashtag (no #, e.g. travel)"
+              />
+              <Input
+                id="sc-tag-max"
+                type="number"
+                min={1}
+                className="rounded-none"
+                value={config.maxInput}
+                onChange={(e) => setMaxInput(e.target.value)}
+                placeholder="Max leads (blank = all)"
+              />
+            </>
           ) : null}
 
           {mode === 'scrape_by_location' ? (
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="sc-loc">Location URL or ID</Label>
-                <Input
-                  id="sc-loc"
-                  value={config.locationUrl}
-                  onChange={(e) => setLocationUrl(e.target.value)}
-                  placeholder="https://www.instagram.com/explore/locations/213385402/new-york-new-york/"
-                />
-              </div>
-              <MaxLeadsField value={config.maxInput} onChange={setMaxInput} />
-            </div>
+            <>
+              <Input
+                id="sc-loc"
+                className="rounded-none"
+                value={config.locationUrl}
+                onChange={(e) => setLocationUrl(e.target.value)}
+                placeholder="Location URL or ID"
+              />
+              <Input
+                id="sc-loc-max"
+                type="number"
+                min={1}
+                className="rounded-none"
+                value={config.maxInput}
+                onChange={(e) => setMaxInput(e.target.value)}
+                placeholder="Max leads (blank = all)"
+              />
+            </>
           ) : null}
         </div>
       </div>
@@ -442,31 +455,6 @@ function ScrapeConfigStep({
   );
 }
 
-function MaxLeadsField({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="space-y-1">
-      <Label htmlFor="sc-max">Max leads (blank = all)</Label>
-      <Input
-        id="sc-max"
-        type="number"
-        min={1}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="e.g. 2000"
-      />
-      <p className="text-[11px] text-muted-foreground">
-        We walk posts newest-first and stop once the cap is reached.
-      </p>
-    </div>
-  );
-}
-
 /* ---------------- Step 3: Review ---------------- */
 
 function ReviewStep({
@@ -475,44 +463,40 @@ function ReviewStep({
   config,
   category,
   error,
-  submitting,
   willEnqueue,
   onEditAccount,
   onEditScrape,
-  onConfirm,
 }: {
   account: { username: string; profilePicUrl: string | null } | null;
   mode: Mode;
   config: ConfigState;
   category: CategorySelection;
   error: string | null;
-  submitting: boolean;
   willEnqueue: boolean;
   onEditAccount: () => void;
   onEditScrape: () => void;
-  onConfirm: () => void;
 }) {
   const modeDef = MODES.find((m) => m.id === mode)!;
   const ModeIcon = modeDef.icon;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+    <div className="flex flex-col gap-2">
       <SummaryCard title="Account" onEdit={onEditAccount}>
         {account ? (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {account.profilePicUrl ? (
               <img
                 src={account.profilePicUrl}
                 alt={account.username}
                 referrerPolicy="no-referrer"
-                className="h-8 w-8 rounded-full object-cover"
+                className="h-6 w-6 rounded-full object-cover"
               />
             ) : (
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Instagram className="h-4 w-4" />
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Instagram className="h-3 w-3" />
               </div>
             )}
-            <span className="font-medium">@{account.username}</span>
+            <span className="text-sm font-medium">@{account.username}</span>
           </div>
         ) : (
           <span className="text-sm text-muted-foreground">—</span>
@@ -542,24 +526,6 @@ function ReviewStep({
         </p>
       ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
-
-      <div>
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={submitting}
-          className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
-        >
-          {submitting ? <Spinner /> : <Play className="h-3.5 w-3.5" />}
-          {submitting
-            ? willEnqueue
-              ? 'Enqueuing…'
-              : 'Starting…'
-            : willEnqueue
-            ? 'Add to queue'
-            : 'Start scrape'}
-        </button>
-      </div>
     </div>
   );
 }

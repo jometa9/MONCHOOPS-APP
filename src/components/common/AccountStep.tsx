@@ -1,9 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Check, Instagram, Search } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { Badge } from '@/components/ui/badge';
 import { EmptyPanel } from '@/components/common/EmptyPanel';
 import { useJobs } from '@/context/JobsContext';
 import type { AccountPublic } from '@/types/domain';
+
+function StatusBadge({ status }: { status: AccountPublic['status'] }) {
+  if (status === 'busy') return <Badge variant="warning">Running</Badge>;
+  if (status === 'error') return <Badge variant="destructive">Error</Badge>;
+  return <Badge variant="success">Idle</Badge>;
+}
 
 interface Props {
   accounts: AccountPublic[];
@@ -55,8 +62,8 @@ export function AccountStep({ accounts, value, onChange }: Props) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-border bg-background">
-      <div className="sticky top-0 z-10 flex items-stretch border-b border-border bg-background">
+    <div className="overflow-hidden border border-border bg-background">
+      <div className="flex items-stretch border-b border-border bg-background">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -67,25 +74,25 @@ export function AccountStep({ accounts, value, onChange }: Props) {
           />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="h-[50vh] overflow-auto">
         <table className="w-full whitespace-nowrap text-sm">
           <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-1.5 text-left">Account</th>
               <th className="px-3 py-1.5 text-left">Status</th>
+              <th className="w-8 px-2 py-1.5" />
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr className="border-t border-border last:border-b">
-                <td colSpan={2} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={3} className="px-3 py-10 text-center text-sm text-muted-foreground">
                   No accounts match your search.
                 </td>
               </tr>
             ) : (
               filtered.map((acc) => {
                 const selected = value === acc.id;
-                const busy = acc.status === 'busy';
                 const queued = queueDepthById.get(acc.id) ?? 0;
                 return (
                   <tr
@@ -96,51 +103,41 @@ export function AccountStep({ accounts, value, onChange }: Props) {
                       selected && 'bg-primary/5 hover:bg-primary/10'
                     )}
                   >
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-3">
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center gap-2.5">
                         {acc.profilePicUrl ? (
                           <img
                             src={acc.profilePicUrl}
                             alt={acc.username}
                             referrerPolicy="no-referrer"
-                            className="h-8 w-8 rounded-full object-cover"
+                            className="h-6 w-6 flex-none rounded-full object-cover"
                           />
                         ) : (
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                            <Instagram className="h-4 w-4" />
+                          <div className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-muted text-muted-foreground">
+                            <Instagram className="h-3 w-3" />
                           </div>
                         )}
                         <div className="min-w-0">
-                          <div className="font-medium">@{acc.username}</div>
+                          <div className="text-sm font-medium leading-tight">@{acc.username}</div>
                           {acc.displayName ? (
-                            <div className="text-[11px] text-muted-foreground">
+                            <div className="text-[11px] leading-tight text-muted-foreground">
                               {acc.displayName}
                             </div>
                           ) : null}
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-xs">
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5',
-                          busy && 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-                          acc.status === 'error' && 'bg-destructive/10 text-destructive',
-                          acc.status === 'idle' && 'bg-muted text-muted-foreground'
-                        )}
-                      >
-                        {busy ? 'Busy' : acc.status === 'error' ? 'Error' : 'Idle'}
-                      </span>
-                      {queued > 0 ? (
-                        <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                          +{queued} queued
-                        </span>
-                      ) : null}
+                    <td className="px-3 py-1.5">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <StatusBadge status={acc.status} />
+                        {queued > 0 ? (
+                          <Badge variant="muted">+{queued} queued</Badge>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="w-8 px-2 py-1.5 text-right">
                       {selected ? (
-                        <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-primary">
-                          <Check className="h-3 w-3" />
-                          Selected
-                        </span>
+                        <Check className="ml-auto h-3.5 w-3.5 text-primary" />
                       ) : null}
                     </td>
                   </tr>
