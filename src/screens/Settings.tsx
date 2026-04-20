@@ -86,8 +86,7 @@ export function Settings() {
     : '—';
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="mx-auto flex w-full max-w-2xl flex-col px-4 py-4">
+    <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-4">
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Manage your account, preferences, and stored data.
@@ -176,7 +175,6 @@ export function Settings() {
             </div>
           </div>
         </div>
-      </div>
     </div>
   );
 }
