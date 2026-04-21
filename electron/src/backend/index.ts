@@ -186,12 +186,19 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     'accounts:updateProxy',
     async (
       _e,
-      payload: { id: string; url: string | null; username: string | null; password: string | null }
+      payload: {
+        id: string;
+        url: string | null;
+        username: string | null;
+        password: string | null;
+        enabled?: boolean;
+      }
     ) => {
       const acc = updateProxy(payload.id, {
         url: payload.url,
         username: payload.username,
         password: payload.password,
+        enabled: payload.enabled,
       });
       broadcast('accounts:changed');
       return acc;
@@ -271,6 +278,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   ipcMain.handle('scrapes:download', async (_e, jobId: string) => {
     const row = getScrapeResult(jobId);
     if (!row) throw new Error('Scrape result not found');
+    if (!row.csvPath) throw new Error('No CSV available for this scrape');
     const res = await dialog.showSaveDialog({
       defaultPath: `${row.summary.replace(/[^a-z0-9_-]+/gi, '_')}.csv`,
       filters: [{ name: 'CSV', extensions: ['csv'] }],
@@ -281,7 +289,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   });
   ipcMain.handle('scrapes:revealInFolder', async (_e, jobId: string) => {
     const row = getScrapeResult(jobId);
-    if (!row) return;
+    if (!row || !row.csvPath) return;
     shell.showItemInFolder(row.csvPath);
   });
   ipcMain.handle('scrapes:listUsernames', async (_e, jobId: string) =>
@@ -335,7 +343,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     const seen = new Set<string>();
     for (const jobId of jobIds) {
       const row = getScrapeResult(jobId);
-      if (!row) continue;
+      if (!row || !row.csvPath) continue;
       let content: string;
       try {
         content = fs.readFileSync(row.csvPath, 'utf8');
@@ -396,6 +404,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   ipcMain.handle('scrapes:deleteAll', async () => {
     const rows = listScrapeResults();
     for (const row of rows) {
+      if (!row.csvPath) continue;
       try { fs.unlinkSync(row.csvPath); } catch {}
     }
     getDb().prepare('DELETE FROM scrape_results').run();

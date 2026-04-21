@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Search, Users } from 'lucide-react';
 import { EmptyState } from '@/components/common/EmptyState';
+import { ScrapeSummaryOf } from '@/components/common/ScrapeSummary';
 import { Spinner } from '@/components/common/Spinner';
 import { b2dm } from '@/lib/b2dm';
 import type { ScrapeResultPublic, ScrapeUsernameRow } from '@/types/domain';
@@ -70,18 +71,24 @@ export function LeadsDetail() {
         </div>
         {result ? (
           <div className="flex items-center gap-2 border-l border-border px-3 text-xs text-muted-foreground">
-            <span className="truncate">{result.summary}</span>
+            <ScrapeSummaryOf row={result} className="truncate text-xs text-muted-foreground" />
             <span className="tabular-nums">· {result.usernameCount}</span>
           </div>
         ) : null}
       </div>
 
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Users className="h-10 w-10" />}
-          title="No usernames found"
-          description="This scrape finished without producing any usernames."
-        />
+      {filteredRows!.length === 0 ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center border-t border-border">
+          <EmptyState
+            icon={rows.length === 0 ? <Users className="h-10 w-10" /> : <Search className="h-10 w-10" />}
+            title="No results"
+            description={
+              rows.length === 0
+                ? 'This scrape finished without producing any usernames.'
+                : 'No usernames match your search.'
+            }
+          />
+        </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full whitespace-nowrap text-sm">
@@ -92,42 +99,33 @@ export function LeadsDetail() {
             </tr>
           </thead>
           <tbody>
-            {filteredRows!.length === 0 ? (
-              <tr className="border-t border-border last:border-b">
-                <td colSpan={2} className="px-3 py-10 text-center text-sm text-muted-foreground">
-                  No usernames match your search.
-                </td>
-              </tr>
-            ) : (
-              filteredRows!.map((row) => {
-                const openProfile = () =>
-                  void b2dm.openExternalLink(
-                    `https://www.instagram.com/${encodeURIComponent(row.username)}/`
-                  );
-                return (
-                  <tr
-                    key={row.username}
-                    onClick={openProfile}
-                    className="cursor-pointer border-t border-border transition-colors even:bg-muted/30 last:border-b hover:bg-accent/40"
-                  >
-                    <td className="px-3 py-1.5 font-medium">@{row.username}</td>
-                    <td className="px-2 py-1.5">
-                      <div className="flex items-center justify-end">
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); openProfile(); }}
-                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                          title={`Open @${row.username} on Instagram`}
-                          aria-label={`Open @${row.username} on Instagram`}
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+            {filteredRows!.map((row) => {
+              const openProfile = () =>
+                void b2dm.openExternalLink(
+                  `https://www.instagram.com/${encodeURIComponent(row.username)}/`
                 );
-              })
-            )}
+              return (
+                <tr
+                  key={row.username}
+                  onClick={openProfile}
+                  className="cursor-pointer border-t border-border transition-colors even:bg-muted/30 last:border-b hover:bg-accent/40"
+                >
+                  <td className="px-3 py-1.5 font-medium">@{row.username}</td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); openProfile(); }}
+                        className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                        aria-label={`Open @${row.username} on Instagram`}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         </div>

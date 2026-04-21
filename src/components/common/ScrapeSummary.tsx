@@ -1,0 +1,114 @@
+import { b2dm } from '@/lib/b2dm';
+import { cn } from '@/lib/cn';
+import type { JobKind, ScrapeResultPublic } from '@/types/domain';
+
+interface Props {
+  kind: JobKind;
+  params: unknown;
+  targetName: string | null;
+  className?: string;
+}
+
+// Renders a one-line description of a scrape job, with the URL-ish part
+// (post, location, hashtag, profile) turned into a clickable link word
+// so the table stays narrow and readable.
+export function ScrapeSummary({ kind, params, targetName, className }: Props) {
+  const p = (params && typeof params === 'object' ? params : {}) as Record<string, unknown>;
+
+  switch (kind) {
+    case 'scrape_by_username': {
+      const username = String(p.username ?? '').replace(/^@+/, '').trim() || null;
+      return (
+        <span className={cn('inline-flex items-center gap-1', className)}>
+          Followers of {username ? <ProfileLink username={username} /> : <Unknown label="profile" />}
+        </span>
+      );
+    }
+    case 'scrape_by_post': {
+      const url = String(p.postUrl ?? '').trim() || null;
+      const isReel = url ? /\/reel\//.test(url) : false;
+      return (
+        <span className={cn('inline-flex items-center gap-1', className)}>
+          Engagers of {url ? <ExternalLinkWord url={url} label={isReel ? 'reel' : 'post'} /> : <Unknown label="post" />}
+          {targetName ? (
+            <>
+              <span>by</span>
+              <ProfileLink username={targetName.replace(/^@+/, '')} />
+            </>
+          ) : null}
+        </span>
+      );
+    }
+    case 'scrape_by_hashtag': {
+      const hashtag = String(p.hashtag ?? '').replace(/^#+/, '').trim() || null;
+      return (
+        <span className={cn('inline-flex items-center gap-1', className)}>
+          Engagers of{' '}
+          {hashtag ? <HashtagLink hashtag={hashtag} /> : <Unknown label="hashtag" />}
+        </span>
+      );
+    }
+    case 'scrape_by_location': {
+      const url = String(p.locationUrl ?? '').trim() || null;
+      return (
+        <span className={cn('inline-flex items-center gap-1', className)}>
+          Engagers at{' '}
+          {url ? (
+            <ExternalLinkWord url={url} label={targetName ?? 'location'} />
+          ) : (
+            <Unknown label={targetName ?? 'location'} />
+          )}
+        </span>
+      );
+    }
+    default:
+      return <span className={className}>Scrape result</span>;
+  }
+}
+
+function Unknown({ label }: { label: string }) {
+  return <span>{label}</span>;
+}
+
+function ExternalLinkWord({ url, label }: { url: string; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        void b2dm.openExternalLink(url);
+      }}
+      className="font-medium underline decoration-dotted underline-offset-2"
+    >
+      {label}
+    </button>
+  );
+}
+
+function ProfileLink({ username }: { username: string }) {
+  const url = `https://www.instagram.com/${encodeURIComponent(username)}/`;
+  return <ExternalLinkWord url={url} label={`@${username}`} />;
+}
+
+function HashtagLink({ hashtag }: { hashtag: string }) {
+  const url = `https://www.instagram.com/explore/tags/${encodeURIComponent(hashtag)}/`;
+  return <ExternalLinkWord url={url} label={`#${hashtag}`} />;
+}
+
+// Convenience wrapper for call sites that already have a ScrapeResultPublic.
+export function ScrapeSummaryOf({
+  row,
+  className,
+}: {
+  row: Pick<ScrapeResultPublic, 'kind' | 'params' | 'targetName'>;
+  className?: string;
+}) {
+  return (
+    <ScrapeSummary
+      kind={row.kind}
+      params={row.params}
+      targetName={row.targetName}
+      className={className}
+    />
+  );
+}

@@ -16,6 +16,7 @@ export function wipeUserData(): void {
 
   const scrapeRows = listScrapeResults();
   for (const row of scrapeRows) {
+    if (!row.csvPath) continue;
     try {
       fs.unlinkSync(row.csvPath);
     } catch {}

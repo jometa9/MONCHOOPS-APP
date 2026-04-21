@@ -77,12 +77,18 @@ export function CategoryLeadsDetail() {
         ) : null}
       </div>
 
-      {leads.length === 0 ? (
-        <EmptyState
-          icon={<Users className="h-10 w-10" />}
-          title="No leads yet"
-          description="Run a scrape tagged with this category to populate it."
-        />
+      {filteredLeads!.length === 0 ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center border-t border-border">
+          <EmptyState
+            icon={leads.length === 0 ? <Users className="h-10 w-10" /> : <Search className="h-10 w-10" />}
+            title="No results"
+            description={
+              leads.length === 0
+                ? 'Run a scrape tagged with this category to populate it.'
+                : 'No leads match your search.'
+            }
+          />
+        </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full whitespace-nowrap text-sm">
@@ -95,48 +101,42 @@ export function CategoryLeadsDetail() {
             </tr>
           </thead>
           <tbody>
-            {filteredLeads!.length === 0 ? (
-              <tr className="border-t border-border last:border-b">
-                <td colSpan={4} className="px-3 py-10 text-center text-sm text-muted-foreground">
-                  No leads match your search.
-                </td>
-              </tr>
-            ) : (
-              filteredLeads!.map((lead) => {
-                const openProfile = () =>
-                  void b2dm.openExternalLink(
-                    `https://www.instagram.com/${encodeURIComponent(lead.username)}/`
-                  );
-                return (
-                  <tr
-                    key={lead.id}
-                    onClick={openProfile}
-                    className="cursor-pointer border-t border-border transition-colors even:bg-muted/30 last:border-b hover:bg-accent/40"
-                  >
-                    <td className="px-3 py-1.5 font-medium">@{lead.username}</td>
-                    <td className="px-3 py-1.5 text-xs text-muted-foreground">
-                      {lead.sourceDetail ?? lead.sourceKind}
-                    </td>
-                    <td className="px-3 py-1.5 text-xs text-muted-foreground">
-                      {formatDateTime(lead.scrapedAt)}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <div className="flex items-center justify-end">
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); openProfile(); }}
-                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                          title={`Open @${lead.username} on Instagram`}
-                          aria-label={`Open @${lead.username} on Instagram`}
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+            {filteredLeads!.map((lead) => {
+              const openProfile = () =>
+                void b2dm.openExternalLink(
+                  `https://www.instagram.com/${encodeURIComponent(lead.username)}/`
                 );
-              })
-            )}
+              return (
+                <tr
+                  key={lead.id}
+                  onClick={openProfile}
+                  className="cursor-pointer border-t border-border transition-colors even:bg-muted/30 last:border-b hover:bg-accent/40"
+                >
+                  <td className="px-3 py-1.5 font-medium">@{lead.username}</td>
+                  <td className="px-3 py-1.5 text-xs text-muted-foreground">
+                    <LeadSourceCell
+                      sourceDetail={lead.sourceDetail}
+                      sourceKind={lead.sourceKind}
+                    />
+                  </td>
+                  <td className="px-3 py-1.5 text-xs text-muted-foreground">
+                    {formatDateTime(lead.scrapedAt)}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); openProfile(); }}
+                        className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                        aria-label={`Open @${lead.username} on Instagram`}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         </div>
@@ -149,4 +149,74 @@ export function CategoryLeadsDetail() {
       ) : null}
     </div>
   );
+}
+
+// Parses a `source_detail` string from the leads table and renders the
+// "where we found this lead" reference with any URL replaced by a clickable
+// word matching the source kind (post, reel, hashtag, location, profile).
+function LeadSourceCell({
+  sourceDetail,
+  sourceKind,
+}: {
+  sourceDetail: string | null;
+  sourceKind: string;
+}) {
+  const parts = (sourceDetail ?? '').split(' | ').map((s) => s.trim()).filter(Boolean);
+  if (parts.length === 0) return <span>{sourceKind}</span>;
+
+  const kind = parts[0] ?? sourceKind;
+  const [kindLabel, linkWord] = labelsFor(kind);
+
+  // Find the first URL or @handle / #tag reference in the remaining parts.
+  const ref = parts.slice(1).find(Boolean) ?? null;
+  const refUrl = refToUrl(ref);
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span>{kindLabel}</span>
+      {refUrl ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            void b2dm.openExternalLink(refUrl);
+          }}
+          className="font-medium text-foreground underline decoration-dotted underline-offset-2 transition-colors hover:text-primary"
+        >
+          {linkWord}
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
+function labelsFor(kind: string): [string, string] {
+  switch (kind) {
+    case 'post_comment': return ['commented on', 'post'];
+    case 'post_like': return ['liked', 'post'];
+    case 'reel_comment': return ['commented on', 'reel'];
+    case 'reel_like': return ['liked', 'reel'];
+    case 'followers': return ['follows', 'profile'];
+    default: return [kind.replace(/_/g, ' '), 'link'];
+  }
+}
+
+function refToUrl(ref: string | null): string | null {
+  if (!ref) return null;
+  const trimmed = ref.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('@')) {
+    return `https://www.instagram.com/${encodeURIComponent(trimmed.slice(1))}/`;
+  }
+  if (trimmed.startsWith('#')) {
+    return `https://www.instagram.com/explore/tags/${encodeURIComponent(trimmed.slice(1))}/`;
+  }
+  const hashtagTag = trimmed.match(/^hashtag:#?(.+)/);
+  if (hashtagTag) return `https://www.instagram.com/explore/tags/${encodeURIComponent(hashtagTag[1])}/`;
+  const locationTag = trimmed.match(/^location:(.+)/);
+  if (locationTag) {
+    const raw = locationTag[1];
+    return /^https?:\/\//i.test(raw) ? raw : `https://www.instagram.com/explore/locations/${raw}/`;
+  }
+  return null;
 }

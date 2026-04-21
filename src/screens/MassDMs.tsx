@@ -11,7 +11,6 @@ import {
   Plus,
   Search,
   Send,
-  Tag,
   Trash2,
   UploadCloud,
   UserPlus,
@@ -25,10 +24,13 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Spinner } from '@/components/common/Spinner';
 import { AccountStep } from '@/components/common/AccountStep';
+import { CategoryChip } from '@/components/common/CategoryChip';
 import { Stepper } from '@/components/common/Stepper';
 import { SummaryCard } from '@/components/common/SummaryCard';
 import { EmptyPanel } from '@/components/common/EmptyPanel';
 import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
+import { JobStartedPanel } from '@/components/common/JobStartedPanel';
+import { ScrapeSummaryOf } from '@/components/common/ScrapeSummary';
 import { useAccounts } from '@/context/AccountsContext';
 import { b2dm } from '@/lib/b2dm';
 import { cn } from '@/lib/cn';
@@ -171,32 +173,12 @@ export function MassDMs() {
 
   if (startedJobId) {
     return (
-      <div className="mx-auto max-w-2xl p-4">
-        <div className="border border-border bg-background">
-          <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {wasEnqueued ? 'Cold DM queued' : 'Cold DM started'}
-          </div>
-          <div className="p-4">
-            <div className="flex items-center gap-2 text-sm">
-              <Spinner className="h-4 w-4" />
-              <span>
-                {wasEnqueued
-                  ? 'The account is busy — this Cold DM will start once earlier jobs finish. Track it in the Queue.'
-                  : 'Watch progress in the bottom status bar.'}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-stretch border-t border-border">
-            <button
-              type="button"
-              onClick={resetAll}
-              className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              Queue another
-            </button>
-          </div>
-        </div>
-      </div>
+      <JobStartedPanel
+        jobId={startedJobId}
+        kind="dm"
+        wasEnqueued={wasEnqueued}
+        onReset={resetAll}
+      />
     );
   }
 
@@ -503,7 +485,7 @@ function JobsPanel({
     const q = query.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) =>
-      [r.summary, r.kind, r.categoryName ?? ''].join(' ').toLowerCase().includes(q)
+      [r.summary, r.kind, r.targetName ?? '', r.categoryName ?? ''].join(' ').toLowerCase().includes(q)
     );
   }, [rows, query]);
 
@@ -572,7 +554,7 @@ function JobsPanel({
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-1.5 text-left">Summary</th>
-                <th className="px-3 py-1.5 text-right">Usernames</th>
+                <th className="px-3 py-1.5 text-right">Leads</th>
                 <th className="px-3 py-1.5 text-left">Completed</th>
                 <th className="w-8 px-2 py-1.5" />
               </tr>
@@ -598,16 +580,11 @@ function JobsPanel({
                       )}
                     >
                       <td className="px-3 py-1.5">
-                        <div className="text-sm font-medium leading-tight">
-                          {row.summary.length > 20 ? `${row.summary.slice(0, 20)}…` : row.summary}
-                        </div>
-                        <div className="text-[11px] leading-tight text-muted-foreground">
-                          {row.kind}
+                        <ScrapeSummaryOf row={row} className="text-sm font-medium leading-tight" />
+                        <div className="flex items-center gap-2 text-[11px] leading-tight text-muted-foreground">
+                          <span>{row.kind}</span>
                           {row.categoryName ? (
-                            <span className="ml-1 inline-flex items-center gap-1">
-                              <Tag className="h-2.5 w-2.5" />
-                              {row.categoryName}
-                            </span>
+                            <CategoryChip name={row.categoryName} />
                           ) : null}
                         </div>
                       </td>
@@ -766,10 +743,7 @@ function CategoryPanel({
                       )}
                     >
                       <td className="px-3 py-1.5">
-                        <div className="flex items-center gap-2">
-                          <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="text-sm font-medium leading-tight">{row.name}</span>
-                        </div>
+                        <CategoryChip name={row.name} />
                       </td>
                       <td className="px-3 py-1.5 text-right tabular-nums">{row.leadCount}</td>
                       <td className="px-3 py-1.5 text-muted-foreground">

@@ -1,20 +1,34 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, ListTodo, X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { CategoryChip } from '@/components/common/CategoryChip';
 import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
+import { ScrapeSummary } from '@/components/common/ScrapeSummary';
 import { Spinner } from '@/components/common/Spinner';
 import { useJobs } from '@/context/JobsContext';
 import { useAccounts } from '@/context/AccountsContext';
 import { b2dm } from '@/lib/b2dm';
-import { cn } from '@/lib/cn';
-import type { JobKind, JobPublic } from '@/types/domain';
+import type { JobKind, JobPublic, LeadCategoryPublic, ScrapeKind } from '@/types/domain';
 
-const KIND_LABEL: Record<JobKind, string> = {
+const SCRAPE_KINDS: ReadonlyArray<ScrapeKind> = [
+  'scrape_by_username',
+  'scrape_by_post',
+  'scrape_by_hashtag',
+  'scrape_by_location',
+];
+
+function isScrapeKind(kind: JobKind): kind is ScrapeKind {
+  return (SCRAPE_KINDS as readonly JobKind[]).includes(kind);
+}
+
+function formatKind(kind: string): string {
+  const spaced = kind.replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+const NON_SCRAPE_TITLE: Record<Exclude<JobKind, ScrapeKind>, string> = {
   login: 'Login',
-  mass_dm: 'Cold DM',
-  scrape_by_username: 'Scrape · username',
-  scrape_by_post: 'Scrape · post',
-  scrape_by_hashtag: 'Scrape · hashtag',
-  scrape_by_location: 'Scrape · location',
+  mass_dm: 'Cold DM campaign',
   warmup: 'Warmup',
 };
 
@@ -34,12 +48,33 @@ export function Queue() {
   const { active, progressByJob } = useJobs();
   const { accounts } = useAccounts();
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
+  const [categories, setCategories] = useState<LeadCategoryPublic[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const list = await b2dm.categories.list();
+      if (!cancelled) setCategories(list);
+    }
+    void load();
+    const off = b2dm.categories.onChange(() => void load());
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
 
   const accountById = useMemo(() => {
     const map = new Map<string, string>();
     for (const a of accounts) map.set(a.id, a.username);
     return map;
   }, [accounts]);
+
+  const categoryNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of categories) map.set(c.id, c.name);
+    return map;
+  }, [categories]);
 
   // Running first, then queued (FIFO). For login jobs (no accountId) we keep
   // them at the end — they're transient anyway.
@@ -86,7 +121,7 @@ export function Queue() {
             <tr>
               <th className="px-3 py-1.5 text-left">Status</th>
               <th className="px-3 py-1.5 text-left">Job</th>
-              <th className="px-3 py-1.5 text-left">Account</th>
+              <th className="px-3 py-1.5 text-left">Category</th>
               <th className="px-3 py-1.5 text-left">Progress</th>
               <th className="px-3 py-1.5 text-right">Elapsed</th>
               <th className="px-3 py-1.5 text-right">Actions</th>
@@ -98,6 +133,7 @@ export function Queue() {
                 key={job.id}
                 job={job}
                 accountUsername={job.accountId ? accountById.get(job.accountId) ?? null : null}
+                categoryName={resolveCategoryName(job, categoryNameById)}
                 progress={progressByJob[job.id]}
                 cancelling={cancellingIds.has(job.id)}
                 onCancel={() => void cancel(job.id)}
@@ -112,12 +148,20 @@ export function Queue() {
 interface QueueRowProps {
   job: JobPublic;
   accountUsername: string | null;
+  categoryName: string | null;
   progress?: { done: number; total: number | null; lastItem?: string };
   cancelling: boolean;
   onCancel: () => void;
 }
 
-function QueueRow({ job, accountUsername, progress, cancelling, onCancel }: QueueRowProps) {
+function QueueRow({
+  job,
+  accountUsername,
+  categoryName,
+  progress,
+  cancelling,
+  onCancel,
+}: QueueRowProps) {
   const isQueued = job.status === 'queued';
   const done = progress?.done ?? job.progressDone;
   const total = progress?.total ?? job.progressTotal;
@@ -126,43 +170,66 @@ function QueueRow({ job, accountUsername, progress, cancelling, onCancel }: Queu
   return (
     <tr className="border-t border-border even:bg-muted/30 last:border-b">
       <td className="px-3 py-1.5">
-        <span
-          className={cn(
-            'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide',
-            isQueued
-              ? 'bg-muted text-muted-foreground'
-              : 'bg-primary/10 text-primary'
-          )}
-        >
-          {isQueued ? null : <Spinner className="h-2.5 w-2.5" />}
-          {isQueued ? 'Queued' : 'Running'}
-        </span>
+        {isQueued ? (
+          <Badge variant="muted">Queued</Badge>
+        ) : (
+          <Badge variant="warning">
+            <Spinner className="h-2.5 w-2.5" />
+            Running
+          </Badge>
+        )}
       </td>
       <td className="px-3 py-1.5">
-        <div className="font-medium">{KIND_LABEL[job.kind] ?? job.kind}</div>
-        {progress?.lastItem ? (
-          <div className="text-[11px] text-muted-foreground" title={progress.lastItem}>
-            @{progress.lastItem}
-          </div>
-        ) : null}
+        <JobTitle job={job} />
+        <div className="text-[11px] text-muted-foreground">
+          {formatKind(job.kind)}
+          {accountUsername ? (
+            <>
+              {' with '}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void b2dm.openExternalLink(
+                    `https://www.instagram.com/${encodeURIComponent(accountUsername)}/`
+                  );
+                }}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                @{accountUsername}
+              </button>
+            </>
+          ) : null}
+        </div>
       </td>
-      <td className="px-3 py-1.5 text-muted-foreground">
-        {accountUsername ? `@${accountUsername}` : '—'}
+      <td className="px-3 py-1.5">
+        {categoryName ? (
+          <CategoryChip name={categoryName} />
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
       </td>
       <td className="px-3 py-1.5">
         {isQueued ? (
           <span className="text-[11px] text-muted-foreground">Waiting for account</span>
         ) : (
-          <div className="flex items-center gap-3">
-            <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full bg-foreground/70 transition-[width]"
-                style={{ width: pct != null ? `${pct}%` : '30%' }}
-              />
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-foreground/70 transition-[width]"
+                  style={{ width: pct != null ? `${pct}%` : '30%' }}
+                />
+              </div>
+              <div className="tabular-nums text-xs text-muted-foreground">
+                {total != null ? `${done}/${total}` : `${done}`}
+              </div>
             </div>
-            <div className="tabular-nums text-xs text-muted-foreground">
-              {total != null ? `${done}/${total}` : `${done}`}
-            </div>
+            {progress?.lastItem ? (
+              <div className="truncate text-[11px] text-muted-foreground">
+                Extracting @{progress.lastItem}
+              </div>
+            ) : null}
           </div>
         )}
       </td>
@@ -176,13 +243,6 @@ function QueueRow({ job, accountUsername, progress, cancelling, onCancel }: Queu
             onClick={onCancel}
             disabled={cancelling}
             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-            title={
-              cancelling
-                ? 'Cancelling…'
-                : isQueued
-                ? 'Remove from queue'
-                : 'Cancel and keep partial results'
-            }
             aria-label="Cancel job"
           >
             {cancelling ? <Spinner /> : <X className="h-3.5 w-3.5" />}
@@ -191,4 +251,28 @@ function QueueRow({ job, accountUsername, progress, cancelling, onCancel }: Queu
       </td>
     </tr>
   );
+}
+
+function JobTitle({ job }: { job: JobPublic }) {
+  if (isScrapeKind(job.kind)) {
+    return (
+      <ScrapeSummary
+        kind={job.kind}
+        params={job.params}
+        targetName={null}
+        className="text-sm font-medium"
+      />
+    );
+  }
+  return <div className="text-sm font-medium">{NON_SCRAPE_TITLE[job.kind]}</div>;
+}
+
+function resolveCategoryName(
+  job: JobPublic,
+  categoryNameById: Map<string, string>
+): string | null {
+  if (!job.params || typeof job.params !== 'object') return null;
+  const raw = (job.params as Record<string, unknown>).categoryId;
+  if (typeof raw !== 'string' || raw === '') return null;
+  return categoryNameById.get(raw) ?? null;
 }

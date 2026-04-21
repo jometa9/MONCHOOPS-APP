@@ -20,10 +20,13 @@ import {
   getCommenters,
   getFollowers,
   getLikers,
-  iterPostsByHashtag,
-  iterPostsByLocation,
+  gotoHashtagGrid,
+  gotoLocationGrid,
+  iteratePostsOnGrid,
   iterUserPosts,
   iterUserReels,
+  readLocationName,
+  readPostAuthor,
 } from './ig';
 import type { AccountSecrets } from '../accounts';
 
@@ -63,13 +66,13 @@ interface CsvSink {
 // how many sub-sources (followers / likers / commenters) mention it. If a
 // cap is set, the sink stops writing once reached — belt-and-suspenders
 // alongside shouldStop plumbing.
-function openCsv(csvPath: string, max: number | undefined): CsvSink {
+function openCsv(csvPath: string, target: number): CsvSink {
   fs.mkdirSync(path.dirname(csvPath), { recursive: true });
   const fd = fs.openSync(csvPath, 'w');
   fs.writeSync(fd, 'username,source,source_ref\n');
   const seen = new Set<string>();
   const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
-  const atCap = () => (max != null ? seen.size >= max : false);
+  const atCap = () => seen.size >= target;
   return {
     write(username, sourceDetail) {
       if (atCap()) return false;
@@ -91,8 +94,10 @@ function openCsv(csvPath: string, max: number | undefined): CsvSink {
   };
 }
 
-function readMax(params: any): number | undefined {
-  return typeof params.max === 'number' && params.max > 0 ? params.max : undefined;
+const DEFAULT_TARGET_LEADS = 10_000;
+
+function readTarget(params: any): number {
+  return typeof params.target === 'number' && params.target > 0 ? params.target : DEFAULT_TARGET_LEADS;
 }
 
 async function runByUsername(
@@ -100,26 +105,26 @@ async function runByUsername(
   postPage: Page,
   params: any,
   sink: CsvSink
-): Promise<void> {
+): Promise<string> {
   const username = String(params.username ?? '').replace(/^@+/, '').trim();
   if (!username) throw new Error('username is required');
 
-  const max = readMax(params);
+  const target = readTarget(params);
   const shouldStop = () => sink.atCap() || isCancelled();
 
   sendLog('info', `[1/3] Collecting followers of @${username}`);
   await getFollowers(gridPage, username, {
-    max,
+    target,
     shouldStop,
     onBatch: (batch) => {
       for (const u of batch) {
-        if (sink.write(u, `followers | @${username}`)) sendProgress(sink.count(), max, u);
+        if (sink.write(u, `followers | @${username}`)) sendProgress(sink.count(), target, u);
         if (shouldStop()) return;
       }
     },
   });
-  sendLog('info', `[1/3] Followers done. Leads so far: ${sink.count()}${max ? `/${max}` : ''}`);
-  if (shouldStop()) return;
+  sendLog('info', `[1/3] Followers done. Leads so far: ${sink.count()}/${target}`);
+  if (shouldStop()) return `@${username}`;
 
   sendLog('info', `[2/3] Walking posts of @${username}`);
   let postIdx = 0;
@@ -127,11 +132,11 @@ async function runByUsername(
     if (shouldStop()) break;
     postIdx += 1;
     sendLog('info', `[2/3] → Post #${postIdx}: ${url}`);
-    await walkEngagement(postPage, url, 'post', sink, max);
-    sendLog('info', `[2/3] ← Post #${postIdx} done. Leads: ${sink.count()}${max ? `/${max}` : ''}`);
+    await walkEngagement(postPage, url, 'post', sink, target);
+    sendLog('info', `[2/3] ← Post #${postIdx} done. Leads: ${sink.count()}/${target}`);
     await waitFor(jitter(1500));
   }
-  if (shouldStop()) return;
+  if (shouldStop()) return `@${username}`;
 
   sendLog('info', `[3/3] Walking reels of @${username}`);
   let reelIdx = 0;
@@ -139,22 +144,23 @@ async function runByUsername(
     if (shouldStop()) break;
     reelIdx += 1;
     sendLog('info', `[3/3] → Reel #${reelIdx}: ${url}`);
-    await walkEngagement(postPage, url, 'reel', sink, max);
-    sendLog('info', `[3/3] ← Reel #${reelIdx} done. Leads: ${sink.count()}${max ? `/${max}` : ''}`);
+    await walkEngagement(postPage, url, 'reel', sink, target);
+    sendLog('info', `[3/3] ← Reel #${reelIdx} done. Leads: ${sink.count()}/${target}`);
     await waitFor(jitter(1500));
   }
 
   sendLog('info', `[done] Total leads: ${sink.count()}`);
+  return `@${username}`;
 }
 
 // Extract commenters + likers from a single post/reel, streaming each batch
-// into the sink and short-circuiting when the global `max` cap is reached.
+// into the sink and short-circuiting when the global target cap is reached.
 async function walkEngagement(
   page: Page,
   url: string,
   kindPrefix: 'post' | 'reel',
   sink: CsvSink,
-  max: number | undefined
+  target: number
 ): Promise<void> {
   const shouldStop = () => sink.atCap() || isCancelled();
   const startCount = sink.count();
@@ -165,7 +171,7 @@ async function walkEngagement(
       shouldStop,
       onBatch: (batch) => {
         for (const u of batch) {
-          if (sink.write(u, `${kindPrefix}_comment | ${url}`)) sendProgress(sink.count(), max, u);
+          if (sink.write(u, `${kindPrefix}_comment | ${url}`)) sendProgress(sink.count(), target, u);
           if (shouldStop()) return;
         }
       },
@@ -183,7 +189,7 @@ async function walkEngagement(
       shouldStop,
       onBatch: (batch) => {
         for (const u of batch) {
-          if (sink.write(u, `${kindPrefix}_like | ${url}`)) sendProgress(sink.count(), max, u);
+          if (sink.write(u, `${kindPrefix}_like | ${url}`)) sendProgress(sink.count(), target, u);
           if (shouldStop()) return;
         }
       },
@@ -194,40 +200,49 @@ async function walkEngagement(
   }
 }
 
-async function runByPost(page: Page, params: any, sink: CsvSink): Promise<void> {
+async function runByPost(page: Page, params: any, sink: CsvSink): Promise<string | null> {
   const postUrl = String(params.postUrl ?? '').trim();
   if (!postUrl) throw new Error('postUrl is required');
 
+  const target = readTarget(params);
   const isReel = /\/reel\//.test(postUrl);
   const kindPrefix = isReel ? 'reel' : 'post';
+  const shouldStop = () => sink.atCap() || isCancelled();
 
   sendLog('info', `Collecting commenters of ${postUrl}`);
   await getCommenters(page, postUrl, {
+    shouldStop,
     onBatch: (batch) => {
       for (const u of batch) {
         if (sink.write(u, `${kindPrefix}_comment | ${postUrl}`)) {
-          sendProgress(sink.count(), undefined, u);
+          sendProgress(sink.count(), target, u);
         }
-        if (isCancelled()) return;
+        if (shouldStop()) return;
       }
     },
   });
-  if (isCancelled()) return;
+  // getCommenters already navigated to the post and called readPostAuthor
+  // internally — we read it again here on the same page to surface it as
+  // the scrape target. Cheap: same DOM, no network.
+  const author = await readPostAuthor(page);
+  if (shouldStop()) return author ? `@${author}` : null;
 
   sendLog('info', `Collecting likers of ${postUrl}`);
   const likers = await getLikers(page, postUrl, {
+    shouldStop,
     onBatch: (batch) => {
       for (const u of batch) {
         if (sink.write(u, `${kindPrefix}_like | ${postUrl}`)) {
-          sendProgress(sink.count(), undefined, u);
+          sendProgress(sink.count(), target, u);
         }
-        if (isCancelled()) return;
+        if (shouldStop()) return;
       }
     },
   });
   if (likers.partial) {
     sendLog('warn', 'Likers list was partial — IG hid the full list for this post');
   }
+  return author ? `@${author}` : null;
 }
 
 async function runByHashtag(
@@ -235,19 +250,21 @@ async function runByHashtag(
   postPage: Page,
   params: any,
   sink: CsvSink
-): Promise<void> {
+): Promise<string> {
   const hashtag = String(params.hashtag ?? '').replace(/^#+/, '').trim();
   if (!hashtag) throw new Error('hashtag is required');
 
-  const max = readMax(params);
-  sendLog('info', `Walking #${hashtag}${max ? ` (cap: ${max} leads)` : ''}`);
+  const target = readTarget(params);
+  sendLog('info', `Walking #${hashtag} (target: ${target} leads)`);
+  await gotoHashtagGrid(gridPage, hashtag);
   await walkGrid(
-    iterPostsByHashtag(gridPage, hashtag),
+    iteratePostsOnGrid(gridPage),
     postPage,
     sink,
     `hashtag:#${hashtag}`,
-    max
+    target
   );
+  return `#${hashtag}`;
 }
 
 async function runByLocation(
@@ -255,19 +272,23 @@ async function runByLocation(
   postPage: Page,
   params: any,
   sink: CsvSink
-): Promise<void> {
+): Promise<string | null> {
   const locationInput = String(params.locationUrl ?? params.locationSlug ?? '').trim();
   if (!locationInput) throw new Error('location URL or slug is required');
 
-  const max = readMax(params);
-  sendLog('info', `Walking location ${locationInput} (recent)${max ? ` (cap: ${max} leads)` : ''}`);
+  const target = readTarget(params);
+  sendLog('info', `Walking location ${locationInput} (recent) (target: ${target} leads)`);
+  await gotoLocationGrid(gridPage, locationInput, { recent: true });
+  const locationName = await readLocationName(gridPage);
+  if (locationName) sendLog('info', `Location resolved as "${locationName}"`);
   await walkGrid(
-    iterPostsByLocation(gridPage, locationInput, { recent: true }),
+    iteratePostsOnGrid(gridPage),
     postPage,
     sink,
     `location:${locationInput}`,
-    max
+    target
   );
+  return locationName;
 }
 
 async function walkGrid(
@@ -275,7 +296,7 @@ async function walkGrid(
   postPage: Page,
   sink: CsvSink,
   refTag: string,
-  max: number | undefined
+  target: number
 ): Promise<void> {
   const shouldStop = () => sink.atCap() || isCancelled();
   let idx = 0;
@@ -292,7 +313,7 @@ async function walkGrid(
         onBatch: (batch) => {
           for (const u of batch) {
             if (sink.write(u, `${prefix}_comment | ${refTag} | ${url}`)) {
-              sendProgress(sink.count(), max, u);
+              sendProgress(sink.count(), target, u);
             }
             if (shouldStop()) return;
           }
@@ -304,7 +325,7 @@ async function walkGrid(
         onBatch: (batch) => {
           for (const u of batch) {
             if (sink.write(u, `${prefix}_like | ${refTag} | ${url}`)) {
-              sendProgress(sink.count(), max, u);
+              sendProgress(sink.count(), target, u);
             }
             if (shouldStop()) return;
           }
@@ -313,13 +334,13 @@ async function walkGrid(
     } catch (err) {
       sendLog('warn', `${url}: ${err instanceof Error ? err.message : String(err)}`);
     }
-    sendLog('info', `← #${idx} done. Leads: ${sink.count()}${max ? `/${max}` : ''}`);
+    sendLog('info', `← #${idx} done. Leads: ${sink.count()}/${target}`);
     await waitFor(jitter(1800));
   }
 }
 
 onInit<ScrapeInit>(async (init) => {
-  const sink = openCsv(init.csvPath, readMax(init.params));
+  const sink = openCsv(init.csvPath, readTarget(init.params));
   const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets, windowBounds: init.windowBounds, maximizeWindow: init.maximizeWindow });
   const gridPage = await context.newPage();
   const postPage = await context.newPage();
@@ -328,25 +349,26 @@ onInit<ScrapeInit>(async (init) => {
   try {
     await ensureLoggedIn(gridPage, { captchaTimeoutMs: 5 * 60_000 });
 
+    let targetName: string | null = null;
     switch (init.kind) {
       case 'scrape_by_username':
-        await runByUsername(gridPage, postPage, init.params, sink);
+        targetName = await runByUsername(gridPage, postPage, init.params, sink);
         break;
       case 'scrape_by_post':
-        await runByPost(postPage, init.params, sink);
+        targetName = await runByPost(postPage, init.params, sink);
         break;
       case 'scrape_by_hashtag':
-        await runByHashtag(gridPage, postPage, init.params, sink);
+        targetName = await runByHashtag(gridPage, postPage, init.params, sink);
         break;
       case 'scrape_by_location':
-        await runByLocation(gridPage, postPage, init.params, sink);
+        targetName = await runByLocation(gridPage, postPage, init.params, sink);
         break;
       default:
         throw new Error(`Unknown scrape kind: ${init.kind}`);
     }
 
     sink.close();
-    sendResult({ count: sink.count(), csvPath: init.csvPath });
+    sendResult({ count: sink.count(), csvPath: init.csvPath, targetName });
     await browser.close();
     process.exit(0);
   } catch (err) {

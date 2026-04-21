@@ -58,6 +58,7 @@ const accountsApi = {
     url: string | null;
     username: string | null;
     password: string | null;
+    enabled?: boolean;
   }) => invoke<import('./backend/accounts').AccountPublic>('accounts:updateProxy', payload),
   onChange: (cb: () => void) => listen<void>('accounts:changed', () => cb()),
 };

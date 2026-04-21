@@ -17,6 +17,7 @@ export interface AccountPublic {
   userAgent: string;
   proxyUrl: string | null;
   proxyUsername: string | null;
+  proxyEnabled: boolean;
   hasProxyPassword: boolean;
   hasStoredPassword: boolean;
   status: AccountStatus;
@@ -47,6 +48,7 @@ interface AccountRow {
   proxy_url: string | null;
   proxy_username: string | null;
   proxy_password_encrypted: Buffer | null;
+  proxy_enabled: number;
   password_encrypted: Buffer | null;
   status: AccountStatus;
   last_error: string | null;
@@ -124,6 +126,7 @@ function rowToPublic(row: AccountRow, metrics?: WarmupMetrics): AccountPublic {
     userAgent: row.user_agent,
     proxyUrl: row.proxy_url,
     proxyUsername: row.proxy_username,
+    proxyEnabled: row.proxy_enabled !== 0,
     hasProxyPassword: !!row.proxy_password_encrypted,
     hasStoredPassword: !!row.password_encrypted,
     status: row.status,
@@ -172,7 +175,7 @@ export function getAccountSecrets(id: string): AccountSecrets | null {
   if (!row) return null;
   const cookies = decryptJson<InstagramCookie[]>(row.cookies_encrypted);
   const out: AccountSecrets = { cookies, userAgent: row.user_agent };
-  if (row.proxy_url) {
+  if (row.proxy_url && row.proxy_enabled !== 0) {
     const password = row.proxy_password_encrypted
       ? decryptString(row.proxy_password_encrypted)
       : undefined;
@@ -325,6 +328,7 @@ export interface ProxyConfig {
   url: string | null;
   username: string | null;
   password: string | null;
+  enabled?: boolean;
 }
 
 export function updateProxy(id: string, cfg: ProxyConfig): AccountPublic {
@@ -339,8 +343,26 @@ export function updateProxy(id: string, cfg: ProxyConfig): AccountPublic {
     throw new Error('Proxy URL must look like http(s)://host:port or socks5://host:port');
   }
 
+  const keepPassword = cfg.password === null;
   const passwordBlob =
-    cfg.password && cfg.password.length > 0 ? encryptString(cfg.password) : null;
+    cfg.password && cfg.password.length > 0
+      ? encryptString(cfg.password)
+      : keepPassword
+      ? row.proxy_password_encrypted
+      : null;
+
+  const nextUrl = trimmed || null;
+  // Clearing the URL implicitly clears credentials too, since there's no
+  // host to attach them to.
+  const nextUsername = nextUrl
+    ? cfg.username && cfg.username.length > 0
+      ? cfg.username
+      : null
+    : null;
+  const nextPassword = nextUrl ? passwordBlob : null;
+  // When no URL is saved there's nothing to enable; force back to the
+  // default so re-adding a proxy later starts in the "on" state.
+  const nextEnabled = nextUrl ? (cfg.enabled === false ? 0 : 1) : 1;
 
   getDb()
     .prepare(
@@ -348,16 +370,11 @@ export function updateProxy(id: string, cfg: ProxyConfig): AccountPublic {
          proxy_url = ?,
          proxy_username = ?,
          proxy_password_encrypted = ?,
+         proxy_enabled = ?,
          updated_at = ?
        WHERE id = ?`
     )
-    .run(
-      trimmed || null,
-      cfg.username && cfg.username.length > 0 ? cfg.username : null,
-      passwordBlob,
-      Date.now(),
-      id
-    );
+    .run(nextUrl, nextUsername, nextPassword, nextEnabled, Date.now(), id);
   return getAccount(id)!;
 }
 

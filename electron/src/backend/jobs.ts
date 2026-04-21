@@ -86,11 +86,17 @@ export interface ScrapeResultPublic {
   kind: JobKind;
   summary: string;
   usernameCount: number;
-  csvPath: string;
+  csvPath: string | null;
   durationMs: number;
   completedAt: number;
   categoryId: string | null;
   categoryName: string | null;
+  status: 'completed' | 'cancelled' | 'failed';
+  error: string | null;
+  accountId: string | null;
+  accountUsername: string | null;
+  params: unknown;
+  targetName: string | null;
 }
 
 export interface MassDmResultPublic {
@@ -123,11 +129,17 @@ interface ScrapeResultRow {
   kind: JobKind;
   summary: string;
   username_count: number;
-  csv_path: string;
+  csv_path: string | null;
   duration_ms: number;
   completed_at: number;
+  status: 'completed' | 'cancelled' | 'failed';
+  error: string | null;
   category_id: string | null;
   category_name: string | null;
+  account_id: string | null;
+  account_username: string | null;
+  params_json: string | null;
+  target_name: string | null;
 }
 
 type Listener = (event: JobEvent) => void;
@@ -180,6 +192,10 @@ function rowToPublic(row: JobRow): JobPublic {
 }
 
 function scrapeRowToPublic(row: ScrapeResultRow): ScrapeResultPublic {
+  let params: unknown = null;
+  if (row.params_json) {
+    try { params = JSON.parse(row.params_json); } catch {}
+  }
   return {
     jobId: row.job_id,
     kind: row.kind,
@@ -188,8 +204,14 @@ function scrapeRowToPublic(row: ScrapeResultRow): ScrapeResultPublic {
     csvPath: row.csv_path,
     durationMs: row.duration_ms,
     completedAt: row.completed_at,
+    status: row.status,
+    error: row.error,
     categoryId: row.category_id,
     categoryName: row.category_name,
+    accountId: row.account_id,
+    accountUsername: row.account_username,
+    params,
+    targetName: row.target_name,
   };
 }
 
@@ -197,9 +219,13 @@ const SCRAPE_RESULT_SELECT = `
   SELECT
     sr.*,
     lc.id   AS category_id,
-    lc.name AS category_name
+    lc.name AS category_name,
+    j.account_id AS account_id,
+    j.params_json AS params_json,
+    a.username AS account_username
   FROM scrape_results sr
   LEFT JOIN jobs j ON j.id = sr.job_id
+  LEFT JOIN accounts a ON a.id = j.account_id
   LEFT JOIN lead_categories lc
     ON lc.id = json_extract(j.params_json, '$.categoryId')
 `;
@@ -293,7 +319,7 @@ export interface ScrapeUsernameRow {
 
 export function readScrapeUsernames(jobId: string): ScrapeUsernameRow[] {
   const result = getScrapeResult(jobId);
-  if (!result) return [];
+  if (!result || !result.csvPath) return [];
   if (!fs.existsSync(result.csvPath)) return [];
   const raw = fs.readFileSync(result.csvPath, 'utf8');
   const lines = raw.split(/\r?\n/);
@@ -815,6 +841,12 @@ export function startScrape(args: StartScrapeArgs): string {
     ...args.params,
     categoryId: category?.id ?? null,
     newCategoryName: undefined,
+    ...(typeof args.params.username === 'string'
+      ? { username: args.params.username.trim().replace(/^@+/, '') }
+      : {}),
+    ...(typeof args.params.hashtag === 'string'
+      ? { hashtag: args.params.hashtag.trim().replace(/^#+/, '') }
+      : {}),
   };
 
   if (hasPendingJobForAccount(args.accountId)) {
@@ -1127,11 +1159,45 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
     finaliseJob(jobId, finalStatus, finalStatus === 'failed' ? (jobRow?.error ?? 'Worker exited unexpectedly') : null);
   }
 
-  // Persist scrape result row if present. We treat 'cancelled' the same as
-  // 'completed' here — the worker has already flushed whatever partial state
-  // it had (CSV rows, result payload), so the user keeps what was scraped up
-  // to the cancel point.
+  // Persist result rows. For scrapes we record every terminal status
+  // (completed / cancelled / failed) so the history screen can surface the
+  // full picture — cancelled keeps whatever partial CSV the worker flushed,
+  // failed may have no CSV at all but we still want the row + retry action.
+  // For login / mass_dm / warmup we keep the previous behaviour (persist on
+  // completed or cancelled only).
+  const isScrape = meta && meta.kind !== 'login' && meta.kind !== 'mass_dm' && meta.kind !== 'warmup';
   const shouldPersistResult = finalStatus === 'completed' || finalStatus === 'cancelled';
+  if (meta && isScrape && finalStatus === 'failed') {
+    try {
+      const params = (() => {
+        try { return JSON.parse(jobRow?.params_json ?? '{}'); } catch { return {}; }
+      })();
+      const r = (result && typeof result === 'object' ? result : {}) as any;
+      const count = Number(r?.count) || 0;
+      const summary = buildScrapeSummary(meta.kind, params, count);
+      const targetName = typeof r?.targetName === 'string' && r.targetName ? r.targetName : null;
+      getDb()
+        .prepare(
+          `INSERT INTO scrape_results(
+             job_id, kind, summary, username_count, csv_path, duration_ms, completed_at, status, error, target_name
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          jobId,
+          meta.kind,
+          summary,
+          count,
+          typeof r?.csvPath === 'string' ? r.csvPath : null,
+          Date.now() - meta.startedAt,
+          Date.now(),
+          'failed',
+          jobRow?.error ?? 'Scrape failed',
+          targetName
+        );
+    } catch (err) {
+      console.error('[jobs] failed to persist failed-scrape result:', err);
+    }
+  }
   if (meta && shouldPersistResult && result && typeof result === 'object') {
     const r = result as any;
     if (meta.kind === 'login' && r.type !== 'bulk-summary' && r.username) {
@@ -1217,10 +1283,12 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
           try { return JSON.parse(jobRow?.params_json ?? '{}'); } catch { return {}; }
         })();
         const summary = buildScrapeSummary(meta.kind, params, r.count);
+        const targetName = typeof r.targetName === 'string' && r.targetName ? r.targetName : null;
         getDb()
           .prepare(
-            `INSERT INTO scrape_results(job_id, kind, summary, username_count, csv_path, duration_ms, completed_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`
+            `INSERT INTO scrape_results(
+               job_id, kind, summary, username_count, csv_path, duration_ms, completed_at, status, error, target_name
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .run(
             jobId,
@@ -1229,7 +1297,10 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
             Number(r.count) || 0,
             r.csvPath,
             Date.now() - meta.startedAt,
-            Date.now()
+            Date.now(),
+            finalStatus,
+            null,
+            targetName
           );
 
         // If the job was tagged with a category, ingest the CSV into that
@@ -1267,10 +1338,15 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
   if (meta?.accountId) {
     const startedNext = dispatchNextForAccount(meta.accountId);
     if (!startedNext) {
+      // A failed scrape means the *target* or the scrape worker broke — the
+      // account's session is still good. Only login failures (and other
+      // account-level jobs) should flip the account into 'error'. Scrape
+      // failures keep the account idle so it can run more jobs immediately.
+      const failedErrorsAccount = finalStatus === 'failed' && !isScrape;
       setAccountStatus(
         meta.accountId,
-        finalStatus === 'failed' ? 'error' : 'idle',
-        finalStatus === 'failed' ? (jobRow?.error ?? null) : null
+        failedErrorsAccount ? 'error' : 'idle',
+        failedErrorsAccount ? (jobRow?.error ?? null) : null
       );
       emit({
         type: 'jobs:accountDrained',
@@ -1284,7 +1360,7 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
 }
 
 function buildScrapeSummary(kind: JobKind, params: any, _count: number): string {
-  const max = typeof params?.max === 'number' && params.max > 0 ? params.max : null;
+  const target = typeof params?.target === 'number' && params.target > 0 ? params.target : null;
   const fmtRange = (): string => {
     const from = typeof params?.from === 'number' ? new Date(params.from).toISOString().slice(0, 10) : null;
     const to = typeof params?.to === 'number' ? new Date(params.to).toISOString().slice(0, 10) : null;
@@ -1296,7 +1372,7 @@ function buildScrapeSummary(kind: JobKind, params: any, _count: number): string 
   switch (kind) {
     case 'scrape_by_username': {
       const u = params?.username ? `@${params.username}` : '—';
-      return max ? `Leads from ${u} (max ${max})` : `Leads from ${u}`;
+      return target ? `Leads from ${u} (target ${target})` : `Leads from ${u}`;
     }
     case 'scrape_by_post':
       return `Engagers of ${params?.postUrl ?? 'post'}`;

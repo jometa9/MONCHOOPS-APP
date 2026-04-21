@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,12 +8,12 @@ import {
   Instagram,
   MapPin,
   Play,
-  Tag,
   Users,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/common/Spinner';
 import { AccountStep } from '@/components/common/AccountStep';
+import { CategoryChip } from '@/components/common/CategoryChip';
 import { Stepper } from '@/components/common/Stepper';
 import { SummaryCard } from '@/components/common/SummaryCard';
 import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
@@ -23,6 +22,7 @@ import {
   type CategorySelection,
 } from '@/components/common/CategoryPicker';
 import { useAccounts } from '@/context/AccountsContext';
+import { JobStartedPanel } from '@/components/common/JobStartedPanel';
 import { cn } from '@/lib/cn';
 import { b2dm } from '@/lib/b2dm';
 import type { LeadCategoryPublic, ScrapeKind } from '@/types/domain';
@@ -67,7 +67,7 @@ export function Scrape() {
   const [mode, setMode] = useState<Mode>('scrape_by_username');
 
   const [username, setUsername] = useState('');
-  const [maxInput, setMaxInput] = useState('');
+  const [targetInput, setTargetInput] = useState('');
   const [postUrl, setPostUrl] = useState('');
   const [hashtag, setHashtag] = useState('');
   const [locationUrl, setLocationUrl] = useState('');
@@ -84,8 +84,8 @@ export function Scrape() {
   );
 
   const config = useMemo(
-    () => ({ username, maxInput, postUrl, hashtag, locationUrl }),
-    [username, maxInput, postUrl, hashtag, locationUrl]
+    () => ({ username, targetInput, postUrl, hashtag, locationUrl }),
+    [username, targetInput, postUrl, hashtag, locationUrl]
   );
 
   const targetFilled =
@@ -120,17 +120,17 @@ export function Scrape() {
       const categoryPayload =
         category.mode === 'existing' ? { categoryId: category.categoryId } : {};
 
-      const max = parseMaxInput(maxInput);
-      const maxPayload = max != null ? { max } : {};
+      const target = parseTargetInput(targetInput);
+      const targetPayload = target != null ? { target } : {};
       let params: Record<string, unknown> = { ...categoryPayload };
       if (mode === 'scrape_by_username') {
-        params = { ...params, username, ...maxPayload };
+        params = { ...params, username, ...targetPayload };
       } else if (mode === 'scrape_by_post') {
         params = { ...params, postUrl };
       } else if (mode === 'scrape_by_hashtag') {
-        params = { ...params, hashtag, ...maxPayload };
+        params = { ...params, hashtag, ...targetPayload };
       } else if (mode === 'scrape_by_location') {
-        params = { ...params, locationUrl, ...maxPayload };
+        params = { ...params, locationUrl, ...targetPayload };
       }
       const jobId = await b2dm.jobs.startScrape({ accountId, kind: mode, params });
       setWasEnqueued(enqueued);
@@ -147,7 +147,7 @@ export function Scrape() {
     setAccountId(null);
     setMode('scrape_by_username');
     setUsername('');
-    setMaxInput('');
+    setTargetInput('');
     setPostUrl('');
     setHashtag('');
     setLocationUrl('');
@@ -174,44 +174,12 @@ export function Scrape() {
 
   if (startedJobId) {
     return (
-      <div className="mx-auto max-w-2xl p-4">
-        <div className="border border-border bg-background">
-          <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {wasEnqueued ? 'Scrape queued' : 'Scrape started'}
-          </div>
-          <div className="p-4">
-            <div className="flex items-center gap-2 text-sm">
-              <Spinner className="h-4 w-4" />
-              <span>
-                {wasEnqueued
-                  ? 'The account is busy — this scrape will start once earlier jobs finish. Track it in the Queue.'
-                  : 'Watch the status bar for progress.'}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-stretch border-t border-border">
-            <Link
-              to="/data"
-              className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent"
-            >
-              View data
-            </Link>
-            <Link
-              to="/categories"
-              className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent"
-            >
-              View categories
-            </Link>
-            <button
-              type="button"
-              onClick={resetAll}
-              className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              Queue another
-            </button>
-          </div>
-        </div>
-      </div>
+      <JobStartedPanel
+        jobId={startedJobId}
+        kind="scrape"
+        wasEnqueued={wasEnqueued}
+        onReset={resetAll}
+      />
     );
   }
 
@@ -239,7 +207,7 @@ export function Scrape() {
             onModeChange={setMode}
             config={config}
             setUsername={setUsername}
-            setMaxInput={setMaxInput}
+            setTargetInput={setTargetInput}
             setPostUrl={setPostUrl}
             setHashtag={setHashtag}
             setLocationUrl={setLocationUrl}
@@ -310,7 +278,7 @@ export function Scrape() {
 
 interface ConfigState {
   username: string;
-  maxInput: string;
+  targetInput: string;
   postUrl: string;
   hashtag: string;
   locationUrl: string;
@@ -321,7 +289,7 @@ function ScrapeConfigStep({
   onModeChange,
   config,
   setUsername,
-  setMaxInput,
+  setTargetInput,
   setPostUrl,
   setHashtag,
   setLocationUrl,
@@ -333,7 +301,7 @@ function ScrapeConfigStep({
   onModeChange: (m: Mode) => void;
   config: ConfigState;
   setUsername: (v: string) => void;
-  setMaxInput: (v: string) => void;
+  setTargetInput: (v: string) => void;
   setPostUrl: (v: string) => void;
   setHashtag: (v: string) => void;
   setLocationUrl: (v: string) => void;
@@ -388,13 +356,13 @@ function ScrapeConfigStep({
                 placeholder="Target username (e.g. @nike)"
               />
               <Input
-                id="sc-max"
+                id="sc-target"
                 type="number"
                 min={1}
                 className="rounded-none"
-                value={config.maxInput}
-                onChange={(e) => setMaxInput(e.target.value)}
-                placeholder="Max leads (blank = all)"
+                value={config.targetInput}
+                onChange={(e) => setTargetInput(e.target.value)}
+                placeholder="Target leads (blank = 10 000)"
               />
             </>
           ) : null}
@@ -419,13 +387,13 @@ function ScrapeConfigStep({
                 placeholder="Hashtag (no #, e.g. travel)"
               />
               <Input
-                id="sc-tag-max"
+                id="sc-tag-target"
                 type="number"
                 min={1}
                 className="rounded-none"
-                value={config.maxInput}
-                onChange={(e) => setMaxInput(e.target.value)}
-                placeholder="Max leads (blank = all)"
+                value={config.targetInput}
+                onChange={(e) => setTargetInput(e.target.value)}
+                placeholder="Target leads (blank = 10 000)"
               />
             </>
           ) : null}
@@ -440,13 +408,13 @@ function ScrapeConfigStep({
                 placeholder="Location URL or ID"
               />
               <Input
-                id="sc-loc-max"
+                id="sc-loc-target"
                 type="number"
                 min={1}
                 className="rounded-none"
-                value={config.maxInput}
-                onChange={(e) => setMaxInput(e.target.value)}
-                placeholder="Max leads (blank = all)"
+                value={config.targetInput}
+                onChange={(e) => setTargetInput(e.target.value)}
+                placeholder="Target leads (blank = 10 000)"
               />
             </>
           ) : null}
@@ -549,7 +517,7 @@ function ReviewStep({
 
 function TargetSummary({ mode, config }: { mode: Mode; config: ConfigState }) {
   if (mode === 'scrape_by_username') {
-    const max = parseMaxInput(config.maxInput);
+    const target = parseTargetInput(config.targetInput);
     return (
       <div className="text-sm">
         <div>
@@ -557,7 +525,7 @@ function TargetSummary({ mode, config }: { mode: Mode; config: ConfigState }) {
           <span className="font-medium">@{config.username.replace(/^@/, '')}</span>
         </div>
         <div className="text-[11px] text-muted-foreground">
-          Max leads: {max != null ? max : 'all available'}
+          Target leads: {target != null ? target : '10 000 (default)'}
         </div>
       </div>
     );
@@ -571,7 +539,7 @@ function TargetSummary({ mode, config }: { mode: Mode; config: ConfigState }) {
     );
   }
   if (mode === 'scrape_by_hashtag') {
-    const max = parseMaxInput(config.maxInput);
+    const target = parseTargetInput(config.targetInput);
     return (
       <div className="text-sm">
         <div>
@@ -579,12 +547,12 @@ function TargetSummary({ mode, config }: { mode: Mode; config: ConfigState }) {
           <span className="font-medium">#{config.hashtag.replace(/^#/, '')}</span>
         </div>
         <div className="text-[11px] text-muted-foreground">
-          Max leads: {max != null ? max : 'all available'}
+          Target leads: {target != null ? target : '10 000 (default)'}
         </div>
       </div>
     );
   }
-  const max = parseMaxInput(config.maxInput);
+  const target = parseTargetInput(config.targetInput);
   return (
     <div className="text-sm">
       <div>
@@ -592,7 +560,7 @@ function TargetSummary({ mode, config }: { mode: Mode; config: ConfigState }) {
         <span className="break-all font-medium">{config.locationUrl}</span>
       </div>
       <div className="text-[11px] text-muted-foreground">
-        Max leads: {max != null ? max : 'all available'}
+        Target leads: {target != null ? target : '10 000 (default)'}
       </div>
     </div>
   );
@@ -621,15 +589,10 @@ function CategorySummary({ value }: { value: CategorySelection }) {
     return <span className="text-sm text-muted-foreground">No category</span>;
   }
   const cat = categories?.find((c) => c.id === value.categoryId);
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-      <span className="font-medium">{cat?.name ?? '…'}</span>
-    </div>
-  );
+  return <CategoryChip name={cat?.name ?? '…'} />;
 }
 
-function parseMaxInput(raw: string): number | null {
+function parseTargetInput(raw: string): number | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
   const n = Number(trimmed);

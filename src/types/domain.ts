@@ -11,6 +11,7 @@ export interface AccountPublic {
   userAgent: string;
   proxyUrl: string | null;
   proxyUsername: string | null;
+  proxyEnabled: boolean;
   hasProxyPassword: boolean;
   hasStoredPassword: boolean;
   status: AccountStatus;
@@ -98,16 +99,24 @@ export interface JobPublic {
   error: string | null;
 }
 
+export type ScrapeResultStatus = 'completed' | 'cancelled' | 'failed';
+
 export interface ScrapeResultPublic {
   jobId: string;
   kind: JobKind;
   summary: string;
   usernameCount: number;
-  csvPath: string;
+  csvPath: string | null;
   durationMs: number;
   completedAt: number;
   categoryId: string | null;
   categoryName: string | null;
+  status: ScrapeResultStatus;
+  error: string | null;
+  accountId: string | null;
+  accountUsername: string | null;
+  params: unknown;
+  targetName: string | null;
 }
 
 export interface ScrapeUsernameRow {

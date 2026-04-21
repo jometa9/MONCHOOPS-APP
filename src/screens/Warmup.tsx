@@ -121,7 +121,7 @@ function SelectionBox({
 
 function WarmedBadge() {
   return (
-    <Badge variant="default" title="Account is fully warmed up">
+    <Badge variant="default">
       <Flame className="h-2.5 w-2.5" />
       Warmed
     </Badge>
@@ -420,7 +420,6 @@ function RunTab({ accounts }: { accounts: AccountPublic[] }) {
                 setActiveAction(a.id);
               }}
               disabled={!canRunBulk}
-              title={a.description}
               className={cn(
                 'inline-flex h-9 flex-1 items-center justify-center gap-1.5 border-r border-border px-3 text-xs font-medium transition-colors',
                 canRunBulk
@@ -440,7 +439,6 @@ function RunTab({ accounts }: { accounts: AccountPublic[] }) {
             type="button"
             onClick={openBulkSchedule}
             disabled={!canRunBulk}
-            title="Schedule a recurring warmup"
             className={cn(
               'inline-flex h-9 flex-1 items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
               canRunBulk
@@ -626,11 +624,6 @@ function WarmupAccountRow({
           )}
           <div className="min-w-0">
             <div className="text-sm font-medium leading-tight">@{account.username}</div>
-            {account.displayName ? (
-              <div className="text-[11px] leading-tight text-muted-foreground">
-                {account.displayName}
-              </div>
-            ) : null}
           </div>
         </div>
       </td>
@@ -652,7 +645,6 @@ function WarmupAccountRow({
             type="button"
             onClick={onQuickRun}
             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-            title={`Queue a warmup for @${account.username}`}
             aria-label={`Queue a warmup for @${account.username}`}
           >
             <Play className="h-3.5 w-3.5" />
@@ -661,7 +653,6 @@ function WarmupAccountRow({
             type="button"
             onClick={onQuickSchedule}
             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-            title={`Schedule warmups for @${account.username}`}
             aria-label={`Schedule warmups for @${account.username}`}
           >
             <CalendarClock className="h-3.5 w-3.5" />
@@ -773,7 +764,6 @@ function SchedulesTab({ accounts }: { accounts: AccountPublic[] }) {
                     type="button"
                     onClick={() => void remove(row.id)}
                     className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-destructive"
-                    title="Delete schedule"
                     aria-label="Delete schedule"
                   >
                     <Trash2 className="h-3.5 w-3.5" />

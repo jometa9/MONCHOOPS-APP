@@ -26,7 +26,7 @@ export interface LikersResult {
 }
 
 export interface ExtractOpts {
-  max?: number;
+  target?: number;
   onBatch?: (added: string[]) => void;
   /** When it returns true, stop scrolling the comments/likers list right
    *  away — the caller has already hit its global lead cap and further
@@ -60,7 +60,7 @@ export async function getCommenters(page: Page, postUrl: string, opts: ExtractOp
   const tracker = createNetworkTracker(page);
   try {
     return await collectByScrolling<string>({
-      max: opts.max,
+      target: opts.target,
       shouldStop: opts.shouldStop,
       // With the network tracker deciding when to advance, stale-idle
       // counting is a tiebreaker more than a timer. Keep it tight.
@@ -157,7 +157,7 @@ export async function getLikers(page: Page, postUrl: string, opts: ExtractOpts =
     const tracker = createNetworkTracker(page);
     try {
       const users = await collectByScrolling<string>({
-        max: opts.max,
+        target: opts.target,
         shouldStop: opts.shouldStop,
         maxIdleRounds: 3,
         pauseMs: 100,
@@ -194,7 +194,7 @@ export async function getLikers(page: Page, postUrl: string, opts: ExtractOpts =
     return Array.from(set);
   }, Array.from(RESERVED_PATHS));
 
-  const capped = opts.max ? fallback.slice(0, opts.max) : fallback;
+  const capped = opts.target ? fallback.slice(0, opts.target) : fallback;
   if (capped.length > 0) opts.onBatch?.(capped);
   return { users: capped, partial: true };
 }
@@ -372,7 +372,7 @@ async function extractUsernamesFromDialog(page: Page): Promise<string[]> {
   }, Array.from(RESERVED_PATHS));
 }
 
-async function readPostAuthor(page: Page): Promise<string | null> {
+export async function readPostAuthor(page: Page): Promise<string | null> {
   try {
     return (await page.evaluate(() => {
       // IG puts the author link near the top of the post header.

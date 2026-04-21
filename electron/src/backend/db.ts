@@ -239,7 +239,47 @@ function migrate(db: Database): void {
     `);
   }
 
-  db.pragma('user_version = 10');
+  if (current < 11) {
+    // Allow a user to temporarily turn off a saved proxy without losing the
+    // credentials. Default 1 means every existing row with a proxy stays on.
+    db.exec(`ALTER TABLE accounts ADD COLUMN proxy_enabled INTEGER NOT NULL DEFAULT 1;`);
+  }
+
+  if (current < 12) {
+    // Capture every scrape outcome — not just completed ones — so the user
+    // can see failed/cancelled scrapes in history and retry the failed ones.
+    // csv_path becomes nullable (a failed scrape may have produced no CSV).
+    db.exec(`
+      CREATE TABLE scrape_results_new (
+        job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        username_count INTEGER NOT NULL,
+        csv_path TEXT,
+        duration_ms INTEGER NOT NULL,
+        completed_at INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'completed',
+        error TEXT
+      );
+      INSERT INTO scrape_results_new
+        (job_id, kind, summary, username_count, csv_path, duration_ms, completed_at, status, error)
+        SELECT job_id, kind, summary, username_count, csv_path, duration_ms, completed_at, 'completed', NULL
+        FROM scrape_results;
+      DROP TABLE scrape_results;
+      ALTER TABLE scrape_results_new RENAME TO scrape_results;
+      CREATE INDEX IF NOT EXISTS idx_scrape_results_completed
+        ON scrape_results(completed_at DESC);
+    `);
+  }
+
+  if (current < 13) {
+    // Target identity of the scrape: @username for user/post scrapes,
+    // #hashtag for hashtag scrapes, location name for location scrapes.
+    // Used by the UI to show a clean, clickable summary instead of raw URLs.
+    db.exec(`ALTER TABLE scrape_results ADD COLUMN target_name TEXT;`);
+  }
+
+  db.pragma('user_version = 13');
 }
 
 // meta helpers — used by license.ts for ad-hoc key/value state.

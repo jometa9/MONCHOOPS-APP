@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn';
 import { useSession } from '@/context/SessionContext';
 import { useJobs } from '@/context/JobsContext';
 import { Spinner } from '@/components/common/Spinner';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import type { JobKind } from '@/types/domain';
@@ -90,9 +91,15 @@ export function Sidebar() {
             <Spinner className="h-4 w-4 text-muted-foreground" />
             <span>{statusLabel}</span>
             {isScraping ? (
-              <span className="ml-auto bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
-                {scrapedCount}
-              </span>
+              scrapedCount > 0 ? (
+                <Badge variant="success" className="ml-auto tabular-nums">
+                  {scrapedCount}
+                </Badge>
+              ) : (
+                <span className="ml-auto bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
+                  {scrapedCount}
+                </span>
+              )
             ) : null}
           </NavLink>
         ) : null}

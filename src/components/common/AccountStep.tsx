@@ -3,6 +3,7 @@ import { Check, Flame, Instagram, Search } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Badge } from '@/components/ui/badge';
 import { EmptyPanel } from '@/components/common/EmptyPanel';
+import { EmptyState } from '@/components/common/EmptyState';
 import { useJobs } from '@/context/JobsContext';
 import type { AccountPublic } from '@/types/domain';
 
@@ -14,7 +15,7 @@ function StatusBadge({ status }: { status: AccountPublic['status'] }) {
 
 function WarmedBadge() {
   return (
-    <Badge variant="default" title="Account is fully warmed up">
+    <Badge variant="default">
       <Flame className="h-2.5 w-2.5" />
       Warmed
     </Badge>
@@ -83,24 +84,25 @@ export function AccountStep({ accounts, value, onChange }: Props) {
           />
         </div>
       </div>
-      <div className="h-[50vh] overflow-auto">
-        <table className="w-full whitespace-nowrap text-sm">
-          <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-1.5 text-left">Account</th>
-              <th className="px-3 py-1.5 text-left">Status</th>
-              <th className="w-8 px-2 py-1.5" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr className="border-t border-border last:border-b">
-                <td colSpan={3} className="px-3 py-10 text-center text-sm text-muted-foreground">
-                  No accounts match your search.
-                </td>
+      <div className="flex h-[50vh] flex-col overflow-auto">
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon={<Search className="h-10 w-10" />}
+            title="No results"
+            description="No accounts match your search."
+            className="py-0"
+          />
+        ) : (
+          <table className="w-full whitespace-nowrap text-sm">
+            <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-3 py-1.5 text-left">Account</th>
+                <th className="px-3 py-1.5 text-left">Status</th>
+                <th className="w-8 px-2 py-1.5" />
               </tr>
-            ) : (
-              filtered.map((acc) => {
+            </thead>
+            <tbody>
+              {filtered.map((acc) => {
                 const selected = value === acc.id;
                 const queued = queueDepthById.get(acc.id) ?? 0;
                 return (
@@ -128,11 +130,6 @@ export function AccountStep({ accounts, value, onChange }: Props) {
                         )}
                         <div className="min-w-0">
                           <div className="text-sm font-medium leading-tight">@{acc.username}</div>
-                          {acc.displayName ? (
-                            <div className="text-[11px] leading-tight text-muted-foreground">
-                              {acc.displayName}
-                            </div>
-                          ) : null}
                         </div>
                       </div>
                     </td>
@@ -152,10 +149,10 @@ export function AccountStep({ accounts, value, onChange }: Props) {
                     </td>
                   </tr>
                 );
-              })
-            )}
-          </tbody>
-        </table>
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

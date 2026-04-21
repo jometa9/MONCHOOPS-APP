@@ -151,7 +151,7 @@ async function waitForProfileGrid(page: Page, kind: 'post' | 'reel'): Promise<Gr
 }
 
 export interface FollowersOpts {
-  max?: number;
+  target?: number;
   onBatch?: (added: string[]) => void;
   shouldStop?: () => boolean;
 }
@@ -173,7 +173,7 @@ export async function getFollowers(
   await waitFor(2000);
 
   return collectByScrolling<string>({
-    max: opts.max,
+    target: opts.target,
     shouldStop: opts.shouldStop,
     onBatch: opts.onBatch,
     scroll: () => scrollDialog(page),

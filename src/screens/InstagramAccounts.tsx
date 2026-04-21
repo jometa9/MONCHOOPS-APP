@@ -30,7 +30,7 @@ function StatusBadge({ status }: { status: AccountPublic['status'] }) {
 
 function WarmedBadge() {
   return (
-    <Badge variant="default" title="Account is fully warmed up">
+    <Badge variant="default">
       <Flame className="h-2.5 w-2.5" />
       Warmed
     </Badge>
@@ -66,11 +66,6 @@ function AccountRow({
           )}
           <div className="min-w-0">
             <div className="text-sm font-medium leading-tight">@{account.username}</div>
-            {account.displayName ? (
-              <div className="text-[11px] leading-tight text-muted-foreground">
-                {account.displayName}
-              </div>
-            ) : null}
           </div>
         </div>
       </td>
@@ -82,11 +77,30 @@ function AccountRow({
       </td>
       <td className="px-3 py-1.5">
         {account.proxyUrl ? (
-          <div className="flex min-w-0 items-center gap-1.5 text-xs">
+          <div
+            className={cn(
+              'flex min-w-0 items-center gap-1.5 text-xs',
+              !account.proxyEnabled && 'opacity-60'
+            )}
+          >
             <Globe className="h-3 w-3 flex-none text-muted-foreground" />
-            <span className="font-mono">{account.proxyUrl}</span>
+            <span className={cn('font-mono', !account.proxyEnabled && 'line-through')}>
+              {account.proxyUrl}
+            </span>
             {account.proxyUsername ? (
-              <span className="font-mono text-muted-foreground">· {account.proxyUsername}</span>
+              <span
+                className={cn(
+                  'font-mono text-muted-foreground',
+                  !account.proxyEnabled && 'line-through'
+                )}
+              >
+                · {account.proxyUsername}
+              </span>
+            ) : null}
+            {!account.proxyEnabled ? (
+              <Badge variant="muted" className="text-[10px]">
+                Disabled
+              </Badge>
             ) : null}
           </div>
         ) : (
@@ -103,7 +117,6 @@ function AccountRow({
               type="button"
               onClick={onRetry}
               className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-              title="Retry login"
               aria-label="Retry login"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -113,7 +126,6 @@ function AccountRow({
             type="button"
             onClick={onConfigureProxy}
             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-            title="Configure proxy"
             aria-label="Configure proxy"
           >
             <Globe className="h-3.5 w-3.5" />
@@ -123,7 +135,6 @@ function AccountRow({
             onClick={onDelete}
             disabled={account.status === 'busy'}
             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground"
-            title="Delete account"
             aria-label="Delete account"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -216,7 +227,6 @@ function RetryLoginDialog({
                 onClick={() => setShowPassword((s) => !s)}
                 disabled={busy}
                 className="flex w-10 flex-none items-center justify-center border-l border-border text-muted-foreground transition-colors hover:text-foreground"
-                title={showPassword ? 'Hide password' : 'Show password'}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -241,16 +251,22 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
 function ProxyDialog({
   account,
   onClose,
+  onRequestRemove,
 }: {
   account: AccountPublic;
   onClose: () => void;
+  onRequestRemove: () => void;
 }) {
   const [url, setUrl] = useState(account.proxyUrl ?? '');
   const [username, setUsername] = useState(account.proxyUsername ?? '');
   const [password, setPassword] = useState('');
+  const [enabled, setEnabled] = useState(account.proxyEnabled);
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const hasSavedProxy = !!account.proxyUrl;
+  const busy = saving;
 
   async function save() {
     setSaving(true);
@@ -262,6 +278,7 @@ function ProxyDialog({
         url: normalized || null,
         username: username.trim() || null,
         password: password.length > 0 ? password : null,
+        enabled,
       });
       onClose();
     } catch (err) {
@@ -279,10 +296,16 @@ function ProxyDialog({
       description={`Route @${account.username}'s traffic through a custom proxy.`}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
+          {hasSavedProxy ? (
+            <Button variant="ghost" onClick={onRequestRemove} disabled={busy} className="mr-auto text-amber-600 hover:text-amber-700 dark:text-amber-500 dark:hover:text-amber-400">
+              <Trash2 className="h-3.5 w-3.5" />
+              Remove proxy
+            </Button>
+          ) : null}
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={saving}>
+          <Button onClick={save} disabled={busy}>
             {saving ? <Spinner /> : null}
             {saving ? 'Saving…' : 'Save'}
           </Button>
@@ -290,6 +313,22 @@ function ProxyDialog({
       }
     >
       <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3 border border-border bg-muted/20 px-3 py-2 text-sm">
+          <div className="flex items-center gap-2">
+            <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="font-medium">Proxy enabled</span>
+            {!enabled ? (
+              <Badge variant="muted" className="text-[10px]">
+                Disabled
+              </Badge>
+            ) : null}
+          </div>
+          <Switch
+            checked={enabled}
+            onCheckedChange={setEnabled}
+            disabled={busy || !url.trim()}
+          />
+        </div>
         <div className="space-y-1">
           <Label htmlFor="proxy-url">Proxy URL</Label>
           <SquareIconInput
@@ -298,7 +337,7 @@ function ProxyDialog({
             placeholder="http://host:port or socks5://host:port"
             value={url}
             onChange={setUrl}
-            disabled={saving}
+            disabled={busy}
           />
         </div>
         <div className="space-y-1">
@@ -308,7 +347,7 @@ function ProxyDialog({
             icon={AtSign}
             value={username}
             onChange={setUsername}
-            disabled={saving}
+            disabled={busy}
           />
         </div>
         <div className="space-y-1">
@@ -320,14 +359,13 @@ function ProxyDialog({
             placeholder={account.hasProxyPassword ? '•••••••• (stored)' : ''}
             value={password}
             onChange={setPassword}
-            disabled={saving}
+            disabled={busy}
             trailing={
               <button
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
-                disabled={saving}
+                disabled={busy}
                 className="flex w-10 flex-none items-center justify-center border-l border-border text-muted-foreground transition-colors hover:text-foreground"
-                title={showPassword ? 'Hide password' : 'Show password'}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -378,6 +416,57 @@ function ConfirmDeleteDialog({
           <Button onClick={confirm} disabled={busy}>
             {busy ? <Spinner /> : null}
             {busy ? 'Deleting…' : 'Delete account'}
+          </Button>
+        </>
+      }
+    >
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </Dialog>
+  );
+}
+
+function ConfirmRemoveProxyDialog({
+  account,
+  onClose,
+}: {
+  account: AccountPublic;
+  onClose: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    setBusy(true);
+    setError(null);
+    try {
+      await b2dm.accounts.updateProxy({
+        id: account.id,
+        url: null,
+        username: null,
+        password: null,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove proxy');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Remove proxy for @${account.username}?`}
+      description="The account will route traffic directly instead of through the saved proxy."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={confirm} disabled={busy}>
+            {busy ? <Spinner /> : null}
+            {busy ? 'Removing…' : 'Remove proxy'}
           </Button>
         </>
       }
@@ -682,7 +771,6 @@ function AddAccountDialog({
                     onClick={() => setShowPassword((s) => !s)}
                     disabled={busy}
                     className="flex w-10 flex-none items-center justify-center border-l border-border text-muted-foreground transition-colors hover:text-foreground"
-                    title={showPassword ? 'Hide password' : 'Show password'}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -736,7 +824,6 @@ function AddAccountDialog({
                         onClick={() => setShowProxyPass((s) => !s)}
                         disabled={busy}
                         className="flex w-10 flex-none items-center justify-center border-l border-border text-muted-foreground transition-colors hover:text-foreground"
-                        title={showProxyPass ? 'Hide password' : 'Show password'}
                         aria-label={showProxyPass ? 'Hide password' : 'Show password'}
                       >
                         {showProxyPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -966,6 +1053,7 @@ export function InstagramAccounts() {
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [proxyTarget, setProxyTarget] = useState<AccountPublic | null>(null);
+  const [proxyRemoveTarget, setProxyRemoveTarget] = useState<AccountPublic | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AccountPublic | null>(null);
   const [retryTarget, setRetryTarget] = useState<AccountPublic | null>(null);
   const [showLoginMethod, setShowLoginMethod] = useState(false);
@@ -1157,7 +1245,20 @@ export function InstagramAccounts() {
         )}
 
       {proxyTarget ? (
-        <ProxyDialog account={proxyTarget} onClose={() => setProxyTarget(null)} />
+        <ProxyDialog
+          account={proxyTarget}
+          onClose={() => setProxyTarget(null)}
+          onRequestRemove={() => {
+            setProxyRemoveTarget(proxyTarget);
+            setProxyTarget(null);
+          }}
+        />
+      ) : null}
+      {proxyRemoveTarget ? (
+        <ConfirmRemoveProxyDialog
+          account={proxyRemoveTarget}
+          onClose={() => setProxyRemoveTarget(null)}
+        />
       ) : null}
       {deleteTarget ? (
         <ConfirmDeleteDialog account={deleteTarget} onClose={() => setDeleteTarget(null)} />

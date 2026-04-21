@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Eye, FolderTree, Plus, Search, Tag, Trash2 } from 'lucide-react';
+import { Download, Eye, FolderTree, Plus, Search, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CategoryChip } from '@/components/common/CategoryChip';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
 import { b2dm } from '@/lib/b2dm';
@@ -99,6 +100,15 @@ export function Categories() {
             </button>
           </div>
 
+          {filteredRows!.length === 0 ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center border-t border-border">
+              <EmptyState
+                icon={<Search className="h-10 w-10" />}
+                title="No results"
+                description="No categories match your search."
+              />
+            </div>
+          ) : (
           <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-0 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -111,66 +121,53 @@ export function Categories() {
               </tr>
             </thead>
             <tbody>
-              {filteredRows!.length === 0 ? (
-                <tr className="border-t border-border bg-background last:border-b">
-                  <td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">
-                    No categories match your search.
+              {filteredRows!.map((row) => (
+                <tr
+                  key={row.id}
+                  className="cursor-pointer border-t border-border bg-background even:bg-muted last:border-b hover:bg-accent"
+                  onClick={() => navigate(`/categories/${row.id}`)}
+                >
+                  <td className="px-3 py-1.5">
+                    <CategoryChip name={row.name} />
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{row.leadCount}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{row.scrapeCount}</td>
+                  <td className="px-3 py-1.5 text-muted-foreground">{formatDateTime(row.lastActivityAt)}</td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/categories/${row.id}`)}
+                        className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                        aria-label="View leads"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void exportCsv(row.id)}
+                        disabled={busy === row.id || row.leadCount === 0}
+                        className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+                        aria-label="Download CSV"
+                      >
+                        {busy === row.id ? <Spinner /> : <Download className="h-3.5 w-3.5" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(row)}
+                        className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                        aria-label="Delete category"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
-              ) : (
-                filteredRows!.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="cursor-pointer border-t border-border bg-background even:bg-muted last:border-b hover:bg-accent"
-                    onClick={() => navigate(`/categories/${row.id}`)}
-                  >
-                    <td className="px-3 py-1.5">
-                      <div className="flex items-center gap-2">
-                        <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="font-medium">{row.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{row.leadCount}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{row.scrapeCount}</td>
-                    <td className="px-3 py-1.5 text-muted-foreground">{formatDateTime(row.lastActivityAt)}</td>
-                    <td className="px-2 py-1.5">
-                      <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/categories/${row.id}`)}
-                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                          title="View leads"
-                          aria-label="View leads"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void exportCsv(row.id)}
-                          disabled={busy === row.id || row.leadCount === 0}
-                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-                          title="Download CSV"
-                          aria-label="Download CSV"
-                        >
-                          {busy === row.id ? <Spinner /> : <Download className="h-3.5 w-3.5" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(row)}
-                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                          title="Delete category"
-                          aria-label="Delete category"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
           </div>
+          )}
         </div>
       )}
 

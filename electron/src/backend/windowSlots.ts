@@ -3,11 +3,10 @@
 // every concurrent automation at once instead of windows stacking on top
 // of each other.
 //
-// Slot count is derived from the work area (display minus menubar/dock):
-// we aim for cells that are at least ~640x480 (Instagram's lower bound for
-// a usable layout), and we cap at 4 cols x 3 rows = 12 slots so very large
-// monitors don't end up with unreadably tiny windows. A 13" MacBook (≈1440
-// usable width) lands at 2x2 = 4 slots, matching the user's mental model.
+// Grid is fixed at 2x2 so every tile is ~1/4 of the screen regardless of
+// resolution. The OS window can be smaller than IG's desktop breakpoint —
+// lib.pickViewport() pins the viewport to 1280x800 in that case so the
+// scraper sees the desktop DOM.
 
 export interface WindowBounds {
   x: number;
@@ -22,10 +21,8 @@ interface Slot {
   jobId: string | null;
 }
 
-const MIN_CELL_W = 640;
-const MIN_CELL_H = 480;
-const MAX_COLS = 4;
-const MAX_ROWS = 3;
+const MAX_COLS = 2;
+const MAX_ROWS = 2;
 
 let slots: Slot[] = [];
 // Where the next overflow window goes when every slot is taken. We cycle
@@ -57,14 +54,12 @@ function getPrimaryWorkArea(): WorkArea | null {
 function buildSlots(): Slot[] {
   const wa = getPrimaryWorkArea();
   if (!wa) return [];
-  const cols = Math.min(MAX_COLS, Math.max(2, Math.floor(wa.width / MIN_CELL_W)));
-  const rows = Math.min(MAX_ROWS, Math.max(2, Math.floor(wa.height / MIN_CELL_H)));
-  const cellW = Math.floor(wa.width / cols);
-  const cellH = Math.floor(wa.height / rows);
+  const cellW = Math.floor(wa.width / MAX_COLS);
+  const cellH = Math.floor(wa.height / MAX_ROWS);
   const out: Slot[] = [];
   let i = 0;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
+  for (let r = 0; r < MAX_ROWS; r++) {
+    for (let c = 0; c < MAX_COLS; c++) {
       out.push({
         index: i++,
         bounds: {

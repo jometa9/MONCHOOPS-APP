@@ -47,6 +47,7 @@ export interface AccountsApi {
     url: string | null;
     username: string | null;
     password: string | null;
+    enabled?: boolean;
   }): Promise<AccountPublic>;
   onChange(cb: () => void): Unsubscribe;
 }

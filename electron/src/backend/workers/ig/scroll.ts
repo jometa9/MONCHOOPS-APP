@@ -1,7 +1,7 @@
 // Generic "scroll-until-stable" helper. Callers supply an extract function
 // that returns the current snapshot of items visible in the DOM; the helper
 // tracks what's new, calls scroll(), and stops when the count is unchanged
-// for `maxIdleRounds` consecutive iterations — or when `max` is reached.
+// for `maxIdleRounds` consecutive iterations — or when `target` is reached.
 
 import { waitFor } from '../lib';
 
@@ -11,7 +11,7 @@ export interface CollectOptions<T> {
   extract: () => Promise<T[]>;
   scroll: () => Promise<void>;
   /** Optional cap. Collection stops once the result reaches this length. */
-  max?: number;
+  target?: number;
   /** Idle rounds with no growth before stopping. Default 6. */
   maxIdleRounds?: number;
   /** Delay between extract + scroll cycles. Default 1200ms. */
@@ -90,11 +90,11 @@ export async function collectByScrolling<T>(opts: CollectOptions<T>): Promise<T[
       seen.add(key);
       out.push(item);
       added.push(item);
-      if (opts.max && out.length >= opts.max) break;
+      if (opts.target && out.length >= opts.target) break;
     }
     if (added.length > 0) opts.onBatch?.(added);
 
-    if (opts.max && out.length >= opts.max) break;
+    if (opts.target && out.length >= opts.target) break;
     if (opts.shouldStop?.()) break;
 
     if (out.length === lastSize) {

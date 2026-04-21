@@ -8,10 +8,17 @@ export type { EnsureLoggedInOpts } from './login';
 export { iterUserPosts, iterUserReels, getFollowers } from './profile';
 export type { FollowersOpts } from './profile';
 
-export { getCommenters, getLikers } from './post';
+export { getCommenters, getLikers, readPostAuthor } from './post';
 export type { LikersResult, ExtractOpts } from './post';
 
-export { iterPostsByHashtag, iterPostsByLocation } from './search';
+export {
+  iterPostsByHashtag,
+  iterPostsByLocation,
+  readLocationName,
+  gotoHashtagGrid,
+  gotoLocationGrid,
+  iteratePostsOnGrid,
+} from './search';
 export type { LocationSearchOpts } from './search';
 
 export {
