@@ -205,7 +205,73 @@ export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browse
     await context.addCookies(opts.secrets.cookies as InstagramCookie[]);
   }
 
+  registerBrowserForCleanup(browser);
+
   return { browser, context };
+}
+
+// Safety net against orphan Chromiums. Workers may get SIGTERM (cancel
+// escalation in jobs.ts after the cooperative grace window), or their parent
+// may die unexpectedly (main crashed / was kill -9'd) — in both cases the
+// happy-path `browser.close()` calls scattered through each worker wouldn't
+// run. We track every open browser here and close them from process-level
+// hooks.
+//
+// SIGKILL to the worker itself is the one case we can't catch: the kernel
+// terminates the process immediately, no JS runs. Chromium normally detects
+// the pipe close and self-terminates, which is the best we can do.
+const activeBrowsers = new Set<Browser>();
+let cleanupHooksInstalled = false;
+
+function registerBrowserForCleanup(browser: Browser): void {
+  installCleanupHooks();
+  activeBrowsers.add(browser);
+  try {
+    browser.on('disconnected', () => activeBrowsers.delete(browser));
+  } catch {}
+}
+
+function installCleanupHooks(): void {
+  if (cleanupHooksInstalled) return;
+  cleanupHooksInstalled = true;
+
+  const closeAll = async (): Promise<void> => {
+    const browsers = Array.from(activeBrowsers);
+    activeBrowsers.clear();
+    await Promise.all(
+      browsers.map(async (b) => {
+        try { await b.close(); } catch {}
+      })
+    );
+  };
+
+  // Parent disconnected — main process died or was killed before it could
+  // send us a cooperative cancel. Close gracefully and exit.
+  process.on('disconnect', () => {
+    void closeAll().finally(() => process.exit(0));
+  });
+
+  // jobs.ts escalates cancel → SIGTERM after CANCEL_GRACE_MS. SIGINT covers
+  // Ctrl+C during dev; SIGHUP covers terminal close.
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
+    process.on(signal, () => {
+      void closeAll().finally(() => process.exit(0));
+    });
+  }
+
+  // Last-resort sync kill. `exit` can't await, so we grab each Chromium's
+  // pid and SIGKILL it directly — prevents orphans when the worker exits
+  // without Playwright having finished its own teardown.
+  process.on('exit', () => {
+    for (const browser of activeBrowsers) {
+      try {
+        const child = typeof browser.process === 'function' ? browser.process() : null;
+        if (child && child.pid && !child.killed) {
+          try { child.kill('SIGKILL'); } catch {}
+        }
+      } catch {}
+    }
+  });
 }
 
 // Anti-fingerprint patches injected into every page via addInitScript. These
