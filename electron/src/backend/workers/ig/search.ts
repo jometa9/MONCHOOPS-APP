@@ -3,7 +3,8 @@
 // next URL, so if they hit their lead cap after one post we never scroll at
 // all.
 
-import { safeGoto, sendLog, waitFor } from '../lib';
+import { safeGoto, sendLog } from '../lib';
+import { waitForPageReady } from './network';
 import { iterateByScrolling, scrollWindow } from './scroll';
 
 type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -34,7 +35,7 @@ export async function gotoHashtagGrid(page: Page, hashtag: string): Promise<void
   const clean = hashtag.replace(/^#+/, '').trim();
   if (!clean) throw new Error('hashtag is required');
   await safeGoto(page, `https://www.instagram.com/explore/tags/${encodeURIComponent(clean)}/`);
-  await waitFor(2500);
+  await waitForPageReady(page);
 }
 
 export async function gotoLocationGrid(
@@ -50,7 +51,7 @@ export async function gotoLocationGrid(
   const wantRecent = opts.recent ?? true;
   const url = wantRecent ? toRecentUrl(base) : base;
   await safeGoto(page, url);
-  await waitFor(2500);
+  await waitForPageReady(page);
 
   // IG has progressively gutted /recent/ for logged-out / newer accounts —
   // sometimes it renders an empty shell even when /top/ has posts. If we
@@ -64,7 +65,7 @@ export async function gotoLocationGrid(
     if (counts.posts + counts.reels === 0) {
       sendLog('info', `      [grid] /recent/ empty, falling back to Top tab (${base})`);
       await safeGoto(page, base);
-      await waitFor(2500);
+      await waitForPageReady(page);
       const retry = await probeGridAnchors(page);
       sendLog(
         'info',

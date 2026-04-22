@@ -9,6 +9,7 @@
 // result so the worker can persist counts without grepping logs.
 
 import { safeGoto, sendLog, waitFor, jitter, isCancelled } from '../lib';
+import { waitForPageReady } from './network';
 import { iterUserPosts } from './profile';
 import { iterPostsByHashtag, iterPostsByLocation } from './search';
 
@@ -31,7 +32,10 @@ export async function likePost(page: Page, postUrl: string): Promise<Interaction
 
   try {
     await safeGoto(page, postUrl);
-    await waitFor(jitter(2500));
+    // Wait for IG to hydrate the post page — the heart svg is rendered by
+    // the SPA after fetching post data, so checking too early would falsely
+    // return 'unavailable' on a post that's actually likeable.
+    await waitForPageReady(page);
 
     const state = await detectLikeState(page);
     if (state === 'liked') return { ok: true, skipped: true, reason: 'already_liked' };
@@ -40,7 +44,9 @@ export async function likePost(page: Page, postUrl: string): Promise<Interaction
     const clicked = await clickLikeButton(page);
     if (!clicked) return { ok: false, reason: 'click_failed' };
 
-    await waitFor(jitter(1200));
+    // The like XHR has to round-trip before the heart re-renders as
+    // "Unlike". waitForPageReady catches that XHR via the permissive filter.
+    await waitForPageReady(page);
     const after = await detectLikeState(page);
     if (after === 'liked') return { ok: true, skipped: false };
     return { ok: false, reason: 'state_unchanged' };
@@ -51,53 +57,81 @@ export async function likePost(page: Page, postUrl: string): Promise<Interaction
 
 type LikeState = 'not_liked' | 'liked' | 'unavailable';
 
-async function detectLikeState(page: Page): Promise<LikeState> {
-  return (await page.evaluate(() => {
-    const LIKED = ['Unlike', 'Ya no me gusta'];
-    const UNLIKED = ['Like', 'Me gusta'];
-    const svgs = Array.from(document.querySelectorAll<SVGElement>('svg[aria-label]'));
-    for (const svg of svgs) {
-      const label = svg.getAttribute('aria-label') ?? '';
-      if (LIKED.includes(label)) return 'liked';
+// Decide whether a heart svg belongs to the POST itself rather than a
+// comment / reply. Both share the exact same aria-label, so we have to
+// disambiguate. Two signals are combined:
+//
+//   1. Rendered size. The post's main heart is ~24px on every IG layout
+//      (it lives in the action bar). Comment / reply hearts are ~12-16px.
+//      A `getBoundingClientRect()` width >= 20 reliably picks only the
+//      post heart even on layouts where the comment list isn't a <ul>.
+//   2. Ancestry as a defensive fallback. If somehow a small post heart
+//      ever shipped, we still skip svgs found inside list semantics
+//      (<ul>, <li>, [role="list"], [role="listitem"]).
+//
+// Implementation note: stringified for `page.evaluate` so it executes in
+// the browser context. Keep self-contained, no TypeScript helpers.
+const POST_HEART_PROBE = `
+  function isPostHeart(svg) {
+    var rect = svg.getBoundingClientRect();
+    if (rect.width < 20 || rect.height < 20) return false;
+    var cur = svg;
+    while (cur) {
+      var tag = cur.tagName;
+      var role = cur.getAttribute && cur.getAttribute('role');
+      if (tag === 'UL' || tag === 'LI' || role === 'list' || role === 'listitem') return false;
+      if (tag === 'ARTICLE') return true;
+      cur = cur.parentElement;
     }
-    for (const svg of svgs) {
-      const label = svg.getAttribute('aria-label') ?? '';
-      if (UNLIKED.includes(label)) return 'not_liked';
+    return true;
+  }
+`;
+
+async function detectLikeState(page: Page): Promise<LikeState> {
+  return (await page.evaluate(`(() => {
+    ${POST_HEART_PROBE}
+    var LIKED = ['Unlike', 'Ya no me gusta'];
+    var UNLIKED = ['Like', 'Me gusta'];
+    var svgs = Array.from(document.querySelectorAll('svg[aria-label]'))
+      .filter(isPostHeart);
+    for (var i = 0; i < svgs.length; i++) {
+      var label = svgs[i].getAttribute('aria-label') || '';
+      if (LIKED.indexOf(label) !== -1) return 'liked';
+    }
+    for (var j = 0; j < svgs.length; j++) {
+      var l = svgs[j].getAttribute('aria-label') || '';
+      if (UNLIKED.indexOf(l) !== -1) return 'not_liked';
     }
     return 'unavailable';
-  })) as LikeState;
+  })()`)) as LikeState;
 }
 
 async function clickLikeButton(page: Page): Promise<boolean> {
-  const selectors = [
-    'svg[aria-label="Like"]',
-    'svg[aria-label="Me gusta"]',
-  ];
-  for (const sel of selectors) {
-    try {
-      const loc = page.locator(sel).first();
-      const n = await loc.count();
-      if (n === 0) continue;
-      // The svg itself usually isn't the click target — walk up to the
-      // nearest button/role="button" ancestor and click that.
-      await loc.evaluate((el: Element) => {
-        let cur: HTMLElement | null = el as unknown as HTMLElement;
-        while (cur) {
-          const tag = cur.tagName;
-          const role = cur.getAttribute('role');
-          if (tag === 'BUTTON' || role === 'button') {
-            cur.click();
-            return;
-          }
-          cur = cur.parentElement;
-        }
+  // Find the POST's like heart (not a comment's). Same aria-label —
+  // disambiguated inside POST_HEART_PROBE by SVG size + ancestry. Walk up
+  // from the chosen svg to the nearest button/role="button" and click it.
+  return (await page.evaluate(`(() => {
+    ${POST_HEART_PROBE}
+    var POST_LABELS = ['Like', 'Me gusta'];
+    var svgs = Array.from(document.querySelectorAll('svg[aria-label]'))
+      .filter(function (s) {
+        var label = s.getAttribute('aria-label') || '';
+        return POST_LABELS.indexOf(label) !== -1 && isPostHeart(s);
       });
-      return true;
-    } catch {
-      // try next
+    for (var i = 0; i < svgs.length; i++) {
+      var target = svgs[i];
+      while (target) {
+        var tag = target.tagName;
+        var role = target.getAttribute && target.getAttribute('role');
+        if (tag === 'BUTTON' || role === 'button') {
+          target.click();
+          return true;
+        }
+        target = target.parentElement;
+      }
     }
-  }
-  return false;
+    return false;
+  })()`)) as boolean;
 }
 
 /** Navigate to a user's profile and follow them. If the user is already
@@ -109,20 +143,26 @@ export async function followUser(page: Page, username: string): Promise<Interact
 
   try {
     await safeGoto(page, `https://www.instagram.com/${encodeURIComponent(clean)}/`);
-    await waitFor(jitter(2500));
+    // Profile header is rendered by the SPA after the userinfo XHR returns
+    // — checking before that gave false 'follow_button_not_found' on slow
+    // loads. waitForPageReady gates progression on the actual fetch.
+    await waitForPageReady(page);
 
     const state = await detectFollowState(page);
     if (state === 'following' || state === 'requested') {
       return { ok: true, skipped: true, reason: `already_${state}` };
     }
     if (state === 'unavailable') {
+      await dumpFollowButtons(page);
       return { ok: false, reason: 'follow_button_not_found' };
     }
 
     const clicked = await clickFollowButton(page);
     if (!clicked) return { ok: false, reason: 'click_failed' };
 
-    await waitFor(jitter(1500));
+    // The follow click fires an XHR; the button only re-renders to
+    // "Following"/"Requested" after the response.
+    await waitForPageReady(page);
     const after = await detectFollowState(page);
     if (after === 'following' || after === 'requested') return { ok: true, skipped: false };
     return { ok: false, reason: 'state_unchanged' };
@@ -135,38 +175,84 @@ type FollowState = 'not_following' | 'following' | 'requested' | 'unavailable';
 
 async function detectFollowState(page: Page): Promise<FollowState> {
   return (await page.evaluate(() => {
-    const NOT_FOLLOWING = ['Follow', 'Seguir'];
-    const FOLLOWING = ['Following', 'Siguiendo'];
-    const REQUESTED = ['Requested', 'Solicitado'];
-    const header =
-      document.querySelector('header') ??
+    // Lowercase exact matching: IG sometimes capitalizes differently
+    // across A/B variants and locale switches. We also search inside
+    // <main> (not just <header>) because the profile header has been
+    // re-parented under <section> in newer layouts — the literal <header>
+    // tag isn't always present.
+    const NOT_FOLLOWING = ['follow', 'seguir'];
+    const FOLLOWING = ['following', 'siguiendo'];
+    const REQUESTED = ['requested', 'solicitado'];
+
+    const root =
       document.querySelector('main header') ??
+      document.querySelector('header') ??
+      document.querySelector('main') ??
       document.body;
-    const buttons = Array.from(header.querySelectorAll<HTMLButtonElement>('button, [role="button"]'));
+    const buttons = Array.from(root.querySelectorAll<HTMLElement>('button, [role="button"]'));
+
+    // Order matters: check FOLLOWING/REQUESTED before NOT_FOLLOWING since
+    // "follow" is a substring of "following" — a `text.includes('follow')`
+    // would match both.
     for (const b of buttons) {
-      const text = (b.textContent ?? '').trim();
-      if (!text || text.length > 20) continue;
+      const text = (b.textContent ?? '').trim().toLowerCase();
+      if (!text || text.length > 30) continue;
       if (REQUESTED.includes(text)) return 'requested';
       if (FOLLOWING.includes(text)) return 'following';
+    }
+    for (const b of buttons) {
+      const text = (b.textContent ?? '').trim().toLowerCase();
+      if (!text || text.length > 30) continue;
       if (NOT_FOLLOWING.includes(text)) return 'not_following';
     }
     return 'unavailable';
   })) as FollowState;
 }
 
-async function clickFollowButton(page: Page): Promise<boolean> {
-  for (const label of ['Follow', 'Seguir']) {
-    try {
-      const loc = page.locator(`header button:has-text("${label}"), header [role="button"]:has-text("${label}")`).first();
-      const n = await loc.count();
-      if (n === 0) continue;
-      await loc.click({ timeout: 3000 });
-      return true;
-    } catch {
-      // try next
-    }
+// Diagnostic: when detectFollowState returns 'unavailable', dump the
+// candidate button texts so we can see what IG is actually rendering and
+// adjust the matchers without asking the user to inspect DOM by hand.
+async function dumpFollowButtons(page: Page): Promise<void> {
+  try {
+    const sample = (await page.evaluate(() => {
+      const root =
+        document.querySelector('main header') ??
+        document.querySelector('header') ??
+        document.querySelector('main') ??
+        document.body;
+      return Array.from(root.querySelectorAll<HTMLElement>('button, [role="button"]'))
+        .map((b) => (b.textContent ?? '').trim())
+        .filter((t) => t.length > 0 && t.length <= 40)
+        .slice(0, 12);
+    })) as string[];
+    sendLog('warn', `  [follow] candidate buttons: ${sample.length === 0 ? '(none)' : sample.join(' | ')}`);
+  } catch {
+    // diagnostic — never block the caller
   }
-  return false;
+}
+
+async function clickFollowButton(page: Page): Promise<boolean> {
+  // Match buttons by their lowercase text inside the profile root —
+  // mirrors detectFollowState so a state of 'not_following' guarantees
+  // we'll find the same button to click.
+  return (await page.evaluate(() => {
+    const NOT_FOLLOWING = ['follow', 'seguir'];
+    const root =
+      document.querySelector('main header') ??
+      document.querySelector('header') ??
+      document.querySelector('main') ??
+      document.body;
+    const buttons = Array.from(root.querySelectorAll<HTMLElement>('button, [role="button"]'));
+    for (const b of buttons) {
+      const text = (b.textContent ?? '').trim().toLowerCase();
+      if (!text || text.length > 30) continue;
+      if (NOT_FOLLOWING.includes(text)) {
+        b.click();
+        return true;
+      }
+    }
+    return false;
+  })) as boolean;
 }
 
 export interface LikeNResult {
@@ -220,7 +306,7 @@ export async function likeNPostsOfUser(
  *  or follows — just "I'm here, I'm looking" activity. */
 export async function viewFeed(page: Page, durationMs: number): Promise<void> {
   await safeGoto(page, 'https://www.instagram.com/');
-  await waitFor(jitter(2500));
+  await waitForPageReady(page);
   await scrollForDuration(page, durationMs);
 }
 
@@ -228,7 +314,7 @@ export async function viewFeed(page: Page, durationMs: number): Promise<void> {
  *  given duration. */
 export async function viewExplore(page: Page, durationMs: number): Promise<void> {
   await safeGoto(page, 'https://www.instagram.com/explore/');
-  await waitFor(jitter(2500));
+  await waitForPageReady(page);
   await scrollForDuration(page, durationMs);
 }
 
@@ -324,14 +410,14 @@ async function actOnGridIterator(
     if (isCancelled()) break;
     try {
       await safeGoto(page, url);
-      await waitFor(jitter(2500));
+      await waitForPageReady(page);
 
       if (opts.like) {
         const state = await detectLikeState(page);
         if (state === 'not_liked') {
           const clicked = await clickLikeButton(page);
           if (clicked) {
-            await waitFor(jitter(1000));
+            await waitForPageReady(page);
             const after = await detectLikeState(page);
             if (after === 'liked') liked += 1;
             else failed += 1;

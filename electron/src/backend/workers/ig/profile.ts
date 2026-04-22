@@ -4,6 +4,7 @@
 
 import { safeGoto, sendLog, waitFor } from '../lib';
 import { SELECTORS, RESERVED_PATHS } from './selectors';
+import { waitForLocatorReady, waitForPageReady } from './network';
 import { collectByScrolling, iterateByScrolling, scrollDialog, scrollWindow } from './scroll';
 
 type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -21,7 +22,7 @@ export async function* iterUserPosts(
 
   sendLog('info', `  [posts] navigating to /${clean}/`);
   await safeGoto(page, `https://www.instagram.com/${encodeURIComponent(clean)}/`);
-  await waitFor(2500);
+  await waitForPageReady(page);
 
   const state = await waitForProfileGrid(page, 'post');
   sendLog('info', `  [posts] grid state: ${state}`);
@@ -43,7 +44,7 @@ export async function* iterUserReels(
 
   sendLog('info', `  [reels] navigating to /${clean}/reels/`);
   await safeGoto(page, `https://www.instagram.com/${encodeURIComponent(clean)}/reels/`);
-  await waitFor(2500);
+  await waitForPageReady(page);
 
   const state = await waitForProfileGrid(page, 'reel');
   sendLog('info', `  [reels] grid state: ${state}`);
@@ -165,12 +166,15 @@ export async function getFollowers(
   if (!clean) throw new Error('username is required');
 
   await safeGoto(page, `https://www.instagram.com/${encodeURIComponent(clean)}/`);
-  await waitFor(2500);
 
+  // Page has to be settled before we can trust the followers anchor is
+  // either present or genuinely missing. After clicking it, we wait again
+  // for IG's followers-list XHR to come back before scrolling — otherwise
+  // the dialog is empty and the scroll loop bails on iter 0.
   const link = page.locator(SELECTORS.followersLinkAnchor(clean)).first();
-  await link.waitFor({ state: 'visible', timeout: 15_000 });
+  await waitForLocatorReady(page, link, { state: 'visible', timeout: 15_000 });
   await link.click();
-  await waitFor(2000);
+  await waitForPageReady(page);
 
   return collectByScrolling<string>({
     target: opts.target,

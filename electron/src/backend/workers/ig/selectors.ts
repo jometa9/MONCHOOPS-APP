@@ -11,10 +11,6 @@ export const SELECTORS = {
   // Captcha — IG sometimes drops in reCAPTCHA Enterprise on auto-logins.
   captcha: '#captcha-recaptcha, iframe[src*="recaptcha" i], iframe[title*="reCAPTCHA" i]',
 
-  // Post-login nudges we always dismiss.
-  saveLoginNotNow: 'button:has-text("Not now"), button:has-text("Not Now")',
-  notificationsNotNow: 'button:has-text("Not Now")',
-
   // Profile grid / tabs
   postLinkAnchor: 'a[href*="/p/"]',
   reelLinkAnchor: 'a[href*="/reel/"]',

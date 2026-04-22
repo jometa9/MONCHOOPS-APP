@@ -6,6 +6,7 @@
 // it falls back to a password login.
 
 import { safeGoto, sendLog, waitFor } from '../lib';
+import { dismissIgPrompts } from './dialogs';
 import { SELECTORS } from './selectors';
 
 type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -28,13 +29,13 @@ export async function ensureLoggedIn(page: Page, opts: EnsureLoggedInOpts = {}):
   await waitFor(2500);
 
   await waitOutCaptcha(page, captchaTimeoutMs);
-  await dismissDialogs(page);
+  await dismissIgPrompts(page);
 
   if (await hasSession(page)) return;
 
   if (opts.username && opts.password) {
     await passwordLogin(page, opts.username, opts.password, captchaTimeoutMs);
-    await dismissDialogs(page);
+    await dismissIgPrompts(page);
     if (await hasSession(page)) return;
   }
 
@@ -65,18 +66,6 @@ async function waitOutCaptcha(page: Page, timeoutMs: number): Promise<void> {
     }
   }
   throw new Error('Captcha was not resolved within the allowed window');
-}
-
-async function dismissDialogs(page: Page): Promise<void> {
-  // "Save your login info?" — appears after cookie-based re-entry too.
-  for (const label of ['Not now', 'Not Now']) {
-    try {
-      await page.locator(`button:has-text("${label}")`).first().click({ timeout: 1500 });
-      await waitFor(600);
-    } catch {
-      // Button isn't present — that's fine.
-    }
-  }
 }
 
 async function passwordLogin(

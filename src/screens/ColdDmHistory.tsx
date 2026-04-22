@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, History, Instagram, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Eye, History, Instagram, Search } from 'lucide-react';
 import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
 import { b2dm } from '@/lib/b2dm';
@@ -19,6 +20,7 @@ function formatDuration(ms: number): string {
 }
 
 export function ColdDmHistory() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<MassDmResultPublic[] | null>(null);
   const [query, setQuery] = useState('');
 
@@ -83,53 +85,84 @@ export function ColdDmHistory() {
           />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-      <table className="w-full whitespace-nowrap text-sm">
-        <thead className="sticky top-0 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          <tr>
-            <th className="px-3 py-1.5 text-left">Account</th>
-            <th className="px-3 py-1.5 text-right">Sent</th>
-            <th className="px-3 py-1.5 text-right">Failed</th>
-            <th className="px-3 py-1.5 text-right">Duration</th>
-            <th className="px-3 py-1.5 text-left">Completed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredRows!.length === 0 ? (
-            <tr className="border-t border-border last:border-b">
-              <td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">
-                No runs match your search.
-              </td>
-            </tr>
-          ) : (
-            filteredRows!.map((row) => (
-              <tr key={row.jobId} className="border-t border-border even:bg-muted/30 last:border-b">
-                <td className="px-3 py-1.5">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-muted text-muted-foreground">
-                      <Instagram className="h-3 w-3" />
-                    </div>
-                    <span className="font-medium">
-                      {row.accountUsername ? `@${row.accountUsername}` : '—'}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-3 py-1.5 text-right tabular-nums">{row.sentCount}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                  {row.failedCount}
-                </td>
-                <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                  {formatDuration(row.durationMs)}
-                </td>
-                <td className="px-3 py-1.5 text-muted-foreground">
-                  {formatDateTime(row.completedAt)}
-                </td>
+      {filteredRows!.length === 0 ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center border-t border-border">
+          <EmptyState
+            icon={<Search className="h-10 w-10" />}
+            title="No results"
+            description="No runs match your search."
+          />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full whitespace-nowrap text-sm">
+            <thead className="sticky top-0 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-3 py-1.5 text-left">Account</th>
+                <th className="px-3 py-1.5 text-right">Sent</th>
+                <th className="px-3 py-1.5 text-right">Failed</th>
+                <th className="px-3 py-1.5 text-right">Duration</th>
+                <th className="px-3 py-1.5 text-left">Completed</th>
+                <th className="px-3 py-1.5 text-right">Actions</th>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredRows!.map((row) => (
+                <tr
+                  key={row.jobId}
+                  onClick={() => navigate(`/dm-history/${row.jobId}`)}
+                  className="cursor-pointer border-t border-border transition-colors even:bg-muted/30 last:border-b hover:bg-accent/40"
+                >
+                  <td className="px-3 py-1.5">
+                    <div className="flex items-center gap-2">
+                      {row.accountProfilePicUrl ? (
+                        <img
+                          src={row.accountProfilePicUrl}
+                          alt={row.accountUsername ?? ''}
+                          className="h-6 w-6 flex-none rounded-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-muted text-muted-foreground">
+                          <Instagram className="h-3 w-3" />
+                        </div>
+                      )}
+                      <span className="font-medium">
+                        {row.accountUsername ? `@${row.accountUsername}` : '—'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{row.sentCount}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                    {row.failedCount}
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                    {formatDuration(row.durationMs)}
+                  </td>
+                  <td className="px-3 py-1.5 text-muted-foreground">
+                    {formatDateTime(row.completedAt)}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <div
+                      className="flex items-center justify-end"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/dm-history/${row.jobId}`)}
+                        className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                        aria-label="View run detail"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

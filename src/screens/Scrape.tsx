@@ -184,7 +184,7 @@ export function Scrape() {
   }
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-4">
+    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-4 py-4">
       <h1 className="text-2xl font-semibold tracking-tight">Scrape leads</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Three quick steps: pick the account, configure the scrape, review and start.

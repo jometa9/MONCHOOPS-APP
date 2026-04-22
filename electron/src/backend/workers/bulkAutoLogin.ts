@@ -5,6 +5,7 @@
 // going past per-row failures (it just logs them and moves on).
 
 import { isCancelled, launchBrowser, onInit, sendError, sendLog, sendLoginFailed, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
+import { attachDialogDismisser } from './ig';
 import type { InstagramCookie } from '../accounts';
 
 interface BulkRowInit {
@@ -97,6 +98,7 @@ async function processRow(row: BulkRowInit, headless: boolean, windowBounds?: Wi
 
   const { browser, context } = await launchBrowser({ headless, proxy, windowBounds, maximizeWindow });
   const page = await context.newPage();
+  const detachDismisser = attachDialogDismisser(page);
 
   try {
     await Promise.race([
@@ -104,6 +106,7 @@ async function processRow(row: BulkRowInit, headless: boolean, windowBounds?: Wi
       delayThenThrow(PER_ROW_DEADLINE_MS, `Timed out after ${Math.round(PER_ROW_DEADLINE_MS / 1000)}s`),
     ]);
   } finally {
+    detachDismisser();
     try { await browser.close(); } catch {}
   }
 }

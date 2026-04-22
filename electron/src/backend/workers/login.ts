@@ -4,6 +4,7 @@
 // IG's bot detection and avoids the schema drift we'd get from private APIs.
 
 import { isCancelled, launchBrowser, onInit, sendError, sendResult, waitFor, type WindowBounds } from './lib';
+import { attachDialogDismisser } from './ig';
 import type { InstagramCookie } from '../accounts';
 
 interface LoginInit {
@@ -24,6 +25,7 @@ onInit<LoginInit>(async (init) => {
   const { browser, context } = await launchBrowser({ headless: false, proxy: init.proxy, windowBounds: init.windowBounds, maximizeWindow: init.maximizeWindow });
 
   const page = await context.newPage();
+  const detachDismisser = attachDialogDismisser(page);
   await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'domcontentloaded' });
 
   // Poll until a sessionid cookie appears under .instagram.com.
@@ -114,6 +116,7 @@ onInit<LoginInit>(async (init) => {
     userAgent,
   });
 
+  detachDismisser();
   try { await browser.close(); } catch {}
   process.exit(0);
 });

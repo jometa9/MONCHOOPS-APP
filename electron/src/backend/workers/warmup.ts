@@ -14,6 +14,7 @@ import {
   type WindowBounds,
 } from './lib';
 import {
+  attachDialogDismisser,
   ensureLoggedIn,
   iterHashtagAndAct,
   iterLocationAndAct,
@@ -65,6 +66,7 @@ onInit<WarmupInit>(async (init) => {
     maximizeWindow: init.maximizeWindow,
   });
   const page = await context.newPage();
+  const detachDismisser = attachDialogDismisser(page);
 
   try {
     await ensureLoggedIn(page, { captchaTimeoutMs: 5 * 60_000 });
@@ -73,10 +75,12 @@ onInit<WarmupInit>(async (init) => {
     const result = await runAction(page, init.action);
 
     sendResult(result);
+    detachDismisser();
     await browser.close();
     process.exit(0);
   } catch (err) {
     sendError(err instanceof Error ? err.message : String(err));
+    detachDismisser();
     try { await browser.close(); } catch {}
     process.exit(1);
   }

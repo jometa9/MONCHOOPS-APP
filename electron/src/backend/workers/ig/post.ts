@@ -10,10 +10,10 @@
 //   3. Open the likers modal via multiple fallback strategies: href,
 //      aria-label, then text-based clicks on "likes" / "others" / "y otros".
 
-import { safeGoto, sendLog, waitFor } from '../lib';
+import { safeGoto, sendLog } from '../lib';
 import { RESERVED_PATHS } from './selectors';
 import { collectByScrolling, scrollCommentList, scrollDialog } from './scroll';
-import { createNetworkTracker } from './network';
+import { createNetworkTracker, waitForPageReady } from './network';
 
 type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -40,7 +40,7 @@ export async function getCommenters(page: Page, postUrl: string, opts: ExtractOp
   const isReel = /\/reel\//.test(postUrl);
   sendLog('info', `      navigating to ${postUrl} (${isReel ? 'reel' : 'post'})`);
   await safeGoto(page, postUrl);
-  await waitFor(3000);
+  await waitForPageReady(page);
 
   // Reels don't show comments inline — the player sidebar has a comment
   // icon we must click to open the comments panel.
@@ -132,7 +132,7 @@ async function openReelCommentsPanel(page: Page): Promise<void> {
       if (n === 0) continue;
       await loc.click({ timeout: 3000 });
       sendLog('info', `      reel comments panel opened via ${sel}`);
-      await waitFor(2000);
+      await waitForPageReady(page);
       return;
     } catch {
       // Try next selector.
@@ -146,13 +146,15 @@ export async function getLikers(page: Page, postUrl: string, opts: ExtractOpts =
 
   sendLog('info', `      navigating to ${postUrl}`);
   await safeGoto(page, postUrl);
-  await waitFor(3000);
+  await waitForPageReady(page);
 
   const opened = await openLikesModal(page);
   sendLog('info', `      likes modal opened via: ${opened ?? 'none'}`);
 
   if (opened) {
-    await waitFor(2000);
+    // Wait for the likers list XHR to land before we start scrolling — an
+    // empty dialog would make the scroll loop give up after `maxIdleRounds`.
+    await waitForPageReady(page);
     let iteration = 0;
     const tracker = createNetworkTracker(page);
     try {
@@ -284,7 +286,7 @@ async function clickViewAllComments(page: Page): Promise<void> {
     if (clickable) {
       await page.mouse.click((clickable as any).x, (clickable as any).y);
       sendLog('info', `      clicked "view all comments"`);
-      await waitFor(1500);
+      await waitForPageReady(page);
     }
   } catch {}
 }

@@ -5,6 +5,15 @@
 export { ensureLoggedIn } from './login';
 export type { EnsureLoggedInOpts } from './login';
 
+export {
+  attachDialogDismisser,
+  dismissIgPrompts,
+  dismissNotificationsPrompt,
+  dismissSaveLoginPrompt,
+} from './dialogs';
+
+export { waitForPageReady, waitForLocatorReady } from './network';
+
 export { iterUserPosts, iterUserReels, getFollowers } from './profile';
 export type { FollowersOpts } from './profile';
 

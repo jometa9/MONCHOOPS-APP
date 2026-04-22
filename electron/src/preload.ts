@@ -74,6 +74,7 @@ const jobsApi = {
     messages: string[];
     intervalMs: number;
     interactions?: import('./backend/jobs').MassDmInteractionsConfig | null;
+    excludeUsernames?: string[] | null;
   }) => invoke<string>('jobs:startMassDm', payload),
   startScrape: (payload: {
     accountId: string;
@@ -118,6 +119,12 @@ const scrapesApi = {
 
 const massDmsApi = {
   list: () => invoke<import('./backend/jobs').MassDmResultPublic[]>('massDms:list'),
+  get: (jobId: string) =>
+    invoke<import('./backend/jobs').MassDmResultPublic | null>('massDms:get', jobId),
+  listSends: (jobId: string) =>
+    invoke<import('./backend/jobs').MassDmSendPublic[]>('massDms:listSends', jobId),
+  listDmedUsernames: (accountId: string) =>
+    invoke<string[]>('massDms:listDmedUsernames', accountId),
 };
 
 const warmupsApi = {
@@ -146,6 +153,9 @@ const csvApi = {
   pickAndPersist: () => invoke<{ path: string; count: number } | null>('csv:pickAndPersist'),
   persistFromPath: (srcPath: string) =>
     invoke<{ path: string; count: number }>('csv:persistFromPath', srcPath),
+  listUsernames: (csvPath: string) => invoke<string[]>('csv:listUsernames', csvPath),
+  persistFromUsernames: (usernames: string[]) =>
+    invoke<{ path: string; count: number }>('csv:persistFromUsernames', usernames),
   persistFromCategory: (categoryId: string) =>
     invoke<{ path: string; count: number }>('csv:persistFromCategory', categoryId),
   persistFromCategories: (categoryIds: string[]) =>
@@ -167,6 +177,25 @@ const categoriesApi = {
     invoke<import('./backend/leads').LeadPublic[]>('categories:listLeads', payload),
   exportCsv: (categoryId: string) => invoke<string | null>('categories:exportCsv', categoryId),
   onChange: (cb: () => void) => listen<void>('categories:changed', () => cb()),
+};
+
+const messageVariantsApi = {
+  list: () =>
+    invoke<import('./backend/messageVariants').MessageVariantGroupPublic[]>(
+      'messageVariants:list'
+    ),
+  create: (payload: { name: string; variants: string[] }) =>
+    invoke<import('./backend/messageVariants').MessageVariantGroupPublic>(
+      'messageVariants:create',
+      payload
+    ),
+  update: (payload: { id: string; name: string; variants: string[] }) =>
+    invoke<import('./backend/messageVariants').MessageVariantGroupPublic>(
+      'messageVariants:update',
+      payload
+    ),
+  delete: (id: string) => invoke<void>('messageVariants:delete', id),
+  onChange: (cb: () => void) => listen<void>('messageVariants:changed', () => cb()),
 };
 
 const updaterApi = {
@@ -201,6 +230,7 @@ contextBridge.exposeInMainWorld('b2dm', {
   massDms: massDmsApi,
   warmups: warmupsApi,
   categories: categoriesApi,
+  messageVariants: messageVariantsApi,
   csv: csvApi,
   settings: settingsApi,
   stats: statsApi,

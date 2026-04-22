@@ -12,6 +12,7 @@ import { Home } from '@/screens/Home';
 import { InstagramAccounts } from '@/screens/InstagramAccounts';
 import { MassDMs } from '@/screens/MassDMs';
 import { ColdDmHistory } from '@/screens/ColdDmHistory';
+import { ColdDmHistoryDetail } from '@/screens/ColdDmHistoryDetail';
 import { Scrape } from '@/screens/Scrape';
 import { Warmup } from '@/screens/Warmup';
 import { Queue } from '@/screens/Queue';
@@ -19,6 +20,7 @@ import { Data } from '@/screens/Data';
 import { LeadsDetail } from '@/screens/LeadsDetail';
 import { Categories } from '@/screens/Categories';
 import { CategoryLeadsDetail } from '@/screens/CategoryLeadsDetail';
+import { MessageVariants } from '@/screens/MessageVariants';
 import { Settings } from '@/screens/Settings';
 
 function Gate() {
@@ -59,6 +61,7 @@ function Gate() {
             <Route path="accounts" element={<InstagramAccounts />} />
             <Route path="cold-dm" element={<MassDMs />} />
             <Route path="dm-history" element={<ColdDmHistory />} />
+            <Route path="dm-history/:jobId" element={<ColdDmHistoryDetail />} />
             <Route path="scrape" element={<Scrape />} />
             <Route path="warmup" element={<Warmup />} />
             <Route path="queue" element={<Queue />} />
@@ -66,6 +69,7 @@ function Gate() {
             <Route path="data/:jobId" element={<LeadsDetail />} />
             <Route path="categories" element={<Categories />} />
             <Route path="categories/:categoryId" element={<CategoryLeadsDetail />} />
+            <Route path="message-variants" element={<MessageVariants />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

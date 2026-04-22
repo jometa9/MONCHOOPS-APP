@@ -16,6 +16,7 @@ import fs from 'fs';
 import path from 'path';
 import { isCancelled, launchBrowser, jitter, onInit, sendError, sendLog, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
 import {
+  attachDialogDismisser,
   ensureLoggedIn,
   getCommenters,
   getFollowers,
@@ -344,6 +345,8 @@ onInit<ScrapeInit>(async (init) => {
   const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets, windowBounds: init.windowBounds, maximizeWindow: init.maximizeWindow });
   const gridPage = await context.newPage();
   const postPage = await context.newPage();
+  const detachGrid = attachDialogDismisser(gridPage);
+  const detachPost = attachDialogDismisser(postPage);
   sendProgress(0);
 
   try {
@@ -369,11 +372,15 @@ onInit<ScrapeInit>(async (init) => {
 
     sink.close();
     sendResult({ count: sink.count(), csvPath: init.csvPath, targetName });
+    detachGrid();
+    detachPost();
     await browser.close();
     process.exit(0);
   } catch (err) {
     sink.close();
     sendError(err instanceof Error ? err.message : String(err));
+    detachGrid();
+    detachPost();
     try { await browser.close(); } catch {}
     process.exit(1);
   }

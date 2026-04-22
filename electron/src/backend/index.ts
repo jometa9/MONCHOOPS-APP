@@ -16,7 +16,10 @@ import {
   getStats,
   listActiveJobs,
   listJobs,
+  getMassDmResult,
+  listDmedUsernamesForAccount,
   listMassDmResults,
+  listMassDmSends,
   listRunningJobs,
   listScrapeResults,
   listWarmupResults,
@@ -45,6 +48,12 @@ import {
   listLeads,
   renameCategory,
 } from './leads';
+import {
+  createMessageVariantGroup,
+  deleteMessageVariantGroup,
+  listMessageVariantGroups,
+  updateMessageVariantGroup,
+} from './messageVariants';
 import {
   createWarmupSchedule,
   deleteWarmupSchedule,
@@ -223,6 +232,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       messages: string[];
       intervalMs: number;
       interactions?: MassDmInteractionsConfig | null;
+      excludeUsernames?: string[] | null;
     }) => {
       return startMassDm(payload);
     }
@@ -246,6 +256,11 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
 
   // Mass DM history
   ipcMain.handle('massDms:list', async () => listMassDmResults());
+  ipcMain.handle('massDms:get', async (_e, jobId: string) => getMassDmResult(jobId));
+  ipcMain.handle('massDms:listSends', async (_e, jobId: string) => listMassDmSends(jobId));
+  ipcMain.handle('massDms:listDmedUsernames', async (_e, accountId: string) =>
+    listDmedUsernamesForAccount(accountId)
+  );
 
   // Warmup history
   ipcMain.handle('warmups:list', async () => listWarmupResults());
@@ -315,6 +330,45 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     if (!srcPath || typeof srcPath !== 'string') throw new Error('Invalid file path');
     if (!fs.existsSync(srcPath)) throw new Error('File not found');
     return persistUsernameFile(srcPath);
+  });
+
+  // Read the usernames out of an already-persisted CSV. Used by the Cold DM
+  // Review step to diff the list against accounts' past DM history and warn
+  // about targets that have already been messaged.
+  ipcMain.handle('csv:listUsernames', async (_e, csvPath: string) => {
+    if (!csvPath || typeof csvPath !== 'string') throw new Error('Invalid path');
+    if (!fs.existsSync(csvPath)) return [];
+    const raw = fs.readFileSync(csvPath, 'utf8');
+    const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const first = lines[0]?.toLowerCase();
+    const withoutHeader =
+      first && (first === 'username' || first.startsWith('username,'))
+        ? lines.slice(1)
+        : lines;
+    const seen = new Set<string>();
+    for (const line of withoutHeader) {
+      const u = (line.split(',')[0] ?? '').trim().replace(/^@+/, '');
+      if (u) seen.add(u);
+    }
+    return Array.from(seen);
+  });
+
+  ipcMain.handle('csv:persistFromUsernames', async (_e, usernames: string[]) => {
+    if (!Array.isArray(usernames)) throw new Error('Invalid usernames payload');
+    const seen = new Set<string>();
+    for (const raw of usernames) {
+      if (typeof raw !== 'string') continue;
+      const cleaned = raw.trim().replace(/^[@#]+/, '').trim();
+      if (!cleaned) continue;
+      seen.add(cleaned);
+    }
+    const list = Array.from(seen);
+    if (list.length === 0) throw new Error('Add at least one username');
+    const tempDir = path.join(app.getPath('userData'), 'uploads');
+    fs.mkdirSync(tempDir, { recursive: true });
+    const dest = path.join(tempDir, `manual-${Date.now()}.csv`);
+    fs.writeFileSync(dest, `username\n${list.join('\n')}\n`);
+    return { path: dest, count: list.length };
   });
 
   ipcMain.handle('csv:persistFromCategory', async (_e, categoryId: string) => {
@@ -486,6 +540,29 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     if (res.canceled || !res.filePath) return null;
     fs.writeFileSync(res.filePath, content, 'utf8');
     return res.filePath;
+  });
+
+  // Message variant groups
+  ipcMain.handle('messageVariants:list', async () => listMessageVariantGroups());
+  ipcMain.handle(
+    'messageVariants:create',
+    async (_e, payload: { name: string; variants: string[] }) => {
+      const group = createMessageVariantGroup(payload.name, payload.variants);
+      broadcast('messageVariants:changed');
+      return group;
+    }
+  );
+  ipcMain.handle(
+    'messageVariants:update',
+    async (_e, payload: { id: string; name: string; variants: string[] }) => {
+      const group = updateMessageVariantGroup(payload.id, payload.name, payload.variants);
+      broadcast('messageVariants:changed');
+      return group;
+    }
+  );
+  ipcMain.handle('messageVariants:delete', async (_e, id: string) => {
+    deleteMessageVariantGroup(id);
+    broadcast('messageVariants:changed');
   });
 
   let shutdownStarted = false;

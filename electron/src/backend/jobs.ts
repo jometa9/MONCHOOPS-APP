@@ -103,11 +103,22 @@ export interface MassDmResultPublic {
   jobId: string;
   accountId: string | null;
   accountUsername: string | null;
+  accountProfilePicUrl: string | null;
   sentCount: number;
   failedCount: number;
   totalCount: number;
   durationMs: number;
   completedAt: number;
+}
+
+export interface MassDmSendPublic {
+  jobId: string;
+  accountId: string | null;
+  username: string;
+  status: 'sent' | 'failed';
+  message: string | null;
+  error: string | null;
+  sentAt: number;
 }
 
 interface JobRow {
@@ -363,6 +374,7 @@ interface MassDmResultRow {
   job_id: string;
   account_id: string | null;
   account_username: string | null;
+  account_profile_pic_url: string | null;
   sent_count: number;
   failed_count: number;
   total_count: number;
@@ -373,7 +385,8 @@ interface MassDmResultRow {
 const MASS_DM_RESULT_SELECT = `
   SELECT
     mdr.*,
-    a.username AS account_username
+    a.username AS account_username,
+    a.profile_pic_url AS account_profile_pic_url
   FROM mass_dm_results mdr
   LEFT JOIN accounts a ON a.id = mdr.account_id
 `;
@@ -383,6 +396,7 @@ function massDmRowToPublic(row: MassDmResultRow): MassDmResultPublic {
     jobId: row.job_id,
     accountId: row.account_id,
     accountUsername: row.account_username,
+    accountProfilePicUrl: row.account_profile_pic_url,
     sentCount: row.sent_count,
     failedCount: row.failed_count,
     totalCount: row.total_count,
@@ -398,6 +412,63 @@ export function listMassDmResults(): MassDmResultPublic[] {
     )
     .all();
   return rows.map(massDmRowToPublic);
+}
+
+export function getMassDmResult(jobId: string): MassDmResultPublic | null {
+  const row = getDb()
+    .prepare<[string], MassDmResultRow>(
+      `${MASS_DM_RESULT_SELECT} WHERE mdr.job_id = ?`
+    )
+    .get(jobId);
+  return row ? massDmRowToPublic(row) : null;
+}
+
+interface MassDmSendRow {
+  job_id: string;
+  account_id: string | null;
+  username: string;
+  status: 'sent' | 'failed';
+  message: string | null;
+  error: string | null;
+  sent_at: number;
+}
+
+function massDmSendRowToPublic(row: MassDmSendRow): MassDmSendPublic {
+  return {
+    jobId: row.job_id,
+    accountId: row.account_id,
+    username: row.username,
+    status: row.status,
+    message: row.message,
+    error: row.error,
+    sentAt: row.sent_at,
+  };
+}
+
+export function listMassDmSends(jobId: string): MassDmSendPublic[] {
+  const rows = getDb()
+    .prepare<[string], MassDmSendRow>(
+      `SELECT job_id, account_id, username, status, message, error, sent_at
+         FROM mass_dm_sends
+        WHERE job_id = ?
+        ORDER BY sent_at ASC, id ASC`
+    )
+    .all(jobId);
+  return rows.map(massDmSendRowToPublic);
+}
+
+// Returns the set of usernames that the given account has successfully
+// DM'd in any past mass_dm job. Used by the Cold DM flow to warn the user
+// before re-DMing someone with the same account.
+export function listDmedUsernamesForAccount(accountId: string): string[] {
+  const rows = getDb()
+    .prepare<[string], { username: string }>(
+      `SELECT DISTINCT username
+         FROM mass_dm_sends
+        WHERE account_id = ? AND status = 'sent'`
+    )
+    .all(accountId);
+  return rows.map((r) => r.username);
 }
 
 interface WarmupResultRow {
@@ -648,6 +719,10 @@ export interface StartMassDmArgs {
   messages: string[];
   intervalMs: number;
   interactions?: MassDmInteractionsConfig | null;
+  /** Usernames the worker must skip entirely — typically targets that were
+   *  already DMed by this account in a past job. The list is a snapshot at
+   *  submit time; the worker does not re-query history mid-run. */
+  excludeUsernames?: string[] | null;
 }
 
 const MAX_DM_VARIANTS = 20;
@@ -663,11 +738,15 @@ export function startMassDm(args: StartMassDmArgs): string {
   if (messages.length === 0) throw new Error('At least one message variant is required');
 
   const interactions = normaliseInteractions(args.interactions);
+  const excludeUsernames = Array.isArray(args.excludeUsernames)
+    ? Array.from(new Set(args.excludeUsernames.map((u) => String(u).trim().replace(/^@+/, '')).filter(Boolean)))
+    : [];
   const params = {
     intervalMs: args.intervalMs,
     messages,
     usernamesCsvPath: args.usernamesCsvPath,
     interactions,
+    excludeUsernames,
   };
 
   if (hasPendingJobForAccount(args.accountId)) {
@@ -704,6 +783,7 @@ function spawnMassDmWorker(
     messages: string[];
     intervalMs: number;
     interactions?: MassDmInteractionsConfig | null;
+    excludeUsernames?: string[] | null;
   }
 ): void {
   const headless = getHeadlessPref();
@@ -719,6 +799,7 @@ function spawnMassDmWorker(
         messages: params.messages,
         intervalMs: params.intervalMs,
         interactions: params.interactions ?? null,
+        excludeUsernames: params.excludeUsernames ?? [],
         headless,
       },
     },
@@ -937,6 +1018,7 @@ function dispatchNextForAccount(accountId: string): boolean {
       messages: Array.isArray(params.messages) ? params.messages : [],
       intervalMs: Number(params.intervalMs) || 0,
       interactions: normaliseInteractions(params.interactions ?? null),
+      excludeUsernames: Array.isArray(params.excludeUsernames) ? params.excludeUsernames : [],
     });
   } else if (row.kind === 'warmup') {
     try {
@@ -1077,6 +1159,35 @@ function handleWorkerMessage(jobId: string, msg: any): void {
     persistBulkAccount(jobId, msg.payload);
   } else if (msg.type === 'login-failed') {
     persistFailedLogin(jobId, msg.payload);
+  } else if (msg.type === 'dm-send') {
+    persistDmSend(jobId, msg.payload);
+  }
+}
+
+function persistDmSend(jobId: string, payload: any): void {
+  if (!payload || typeof payload !== 'object') return;
+  const username = typeof payload.username === 'string' ? payload.username.trim() : '';
+  if (!username) return;
+  const status = payload.status === 'sent' || payload.status === 'failed' ? payload.status : null;
+  if (!status) return;
+  const meta = runningMeta.get(jobId);
+  try {
+    getDb()
+      .prepare(
+        `INSERT INTO mass_dm_sends(job_id, account_id, username, status, message, error, sent_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        jobId,
+        meta?.accountId ?? null,
+        username,
+        status,
+        typeof payload.message === 'string' && payload.message.length > 0 ? payload.message : null,
+        typeof payload.error === 'string' ? payload.error : null,
+        Date.now()
+      );
+  } catch (err) {
+    console.error(`[jobs ${jobId}] failed to persist dm-send:`, err);
   }
 }
 

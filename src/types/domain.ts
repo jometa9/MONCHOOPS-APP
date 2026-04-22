@@ -129,11 +129,22 @@ export interface MassDmResultPublic {
   jobId: string;
   accountId: string | null;
   accountUsername: string | null;
+  accountProfilePicUrl: string | null;
   sentCount: number;
   failedCount: number;
   totalCount: number;
   durationMs: number;
   completedAt: number;
+}
+
+export interface MassDmSendPublic {
+  jobId: string;
+  accountId: string | null;
+  username: string;
+  status: 'sent' | 'failed';
+  message: string | null;
+  error: string | null;
+  sentAt: number;
 }
 
 export interface LeadCategoryPublic {
@@ -154,4 +165,12 @@ export interface LeadPublic {
   sourceJobId: string | null;
   sourceDetail: string | null;
   scrapedAt: number;
+}
+
+export interface MessageVariantGroupPublic {
+  id: string;
+  name: string;
+  variants: string[];
+  createdAt: number;
+  updatedAt: number;
 }

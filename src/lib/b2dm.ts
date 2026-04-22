@@ -6,6 +6,8 @@ import type {
   LeadPublic,
   MassDmInteractionsConfig,
   MassDmResultPublic,
+  MassDmSendPublic,
+  MessageVariantGroupPublic,
   ScrapeKind,
   ScrapeResultPublic,
   ScrapeUsernameRow,
@@ -63,6 +65,7 @@ export interface JobsApi {
     messages: string[];
     intervalMs: number;
     interactions?: MassDmInteractionsConfig | null;
+    excludeUsernames?: string[] | null;
   }): Promise<string>;
   startScrape(payload: {
     accountId: string;
@@ -92,6 +95,9 @@ export interface ScrapesApi {
 
 export interface MassDmsApi {
   list(): Promise<MassDmResultPublic[]>;
+  get(jobId: string): Promise<MassDmResultPublic | null>;
+  listSends(jobId: string): Promise<MassDmSendPublic[]>;
+  listDmedUsernames(accountId: string): Promise<string[]>;
 }
 
 export interface WarmupsApi {
@@ -118,9 +124,23 @@ export interface CategoriesApi {
   onChange(cb: () => void): Unsubscribe;
 }
 
+export interface MessageVariantsApi {
+  list(): Promise<MessageVariantGroupPublic[]>;
+  create(payload: { name: string; variants: string[] }): Promise<MessageVariantGroupPublic>;
+  update(payload: {
+    id: string;
+    name: string;
+    variants: string[];
+  }): Promise<MessageVariantGroupPublic>;
+  delete(id: string): Promise<void>;
+  onChange(cb: () => void): Unsubscribe;
+}
+
 export interface CsvApi {
   pickAndPersist(): Promise<{ path: string; count: number } | null>;
   persistFromPath(srcPath: string): Promise<{ path: string; count: number }>;
+  listUsernames(csvPath: string): Promise<string[]>;
+  persistFromUsernames(usernames: string[]): Promise<{ path: string; count: number }>;
   persistFromCategory(categoryId: string): Promise<{ path: string; count: number }>;
   persistFromCategories(categoryIds: string[]): Promise<{ path: string; count: number }>;
   persistFromScrape(jobId: string): Promise<{ path: string; count: number }>;
@@ -202,6 +222,7 @@ export interface B2dmApi {
   massDms: MassDmsApi;
   warmups: WarmupsApi;
   categories: CategoriesApi;
+  messageVariants: MessageVariantsApi;
   csv: CsvApi;
   settings: SettingsApi;
   stats: StatsApi;

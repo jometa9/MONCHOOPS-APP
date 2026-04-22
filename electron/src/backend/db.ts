@@ -279,7 +279,61 @@ function migrate(db: Database): void {
     db.exec(`ALTER TABLE scrape_results ADD COLUMN target_name TEXT;`);
   }
 
-  db.pragma('user_version = 13');
+  if (current < 14) {
+    // Reusable named sets of DM message variations. A group holds up to 20
+    // variants, each with a stable display order. Selected from the Cold DM
+    // flow as a snapshot — the job still serialises the raw strings, so
+    // editing or deleting the group never mutates historical jobs.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS message_variant_groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS message_variants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id TEXT NOT NULL REFERENCES message_variant_groups(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        position INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_message_variants_group
+        ON message_variants(group_id, position);
+    `);
+  }
+
+  if (current < 15) {
+    // Per-username log of every DM attempt within a mass_dm job. The parent
+    // mass_dm_results row keeps aggregate counts; this table keeps the
+    // individual outcomes so the user can see exactly who was DM'd
+    // successfully, who failed and why, and avoid re-DMing the same person
+    // from the same account when starting a new Cold DM.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS mass_dm_sends (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+        username TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error TEXT,
+        sent_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_mass_dm_sends_job
+        ON mass_dm_sends(job_id);
+      CREATE INDEX IF NOT EXISTS idx_mass_dm_sends_account_username
+        ON mass_dm_sends(account_id, username);
+    `);
+  }
+
+  if (current < 16) {
+    // Persist the exact message body sent to each target so the DM History
+    // detail view can show "what was said to whom". Nullable because rows
+    // written before this migration have no message captured.
+    db.exec(`ALTER TABLE mass_dm_sends ADD COLUMN message TEXT;`);
+  }
+
+  db.pragma('user_version = 16');
 }
 
 // meta helpers — used by license.ts for ad-hoc key/value state.
