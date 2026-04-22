@@ -11,6 +11,7 @@
 import { safeGoto, sendLog, waitFor, jitter, isCancelled } from '../lib';
 import { waitForPageReady } from './network';
 import { iterUserPosts } from './profile';
+import { readPostAuthor } from './post';
 import { iterPostsByHashtag, iterPostsByLocation } from './search';
 
 type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -160,11 +161,37 @@ export async function followUser(page: Page, username: string): Promise<Interact
     const clicked = await clickFollowButton(page);
     if (!clicked) return { ok: false, reason: 'click_failed' };
 
+    // Confirmation modal race: IG sometimes drops a "Do you know this
+    // person?" dialog after the click, blocking the follow until we
+    // confirm. Poll briefly since the dialog takes a beat to render.
+    for (let i = 0; i < 4; i++) {
+      if (await confirmFollowAnywayIfPrompted(page)) {
+        sendLog('info', '  [follow] confirmed "Do you know this person?" prompt');
+        break;
+      }
+      await waitFor(400);
+    }
+
     // The follow click fires an XHR; the button only re-renders to
-    // "Following"/"Requested" after the response.
+    // "Following"/"Requested" after the response. Two timing hazards:
+    //  1. waitForPageReady may return before the button label flips if the
+    //     network settles momentarily between XHRs.
+    //  2. IG sometimes drops a "Suggested for you" drawer that reparents
+    //     the header, so the follow button becomes 'unavailable' even
+    //     though the follow succeeded.
+    // Poll a few times to absorb the render race, and treat 'unavailable'
+    // after a successful click as success (we know we clicked Follow).
     await waitForPageReady(page);
-    const after = await detectFollowState(page);
-    if (after === 'following' || after === 'requested') return { ok: true, skipped: false };
+    for (let i = 0; i < 5; i++) {
+      const after = await detectFollowState(page);
+      if (after === 'following' || after === 'requested') {
+        return { ok: true, skipped: false };
+      }
+      if (after === 'unavailable') {
+        return { ok: true, skipped: false };
+      }
+      await waitFor(700);
+    }
     return { ok: false, reason: 'state_unchanged' };
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
@@ -175,11 +202,12 @@ type FollowState = 'not_following' | 'following' | 'requested' | 'unavailable';
 
 async function detectFollowState(page: Page): Promise<FollowState> {
   return (await page.evaluate(() => {
-    // Lowercase exact matching: IG sometimes capitalizes differently
-    // across A/B variants and locale switches. We also search inside
-    // <main> (not just <header>) because the profile header has been
-    // re-parented under <section> in newer layouts — the literal <header>
-    // tag isn't always present.
+    // IG's follow button is a split button once followed: "Following ▾"
+    // with an SVG icon that contributes alt text (e.g. "Down chevron icon"),
+    // so the full textContent ends up like "FollowingDown chevron icon".
+    // We match by prefix for FOLLOWING/REQUESTED so icon alt text doesn't
+    // break detection. NOT_FOLLOWING stays as an exact match — "follow" is
+    // a prefix of "following" and we must not conflate the two.
     const NOT_FOLLOWING = ['follow', 'seguir'];
     const FOLLOWING = ['following', 'siguiendo'];
     const REQUESTED = ['requested', 'solicitado'];
@@ -191,18 +219,18 @@ async function detectFollowState(page: Page): Promise<FollowState> {
       document.body;
     const buttons = Array.from(root.querySelectorAll<HTMLElement>('button, [role="button"]'));
 
-    // Order matters: check FOLLOWING/REQUESTED before NOT_FOLLOWING since
-    // "follow" is a substring of "following" — a `text.includes('follow')`
-    // would match both.
+    // First pass: FOLLOWING/REQUESTED via prefix match (tolerant of icon
+    // alt text appended to the label).
     for (const b of buttons) {
       const text = (b.textContent ?? '').trim().toLowerCase();
-      if (!text || text.length > 30) continue;
-      if (REQUESTED.includes(text)) return 'requested';
-      if (FOLLOWING.includes(text)) return 'following';
+      if (!text || text.length > 60) continue;
+      if (REQUESTED.some((t) => text === t || text.startsWith(t))) return 'requested';
+      if (FOLLOWING.some((t) => text === t || text.startsWith(t))) return 'following';
     }
+    // Second pass: NOT_FOLLOWING via exact match only.
     for (const b of buttons) {
       const text = (b.textContent ?? '').trim().toLowerCase();
-      if (!text || text.length > 30) continue;
+      if (!text || text.length > 60) continue;
       if (NOT_FOLLOWING.includes(text)) return 'not_following';
     }
     return 'unavailable';
@@ -229,6 +257,43 @@ async function dumpFollowButtons(page: Page): Promise<void> {
   } catch {
     // diagnostic — never block the caller
   }
+}
+
+// IG occasionally pops a "Do you know this person?" confirmation after we
+// click Follow — usually on suspicious/fresh accounts or after a burst of
+// follows. It blocks the follow until we confirm by clicking "Follow
+// anyway". Click the confirm button if it appears; no-op otherwise.
+async function confirmFollowAnywayIfPrompted(page: Page): Promise<boolean> {
+  return (await page.evaluate(() => {
+    const TITLE_HINTS = [
+      'do you know this person',
+      'conoces a esta persona',
+      '¿conoces a esta persona',
+    ];
+    const CONFIRM_LABELS = [
+      'follow anyway',
+      'seguir de todos modos',
+      'seguir de todas formas',
+      'seguir igual',
+    ];
+
+    const dialogs = Array.from(document.querySelectorAll<HTMLElement>('div[role="dialog"]'));
+    for (const d of dialogs) {
+      const text = (d.textContent ?? '').toLowerCase();
+      if (!TITLE_HINTS.some((h) => text.includes(h))) continue;
+
+      const buttons = Array.from(d.querySelectorAll<HTMLElement>('button, [role="button"]'));
+      for (const b of buttons) {
+        const label = (b.textContent ?? '').trim().toLowerCase();
+        if (!label || label.length > 40) continue;
+        if (CONFIRM_LABELS.some((l) => label === l || label.startsWith(l))) {
+          b.click();
+          return true;
+        }
+      }
+    }
+    return false;
+  })) as boolean;
 }
 
 async function clickFollowButton(page: Page): Promise<boolean> {
@@ -318,6 +383,41 @@ export async function viewExplore(page: Page, durationMs: number): Promise<void>
   await scrollForDuration(page, durationMs);
 }
 
+/** Same idea on /reels/, but the reels surface is a full-viewport snap
+ *  feed — pixel scrolling just jiggles the current clip. Instead, we advance
+ *  reel-by-reel with the ArrowDown key and dwell for a watch-time-ish
+ *  interval between each. */
+export async function viewReels(page: Page, durationMs: number): Promise<void> {
+  await safeGoto(page, 'https://www.instagram.com/reels/');
+  await waitForPageReady(page);
+  // The reels viewer only routes ArrowDown after a real user click — focus()
+  // alone doesn't arm it. Click near the middle of the viewport to hand
+  // keyboard focus to the reels container.
+  try {
+    const box = await page.evaluate(() => ({
+      w: window.innerWidth,
+      h: window.innerHeight,
+    }));
+    await page.mouse.click(Math.floor(box.w / 2), Math.floor(box.h / 2));
+  } catch {}
+
+  const deadline = Date.now() + durationMs;
+  // Dwell on the first reel before advancing.
+  await waitFor(jitter(4500, 0.6));
+  while (Date.now() < deadline) {
+    if (isCancelled()) return;
+    try {
+      await page.keyboard.press('ArrowDown');
+    } catch {
+      // page may have been closed mid-loop during cancel
+      return;
+    }
+    // Watch-time per reel: most people linger 3–10s. 5s ± 60% gives a
+    // realistic spread without going too robotic.
+    await waitFor(jitter(5000, 0.6));
+  }
+}
+
 async function scrollForDuration(page: Page, durationMs: number): Promise<void> {
   const deadline = Date.now() + durationMs;
   while (Date.now() < deadline) {
@@ -341,6 +441,10 @@ export interface HashtagActOpts {
   /** Max posts to touch. Required — hashtags have effectively infinite
    *  posts and we need an upper bound. */
   count: number;
+  /** Invoked after every post iteration with the running tally. Lets the
+   *  caller push live progress / counter updates to the UI instead of
+   *  waiting for the whole run to finish. */
+  onStep?: (tally: HashtagActResult) => void;
 }
 
 export interface HashtagActResult {
@@ -395,19 +499,29 @@ async function actOnGridIterator(
 ): Promise<HashtagActResult> {
   if (opts.count <= 0) return { visited: 0, liked: 0, followed: 0, skipped: 0, failed: 0 };
 
-  const urls: string[] = [];
-  for await (const url of iter) {
-    urls.push(url);
-    if (urls.length >= opts.count) break;
-    if (isCancelled()) break;
-  }
+  // `count` is the target of NEW actions (likes or follows), not the number
+  // of posts to visit. Already-liked posts or already-followed authors land
+  // in `skipped` and do NOT consume a slot, so we keep iterating until we
+  // reach the target. Safety cap keeps us from looping forever on sources
+  // where most content is already actioned.
+  const target = opts.count;
+  const maxVisits = Math.max(target * 5, target + 20);
 
+  let visited = 0;
   let liked = 0;
   let followed = 0;
   let skipped = 0;
   let failed = 0;
-  for (const url of urls) {
+
+  for await (const url of iter) {
     if (isCancelled()) break;
+    const achieved = opts.like ? liked : opts.follow ? followed : 0;
+    if (achieved >= target) break;
+    if (visited >= maxVisits) {
+      sendLog('warn', `${sourceLabel}: visited ${visited} posts without hitting target (${achieved}/${target}) — stopping`);
+      break;
+    }
+
     try {
       await safeGoto(page, url);
       await waitForPageReady(page);
@@ -435,9 +549,16 @@ async function actOnGridIterator(
         const author = await readPostAuthor(page);
         if (author) {
           const res = await followUser(page, author);
-          if (res.ok && !res.skipped) followed += 1;
-          else if (res.ok && res.skipped) skipped += 1;
-          else failed += 1;
+          if (res.ok && !res.skipped) {
+            followed += 1;
+            sendLog('info', `  [follow] ✓ followed @${author}`);
+          } else if (res.ok && res.skipped) {
+            skipped += 1;
+            sendLog('info', `  [follow] · @${author} (${res.reason})`);
+          } else {
+            failed += 1;
+            sendLog('warn', `  [follow] ✗ @${author} (${res.reason})`);
+          }
         } else {
           failed += 1;
         }
@@ -449,24 +570,10 @@ async function actOnGridIterator(
       );
       failed += 1;
     }
+    visited += 1;
+    opts.onStep?.({ visited, liked, followed, skipped, failed });
     await waitFor(jitter(2200));
   }
-  return { visited: urls.length, liked, followed, skipped, failed };
+  return { visited, liked, followed, skipped, failed };
 }
 
-async function readPostAuthor(page: Page): Promise<string | null> {
-  try {
-    return (await page.evaluate(() => {
-      const header =
-        document.querySelector('article header') ??
-        document.querySelector('header');
-      if (!header) return null;
-      const a = header.querySelector<HTMLAnchorElement>('a');
-      if (!a) return null;
-      const m = (a.pathname || '').match(/^\/([A-Za-z0-9._]+)\/?$/);
-      return m ? m[1] ?? null : null;
-    })) as string | null;
-  } catch {
-    return null;
-  }
-}

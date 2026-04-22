@@ -4,6 +4,7 @@ import {
   CalendarClock,
   Check,
   Compass,
+  Film,
   Flame,
   Hash,
   Heart,
@@ -22,8 +23,10 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { DatePicker } from '@/components/common/DatePicker';
 import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
+import { ExternalLinkWord, HashtagLink } from '@/components/common/ScrapeSummary';
 import { Spinner } from '@/components/common/Spinner';
 import { TimePicker } from '@/components/common/TimePicker';
 import { useAccounts } from '@/context/AccountsContext';
@@ -40,7 +43,7 @@ import type {
 // User-facing action groups. The "like" / "follow" groups are fanned out
 // server-side into one or two concrete WarmupActions (hashtag_* and/or
 // location_*) depending on which targets the user filled in.
-type ActionGroupId = 'view_feed' | 'view_explore' | 'like' | 'follow' | 'combo';
+type ActionGroupId = 'view_feed' | 'view_explore' | 'view_reels' | 'like' | 'follow' | 'combo';
 
 interface ActionConfig {
   id: ActionGroupId;
@@ -61,6 +64,12 @@ const ACTIONS: ActionConfig[] = [
     label: 'Browse explore',
     description: 'Scroll the explore grid to pick up fresh impressions.',
     icon: Compass,
+  },
+  {
+    id: 'view_reels',
+    label: 'Browse reels',
+    description: 'Scroll the reels feed like a normal user.',
+    icon: Film,
   },
   {
     id: 'like',
@@ -180,22 +189,72 @@ function parseHmToSeconds(hm: string): number | null {
   return h * 3600 + min * 60;
 }
 
-function describeAction(action: WarmupAction): string {
+function LocationLink({ location }: { location: string }) {
+  const trimmed = location.trim();
+  const label = shortLocation(trimmed);
+  const url = /^https?:\/\//.test(trimmed)
+    ? trimmed
+    : `https://www.instagram.com/explore/locations/${trimmed.replace(/^\/+/, '')}/`;
+  return <ExternalLinkWord url={url} label={label} />;
+}
+
+function WarmupActionSummary({ action }: { action: WarmupAction }) {
   switch (action.type) {
     case 'view_feed':
-      return `Browse feed · ${action.durationSec}s`;
+      return <span>Browse feed {action.durationSec}s</span>;
     case 'view_explore':
-      return `Browse explore · ${action.durationSec}s`;
+      return <span>Browse explore {action.durationSec}s</span>;
+    case 'view_reels':
+      return <span>Browse reels {action.durationSec}s</span>;
     case 'hashtag_like':
-      return `Like ${action.count} posts · #${action.hashtag}`;
+      return (
+        <span className="inline-flex items-center gap-1">
+          Like {action.count} posts by hashtag <HashtagLink hashtag={action.hashtag} />
+        </span>
+      );
     case 'hashtag_follow':
-      return `Follow ${action.count} authors · #${action.hashtag}`;
+      return (
+        <span className="inline-flex items-center gap-1">
+          Follow {action.count} authors by hashtag <HashtagLink hashtag={action.hashtag} />
+        </span>
+      );
     case 'location_like':
-      return `Like ${action.count} posts · 📍${shortLocation(action.location)}`;
+      return (
+        <span className="inline-flex items-center gap-1">
+          Like {action.count} posts by location <LocationLink location={action.location} />
+        </span>
+      );
     case 'location_follow':
-      return `Follow ${action.count} authors · 📍${shortLocation(action.location)}`;
-    case 'combo':
-      return `Full warmup · #${action.hashtag}`;
+      return (
+        <span className="inline-flex items-center gap-1">
+          Follow {action.count} authors by location <LocationLink location={action.location} />
+        </span>
+      );
+    case 'combo': {
+      const browseSec = action.feedSec + action.exploreSec + action.reelsSec;
+      const parts: string[] = [];
+      if (browseSec > 0) parts.push(`browse ${browseSec}s`);
+      if (action.likeCount > 0) parts.push(`${action.likeCount} likes`);
+      if (action.followCount > 0) parts.push(`${action.followCount} follows`);
+      const body = parts.length > 0 ? parts.join(' + ') : 'no-op';
+      return (
+        <span className="inline-flex items-center gap-1">
+          Full warmup {body}
+          {action.hashtag ? (
+            <>
+              <span>by hashtag</span>
+              <HashtagLink hashtag={action.hashtag} />
+            </>
+          ) : null}
+          {action.location ? (
+            <>
+              <span>by location</span>
+              <LocationLink location={action.location} />
+            </>
+          ) : null}
+        </span>
+      );
+    }
   }
 }
 
@@ -751,7 +810,7 @@ function SchedulesTab({ accounts }: { accounts: AccountPublic[] }) {
                   <div className="flex flex-col gap-0.5 text-[11px]">
                     {row.actions.map((a, i) => (
                       <span key={i} className="text-muted-foreground">
-                        {describeAction(a)}
+                        <WarmupActionSummary action={a} />
                       </span>
                     ))}
                   </div>
@@ -840,7 +899,9 @@ function HistoryTab() {
               <td className="px-3 py-1.5 text-sm">
                 @{row.accountUsername ?? row.accountId?.slice(0, 8) ?? '—'}
               </td>
-              <td className="px-3 py-1.5 text-xs">{describeAction(row.action)}</td>
+              <td className="px-3 py-1.5 text-xs">
+                <WarmupActionSummary action={row.action} />
+              </td>
               <td className="px-3 py-1.5 text-right tabular-nums">{row.visited || '—'}</td>
               <td className="px-3 py-1.5 text-right tabular-nums">{row.liked || '—'}</td>
               <td className="px-3 py-1.5 text-right tabular-nums">{row.followed || '—'}</td>
@@ -941,6 +1002,18 @@ function ActionDialog({
           defaultSec={180}
           onClose={onClose}
           onRun={(durationSec) => onRun([{ type: 'view_explore', durationSec }])}
+        />
+      );
+    case 'view_reels':
+      return (
+        <DurationDialog
+          title="Browse reels"
+          description="Scroll the reels feed with human-like pauses. Safe, low-impact warmup."
+          icon={Film}
+          targetLabel={targetLabel}
+          defaultSec={180}
+          onClose={onClose}
+          onRun={(durationSec) => onRun([{ type: 'view_reels', durationSec }])}
         />
       );
     case 'like':
@@ -1072,37 +1145,57 @@ function HashLocDialog({
   const isLike = mode === 'like';
   const icon = isLike ? Heart : UserPlus;
   const title = isLike ? 'Like posts' : 'Follow authors';
+  const noun = isLike ? 'posts' : 'authors';
   const description = isLike
-    ? 'Like recent posts from a hashtag, a location, or both. Fill whichever you want — empty ones are skipped.'
-    : 'Follow authors of recent posts from a hashtag, a location, or both. Fill whichever you want — empty ones are skipped.';
+    ? 'Like recent posts from hashtag and/or location sources. Toggle each source on or off.'
+    : 'Follow authors of recent posts from hashtag and/or location sources. Toggle each source on or off.';
 
+  const [hashtagOn, setHashtagOn] = useState(true);
+  const [locationOn, setLocationOn] = useState(true);
   const [hashtag, setHashtag] = useState('');
   const [location, setLocation] = useState('');
   const [count, setCount] = useState(isLike ? 10 : 8);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const bothOn = hashtagOn && locationOn;
+  // Enforce ≥ 2 when both sources are on so the even split never hands 0 to
+  // one side (which would silently drop the enabled source).
+  const minTotal = bothOn ? 2 : 1;
+
   async function submit() {
-    const cleanTag = hashtag.trim().replace(/^#+/, '');
-    const cleanLoc = location.trim();
-    if (!cleanTag && !cleanLoc) {
-      setError('Fill a hashtag, a location, or both');
+    if (!hashtagOn && !locationOn) {
+      setError('Enable at least one source');
       return;
     }
-    const c = Math.max(1, Math.min(50, count));
+    const cleanTag = hashtag.trim().replace(/^#+/, '');
+    const cleanLoc = location.trim();
+    if (hashtagOn && !cleanTag) {
+      setError('Enter a hashtag or turn off the hashtag source');
+      return;
+    }
+    if (locationOn && !cleanLoc) {
+      setError('Enter a location or turn off the location source');
+      return;
+    }
+
+    const total = Math.max(minTotal, Math.min(100, count));
+    const tagCount = bothOn ? Math.ceil(total / 2) : total;
+    const locCount = bothOn ? Math.floor(total / 2) : total;
+
     const actions: WarmupAction[] = [];
-    if (cleanTag) {
+    if (hashtagOn) {
       actions.push(
         isLike
-          ? { type: 'hashtag_like', hashtag: cleanTag, count: c }
-          : { type: 'hashtag_follow', hashtag: cleanTag, count: c }
+          ? { type: 'hashtag_like', hashtag: cleanTag, count: tagCount }
+          : { type: 'hashtag_follow', hashtag: cleanTag, count: tagCount }
       );
     }
-    if (cleanLoc) {
+    if (locationOn) {
       actions.push(
         isLike
-          ? { type: 'location_like', location: cleanLoc, count: c }
-          : { type: 'location_follow', location: cleanLoc, count: c }
+          ? { type: 'location_like', location: cleanLoc, count: locCount }
+          : { type: 'location_follow', location: cleanLoc, count: locCount }
       );
     }
     setBusy(true);
@@ -1115,6 +1208,16 @@ function HashLocDialog({
       setBusy(false);
     }
   }
+
+  const splitPreview = (() => {
+    const total = Math.max(minTotal, Math.min(100, count || 0));
+    if (bothOn) {
+      return `${Math.ceil(total / 2)} from hashtag + ${Math.floor(total / 2)} from location`;
+    }
+    if (hashtagOn) return `${total} from hashtag`;
+    if (locationOn) return `${total} from location`;
+    return 'No source enabled';
+  })();
 
   return (
     <Dialog
@@ -1135,63 +1238,104 @@ function HashLocDialog({
       }
     >
       <DialogHeader icon={icon} targetLabel={targetLabel} />
-      <div className="space-y-3">
-        <div className="space-y-1">
-          <Label htmlFor="warmup-hashtag">Hashtag</Label>
-          <div className="flex h-10 items-stretch border border-border bg-background">
-            <div className="flex w-10 flex-none items-center justify-center border-r border-border text-muted-foreground">
-              <Hash className="h-4 w-4" />
-            </div>
-            <input
-              id="warmup-hashtag"
-              value={hashtag}
-              onChange={(e) => setHashtag(e.target.value)}
-              placeholder="e.g. fitness (optional)"
-              disabled={busy}
-              className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
-            />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="warmup-location">Location URL or slug</Label>
-          <div className="flex h-10 items-stretch border border-border bg-background">
-            <div className="flex w-10 flex-none items-center justify-center border-r border-border text-muted-foreground">
-              <MapPin className="h-4 w-4" />
-            </div>
-            <input
-              id="warmup-location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="212988663/buenos-aires-argentina (optional)"
-              disabled={busy}
-              className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
-            />
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Paste the part after <span className="font-mono">/explore/locations/</span>, or a full
-            Instagram location URL.
-          </p>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="warmup-count">
-            Number of {isLike ? 'posts' : 'authors'} per target
+      <div className="space-y-2">
+        <SourceToggleRow
+          icon={Hash}
+          title="Hashtag"
+          enabled={hashtagOn}
+          disabled={busy}
+          onToggle={setHashtagOn}
+          value={hashtag}
+          onChange={setHashtag}
+          placeholder="e.g. fitness"
+        />
+        <SourceToggleRow
+          icon={MapPin}
+          title="Location"
+          enabled={locationOn}
+          disabled={busy}
+          onToggle={setLocationOn}
+          value={location}
+          onChange={setLocation}
+          placeholder="212988663/buenos-aires-argentina"
+          hint={
+            <>
+              Paste the part after <span className="font-mono">/explore/locations/</span>, or a full URL.
+            </>
+          }
+        />
+
+        <div className="flex items-center gap-3 border-t border-border pt-3">
+          <Label htmlFor="warmup-count" className="flex-none text-xs">
+            Total {noun}
           </Label>
           <Input
             id="warmup-count"
             type="number"
-            min={1}
-            max={50}
+            min={minTotal}
+            max={100}
             value={count}
             onChange={(e) => setCount(Number(e.target.value) || 0)}
+            className="h-8 w-20"
           />
-          <p className="text-[11px] text-muted-foreground">
-            Between 1 and 50. If you fill both hashtag and location, this count runs twice (one
-            per target). Keep it under 15 for fresh / low-trust accounts.
-          </p>
+          <span className="text-[11px] text-muted-foreground">→ {splitPreview}</span>
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          Split evenly across enabled sources. Keep it under 15 for fresh / low-trust accounts.
+        </p>
       </div>
       {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
     </Dialog>
+  );
+}
+
+function SourceToggleRow({
+  icon: Icon,
+  title,
+  enabled,
+  disabled,
+  onToggle,
+  value,
+  onChange,
+  placeholder,
+  hint,
+}: {
+  icon: typeof Rss;
+  title: string;
+  enabled: boolean;
+  disabled?: boolean;
+  onToggle: (enabled: boolean) => void;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  hint?: React.ReactNode;
+}) {
+  return (
+    <div className={cn('space-y-1', !enabled && 'opacity-60')}>
+      <div className="flex h-8 items-stretch border border-border bg-background">
+        <div className="flex w-8 flex-none items-center justify-center border-r border-border text-muted-foreground">
+          <Icon className="h-3.5 w-3.5" />
+        </div>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled || !enabled}
+          className="min-w-0 flex-1 bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground disabled:opacity-50"
+        />
+        <div className="flex flex-none items-center justify-center border-l border-border px-2">
+          <Switch
+            checked={enabled}
+            onCheckedChange={onToggle}
+            disabled={disabled}
+            aria-label={title}
+          />
+        </div>
+      </div>
+      {hint && enabled ? (
+        <p className="pl-10 text-[10px] text-muted-foreground">{hint}</p>
+      ) : null}
+    </div>
   );
 }
 
@@ -1204,30 +1348,65 @@ function ComboDialog({
   onClose: () => void;
   onRun: (action: WarmupAction) => Promise<void>;
 }) {
-  const [feedSec, setFeedSec] = useState(120);
-  const [exploreSec, setExploreSec] = useState(120);
+  const [totalSec, setTotalSec] = useState(360);
+  const [hashtagOn, setHashtagOn] = useState(true);
+  const [locationOn, setLocationOn] = useState(true);
   const [hashtag, setHashtag] = useState('');
-  const [likeCount, setLikeCount] = useState(5);
-  const [followCount, setFollowCount] = useState(3);
+  const [location, setLocation] = useState('');
+  const [likeCount, setLikeCount] = useState(8);
+  const [followCount, setFollowCount] = useState(4);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const bothOn = hashtagOn && locationOn;
+
+  // Even 3-way split of the browse phase. Remainder falls into reels so
+  // feed + explore + reels adds up exactly to totalSec.
+  const clampedTotalSec = Math.max(0, Math.min(1800, totalSec));
+  const perPhase = Math.floor(clampedTotalSec / 3);
+  const feedSec = perPhase;
+  const exploreSec = perPhase;
+  const reelsSec = clampedTotalSec - perPhase * 2;
+
+  const splitPreview = (count: number): string => {
+    if (count <= 0) return 'skipped';
+    if (bothOn) return `${Math.ceil(count / 2)} hashtag + ${Math.floor(count / 2)} location`;
+    if (hashtagOn) return `${count} from hashtag`;
+    if (locationOn) return `${count} from location`;
+    return 'no source enabled';
+  };
+
   async function submit() {
-    const clean = hashtag.trim().replace(/^#+/, '');
-    if (!clean) {
-      setError('Enter a hashtag for the like/follow phase');
+    const cleanTag = hashtagOn ? hashtag.trim().replace(/^#+/, '') : '';
+    const cleanLoc = locationOn ? location.trim() : '';
+    const hasLikes = likeCount > 0;
+    const hasFollows = followCount > 0;
+
+    if ((hasLikes || hasFollows) && !hashtagOn && !locationOn) {
+      setError('Enable at least one source (hashtag or location) for likes/follows');
       return;
     }
+    if ((hasLikes || hasFollows) && hashtagOn && !cleanTag) {
+      setError('Enter a hashtag or turn off the hashtag source');
+      return;
+    }
+    if ((hasLikes || hasFollows) && locationOn && !cleanLoc) {
+      setError('Enter a location or turn off the location source');
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
       await onRun({
         type: 'combo',
-        feedSec: Math.max(0, Math.min(1800, feedSec)),
-        exploreSec: Math.max(0, Math.min(1800, exploreSec)),
-        hashtag: clean,
-        likeCount: Math.max(0, Math.min(50, likeCount)),
-        followCount: Math.max(0, Math.min(50, followCount)),
+        feedSec,
+        exploreSec,
+        reelsSec,
+        hashtag: cleanTag || null,
+        location: cleanLoc || null,
+        likeCount: Math.max(0, Math.min(100, likeCount)),
+        followCount: Math.max(0, Math.min(100, followCount)),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start warmup');
@@ -1241,7 +1420,7 @@ function ComboDialog({
       open
       onClose={busy ? () => {} : onClose}
       title="Full warmup"
-      description="Sequences feed → explore → like + follow on a hashtag. Most natural pattern for a fresh account."
+      description="Browses feed + explore + reels, then likes and follows on the enabled sources. Most natural pattern for a fresh account."
       className="max-w-lg"
       footer={
         <>
@@ -1257,73 +1436,93 @@ function ComboDialog({
     >
       <DialogHeader icon={Flame} targetLabel={targetLabel} />
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="combo-feed">Feed (seconds)</Label>
-            <Input
-              id="combo-feed"
-              type="number"
-              min={0}
-              max={1800}
-              value={feedSec}
-              onChange={(e) => setFeedSec(Number(e.target.value) || 0)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="combo-explore">Explore (seconds)</Label>
-            <Input
-              id="combo-explore"
-              type="number"
-              min={0}
-              max={1800}
-              value={exploreSec}
-              onChange={(e) => setExploreSec(Number(e.target.value) || 0)}
-            />
-          </div>
+        <div className="flex items-center gap-3">
+          <Label htmlFor="combo-total" className="flex-none text-xs">
+            Total browse duration
+          </Label>
+          <Input
+            id="combo-total"
+            type="number"
+            min={30}
+            max={1800}
+            value={totalSec}
+            onChange={(e) => setTotalSec(Number(e.target.value) || 0)}
+            className="h-8 w-24"
+          />
+          <span className="text-[11px] text-muted-foreground">
+            sec → {perPhase}s feed + {perPhase}s explore + {reelsSec}s reels
+          </span>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="combo-hashtag">Hashtag</Label>
-          <div className="flex h-10 items-stretch border border-border bg-background">
-            <div className="flex w-10 flex-none items-center justify-center border-r border-border text-muted-foreground">
-              <Hash className="h-4 w-4" />
-            </div>
-            <input
-              id="combo-hashtag"
-              value={hashtag}
-              onChange={(e) => setHashtag(e.target.value)}
-              placeholder="e.g. fitness"
-              disabled={busy}
-              className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
-            />
-          </div>
+
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Sources
+          </p>
+          <SourceToggleRow
+            icon={Hash}
+            title="Hashtag"
+            enabled={hashtagOn}
+            disabled={busy}
+            onToggle={setHashtagOn}
+            value={hashtag}
+            onChange={setHashtag}
+            placeholder="e.g. fitness"
+          />
+          <SourceToggleRow
+            icon={MapPin}
+            title="Location"
+            enabled={locationOn}
+            disabled={busy}
+            onToggle={setLocationOn}
+            value={location}
+            onChange={setLocation}
+            placeholder="212988663/buenos-aires-argentina"
+            hint={
+              <>
+                Paste the part after <span className="font-mono">/explore/locations/</span>, or a full URL.
+              </>
+            }
+          />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="combo-like">Likes</Label>
+
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Engagement
+          </p>
+          <div className="flex items-center gap-3">
+            <Label htmlFor="combo-like" className="flex-none text-xs w-24">
+              Total likes
+            </Label>
             <Input
               id="combo-like"
               type="number"
               min={0}
-              max={50}
+              max={100}
               value={likeCount}
               onChange={(e) => setLikeCount(Number(e.target.value) || 0)}
+              className="h-8 w-20"
             />
+            <span className="text-[11px] text-muted-foreground">→ {splitPreview(likeCount)}</span>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="combo-follow">Follows</Label>
+          <div className="flex items-center gap-3">
+            <Label htmlFor="combo-follow" className="flex-none text-xs w-24">
+              Total follows
+            </Label>
             <Input
               id="combo-follow"
               type="number"
               min={0}
-              max={50}
+              max={100}
               value={followCount}
               onChange={(e) => setFollowCount(Number(e.target.value) || 0)}
+              className="h-8 w-20"
             />
+            <span className="text-[11px] text-muted-foreground">→ {splitPreview(followCount)}</span>
           </div>
         </div>
+
         <p className="text-[11px] text-muted-foreground">
-          Set any of the four numbers to 0 to skip that phase. Likes + follows share the same
-          hashtag but run as separate passes.
+          Set likes or follows to 0 to skip that phase. Keep each under 15 for fresh / low-trust accounts.
         </p>
       </div>
       {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
@@ -1343,6 +1542,7 @@ interface ScheduleState {
   timeOfDay: string;
   feed: { enabled: boolean; durationSec: number };
   explore: { enabled: boolean; durationSec: number };
+  reels: { enabled: boolean; durationSec: number };
   // Unified "Like" and "Follow" groups: fill hashtag, location, or both.
   // buildActions() fans each filled target out into its own WarmupAction.
   like: { enabled: boolean; hashtag: string; location: string; count: number };
@@ -1358,6 +1558,7 @@ function defaultScheduleState(): ScheduleState {
     timeOfDay: '09:00',
     feed: { enabled: true, durationSec: 180 },
     explore: { enabled: true, durationSec: 180 },
+    reels: { enabled: false, durationSec: 180 },
     like: { enabled: false, hashtag: '', location: '', count: 8 },
     follow: { enabled: false, hashtag: '', location: '', count: 5 },
   };
@@ -1375,6 +1576,12 @@ function buildActions(state: ScheduleState): { actions: WarmupAction[]; error: s
     actions.push({
       type: 'view_explore',
       durationSec: Math.max(30, Math.min(1800, state.explore.durationSec)),
+    });
+  }
+  if (state.reels.enabled) {
+    actions.push({
+      type: 'view_reels',
+      durationSec: Math.max(30, Math.min(1800, state.reels.durationSec)),
     });
   }
   if (state.like.enabled) {
@@ -1543,6 +1750,17 @@ function ScheduleDialog({
               amountMin={30}
               amountMax={1800}
               onAmount={(durationSec) => patch({ explore: { ...state.explore, durationSec } })}
+            />
+            <ScheduleTableRow
+              icon={Film}
+              title="Browse reels"
+              enabled={state.reels.enabled}
+              onToggle={(enabled) => patch({ reels: { ...state.reels, enabled } })}
+              amount={state.reels.durationSec}
+              amountUnit="sec"
+              amountMin={30}
+              amountMax={1800}
+              onAmount={(durationSec) => patch({ reels: { ...state.reels, durationSec } })}
             />
             <ScheduleTableRow
               icon={Heart}

@@ -37,6 +37,7 @@ export type ScrapeKind = Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>;
 export type WarmupAction =
   | { type: 'view_feed'; durationSec: number }
   | { type: 'view_explore'; durationSec: number }
+  | { type: 'view_reels'; durationSec: number }
   | { type: 'hashtag_like'; hashtag: string; count: number }
   | { type: 'hashtag_follow'; hashtag: string; count: number }
   | { type: 'location_like'; location: string; count: number }
@@ -45,7 +46,9 @@ export type WarmupAction =
       type: 'combo';
       feedSec: number;
       exploreSec: number;
-      hashtag: string;
+      reelsSec: number;
+      hashtag: string | null;
+      location: string | null;
       likeCount: number;
       followCount: number;
     };

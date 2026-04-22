@@ -36,6 +36,7 @@ export {
   likeNPostsOfUser,
   viewFeed,
   viewExplore,
+  viewReels,
   iterHashtagAndAct,
   iterLocationAndAct,
 } from './interactions';

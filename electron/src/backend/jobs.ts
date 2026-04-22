@@ -28,6 +28,7 @@ export type JobKind =
 export type WarmupAction =
   | { type: 'view_feed'; durationSec: number }
   | { type: 'view_explore'; durationSec: number }
+  | { type: 'view_reels'; durationSec: number }
   | { type: 'hashtag_like'; hashtag: string; count: number }
   | { type: 'hashtag_follow'; hashtag: string; count: number }
   | { type: 'location_like'; location: string; count: number }
@@ -36,7 +37,9 @@ export type WarmupAction =
       type: 'combo';
       feedSec: number;
       exploreSec: number;
-      hashtag: string;
+      reelsSec: number;
+      hashtag: string | null;
+      location: string | null;
       likeCount: number;
       followCount: number;
     };
@@ -840,7 +843,8 @@ export function startWarmup(args: StartWarmupArgs): string {
 function validateWarmupAction(action: WarmupAction): WarmupAction {
   switch (action.type) {
     case 'view_feed':
-    case 'view_explore': {
+    case 'view_explore':
+    case 'view_reels': {
       const durationSec = Math.max(30, Math.min(1800, Math.floor(action.durationSec)));
       return { type: action.type, durationSec };
     }
@@ -859,15 +863,22 @@ function validateWarmupAction(action: WarmupAction): WarmupAction {
       return { type: action.type, location, count };
     }
     case 'combo': {
-      const hashtag = (action.hashtag || '').replace(/^#+/, '').trim();
-      if (!hashtag) throw new Error('Hashtag is required for the combo warmup');
+      const hashtag = action.hashtag ? action.hashtag.replace(/^#+/, '').trim() : '';
+      const location = action.location ? action.location.trim() : '';
+      const likeCount = Math.max(0, Math.min(100, Math.floor(action.likeCount)));
+      const followCount = Math.max(0, Math.min(100, Math.floor(action.followCount)));
+      if ((likeCount > 0 || followCount > 0) && !hashtag && !location) {
+        throw new Error('Enable at least one source (hashtag or location) for likes/follows');
+      }
       return {
         type: 'combo',
         feedSec: Math.max(0, Math.min(1800, Math.floor(action.feedSec))),
         exploreSec: Math.max(0, Math.min(1800, Math.floor(action.exploreSec))),
-        hashtag,
-        likeCount: Math.max(0, Math.min(50, Math.floor(action.likeCount))),
-        followCount: Math.max(0, Math.min(50, Math.floor(action.followCount))),
+        reelsSec: Math.max(0, Math.min(1800, Math.floor(action.reelsSec))),
+        hashtag: hashtag || null,
+        location: location || null,
+        likeCount,
+        followCount,
       };
     }
     default:

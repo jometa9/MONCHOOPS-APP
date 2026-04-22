@@ -70,7 +70,7 @@ function Unknown({ label }: { label: string }) {
   return <span>{label}</span>;
 }
 
-function ExternalLinkWord({ url, label }: { url: string; label: string }) {
+export function ExternalLinkWord({ url, label }: { url: string; label: string }) {
   return (
     <button
       type="button"
@@ -90,9 +90,10 @@ function ProfileLink({ username }: { username: string }) {
   return <ExternalLinkWord url={url} label={`@${username}`} />;
 }
 
-function HashtagLink({ hashtag }: { hashtag: string }) {
-  const url = `https://www.instagram.com/explore/tags/${encodeURIComponent(hashtag)}/`;
-  return <ExternalLinkWord url={url} label={`#${hashtag}`} />;
+export function HashtagLink({ hashtag }: { hashtag: string }) {
+  const clean = hashtag.replace(/^#+/, '');
+  const url = `https://www.instagram.com/explore/tags/${encodeURIComponent(clean)}/`;
+  return <ExternalLinkWord url={url} label={`#${clean}`} />;
 }
 
 // Convenience wrapper for call sites that already have a ScrapeResultPublic.
