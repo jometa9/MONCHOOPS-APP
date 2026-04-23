@@ -18,6 +18,7 @@ function compileElectron() {
   const result = spawnSync(tscBin, ['-p', path.join(repoRoot, 'electron', 'tsconfig.json')], {
     stdio: 'inherit',
     cwd: repoRoot,
+    shell: process.platform === 'win32',
   });
   if (result.status !== 0) {
     console.error('[run-electron-dev] tsc failed');
@@ -59,7 +60,7 @@ async function waitForVite(timeoutMs = 30_000) {
   const child = spawn(ELECTRON_BIN, [path.join(repoRoot, 'electron', 'dist', 'main.js')], {
     stdio: 'inherit',
     cwd: repoRoot,
-    env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' },
+    env: (({ ELECTRON_RUN_AS_NODE, ...rest }) => ({ ...rest, ELECTRON_ENABLE_LOGGING: '1' }))(process.env),
   });
   child.on('close', (code) => process.exit(code ?? 0));
 })();
