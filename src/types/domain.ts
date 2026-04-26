@@ -30,14 +30,24 @@ export type JobKind =
   | 'scrape_by_post'
   | 'scrape_by_hashtag'
   | 'scrape_by_location'
-  | 'warmup';
+  | 'warmup'
+  | 'inbox_poll'
+  | 'inbox_backfill'
+  | 'inbox_thread_fetch'
+  | 'inbox_send'
+  | 'story_watcher'
+  | 'followup_send';
 
-export type ScrapeKind = Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>;
+export type ScrapeKind = Extract<
+  JobKind,
+  'scrape_by_username' | 'scrape_by_post' | 'scrape_by_hashtag' | 'scrape_by_location'
+>;
 
 export type WarmupAction =
   | { type: 'view_feed'; durationSec: number }
   | { type: 'view_explore'; durationSec: number }
   | { type: 'view_reels'; durationSec: number }
+  | { type: 'view_feed_stories'; maxRings: number; perStoryDwellSec: number }
   | { type: 'hashtag_like'; hashtag: string; count: number }
   | { type: 'hashtag_follow'; hashtag: string; count: number }
   | { type: 'location_like'; location: string; count: number }
@@ -56,6 +66,169 @@ export type WarmupAction =
 export interface MassDmInteractionsConfig {
   follow: boolean;
   likeCount: number;
+  watchStories?: boolean;
+  storyDwellSec?: number;
+}
+
+export interface InboxThreadPublic {
+  id: string;
+  accountId: string;
+  accountUsername: string | null;
+  accountProfilePicUrl: string | null;
+  igThreadId: string;
+  peerUsername: string;
+  peerDisplayName: string | null;
+  peerPicUrl: string | null;
+  isGroup: boolean;
+  lastMessageAt: number | null;
+  lastMessagePreview: string | null;
+  lastMessageFromMe: boolean;
+  unreadCount: number;
+  isPinned: boolean;
+  aiResponderEnabled: boolean;
+  followupDisabled: boolean;
+  historyBackfilledAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+  draft: { body: string; model: string | null; createdAt: number } | null;
+}
+
+export interface InboxMessagePublic {
+  id: string;
+  threadId: string;
+  igMessageId: string | null;
+  direction: 'in' | 'out';
+  senderUsername: string;
+  body: string | null;
+  mediaKind: string | null;
+  mediaCaption: string | null;
+  sentAt: number;
+  source: string;
+}
+
+export interface InboxSyncStatePublic {
+  accountId: string;
+  lastPollStartedAt: number | null;
+  lastPollFinishedAt: number | null;
+  lastPollStatus: string | null;
+  lastPollError: string | null;
+  threadsSeen: number;
+  activeMonitoring: boolean;
+  nextPollDueAt: number | null;
+}
+
+export type AnthropicModelId =
+  | 'claude-sonnet-4-6'
+  | 'claude-opus-4-7'
+  | 'claude-haiku-4-5';
+
+export interface AnthropicModelInfo {
+  id: AnthropicModelId;
+  label: string;
+  description: string;
+  inputCostPerMTok: number;
+  outputCostPerMTok: number;
+  cacheReadCostPerMTok: number;
+  cacheWriteCostPerMTok: number;
+}
+
+export interface AiSettings {
+  provider: 'anthropic';
+  model: AnthropicModelId;
+  defaultMaxTokens: number;
+  hasApiKey: boolean;
+}
+
+export type ResponderMode = 'suggest' | 'auto';
+
+export interface AccountAiSettings {
+  accountId: string;
+  enabled: boolean;
+  mode: ResponderMode;
+  maxPerHour: number;
+  maxPerDay: number;
+}
+
+export interface AiLogEntry {
+  id: number;
+  threadId: string;
+  messageId: string | null;
+  status: string;
+  reason: string | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  costUsd: number | null;
+  model: string | null;
+  createdAt: number;
+}
+
+export interface AiCostSummary {
+  monthSentCount: number;
+  monthSuggestedCount: number;
+  monthCostUsd: number;
+}
+
+export interface FollowupSequencePublic {
+  id: string;
+  name: string;
+  isArchived: boolean;
+  stepCount: number;
+  activeEnrollmentCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface FollowupStepPublic {
+  id: string;
+  sequenceId: string;
+  stepIndex: number;
+  delayHours: number;
+  variantIds: number[];
+  stopOnReply: boolean;
+}
+
+export type FollowupEnrollmentStatus =
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'cancelled'
+  | 'replied';
+
+export interface FollowupEnrollmentPublic {
+  id: string;
+  sequenceId: string;
+  sequenceName: string | null;
+  accountId: string;
+  accountUsername: string | null;
+  threadId: string | null;
+  peerUsername: string;
+  currentStepIndex: number;
+  status: FollowupEnrollmentStatus;
+  enrolledAt: number;
+  nextRunAt: number;
+  lastStepRunAt: number | null;
+  cancelledReason: string | null;
+}
+
+export interface CreateSequenceInput {
+  name: string;
+  steps: Array<{ delayHours: number; variantIds: number[]; stopOnReply: boolean }>;
+}
+
+export interface ListEnrollmentsArgs {
+  status?: FollowupEnrollmentStatus | null;
+  accountId?: string | null;
+  threadId?: string | null;
+  limit?: number;
+}
+
+export interface StartStoryWatcherArgs {
+  accountId: string;
+  usernames: string[];
+  perUserDwellSec: number;
+  intervalBetweenUsersSec: number;
+  skipIfNoStory: boolean;
+  maxStoriesPerUser: number;
 }
 
 export interface WarmupResultPublic {

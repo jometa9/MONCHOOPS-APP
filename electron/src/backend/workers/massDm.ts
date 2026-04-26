@@ -9,13 +9,17 @@
 // modal flow only when the shortlink doesn't produce a composer.
 
 import fs from 'fs';
-import { attachDialogDismisser, ensureLoggedIn, followUser, likeNPostsOfUser, waitForLocatorReady, waitForPageReady } from './ig';
+import { attachDialogDismisser, ensureLoggedIn, followUser, likeNPostsOfUser, viewUserStories, waitForLocatorReady, waitForPageReady } from './ig';
 import { isCancelled, launchBrowser, jitter, onInit, safeGoto, sendDmSend, sendError, sendLog, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
 import type { AccountSecrets } from '../accounts';
 
 interface InteractionsConfig {
   follow: boolean;
   likeCount: number;
+  /** When true, watch the target user's stories (silently) before the DM. */
+  watchStories?: boolean;
+  /** Average dwell per story in seconds. Each story is jittered ±40%. */
+  storyDwellSec?: number;
 }
 
 interface MassDmInit {
@@ -83,8 +87,15 @@ onInit<MassDmInit>(async (init) => {
 
   const interactions =
     init.interactions &&
-    (init.interactions.follow || init.interactions.likeCount > 0)
-      ? { follow: !!init.interactions.follow, likeCount: Math.max(0, Math.min(5, Math.floor(init.interactions.likeCount))) }
+    (init.interactions.follow ||
+      init.interactions.likeCount > 0 ||
+      init.interactions.watchStories)
+      ? {
+          follow: !!init.interactions.follow,
+          likeCount: Math.max(0, Math.min(5, Math.floor(init.interactions.likeCount))),
+          watchStories: !!init.interactions.watchStories,
+          storyDwellSec: Math.max(1, Math.min(15, Math.floor(init.interactions.storyDwellSec ?? 3))),
+        }
       : null;
 
   sendProgress(0, usernames.length);
@@ -453,6 +464,20 @@ async function runPreDmInteractions(
   username: string,
   cfg: InteractionsConfig
 ): Promise<void> {
+  if (cfg.watchStories) {
+    try {
+      const dwellMs = Math.max(1, cfg.storyDwellSec ?? 3) * 1000;
+      const r = await viewUserStories(page, username, {
+        perStoryDwellMs: [Math.floor(dwellMs * 0.7), Math.floor(dwellMs * 1.3)],
+        maxStories: 5,
+      });
+      if (r.hadStories) sendLog('info', `Watched ${r.watched} stories of @${username}`);
+    } catch (err) {
+      sendLog('warn', `Story view for @${username} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    await waitFor(jitter(1500));
+    if (isCancelled()) return;
+  }
   if (cfg.follow) {
     const res = await followUser(page, username);
     if (res.ok && !res.skipped) sendLog('info', `Followed @${username}`);

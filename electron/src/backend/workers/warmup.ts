@@ -20,6 +20,7 @@ import {
   iterLocationAndAct,
   viewExplore,
   viewFeed,
+  viewOwnFeedStories,
   viewReels,
 } from './ig';
 import type { AccountSecrets } from '../accounts';
@@ -28,6 +29,7 @@ export type WarmupAction =
   | { type: 'view_feed'; durationSec: number }
   | { type: 'view_explore'; durationSec: number }
   | { type: 'view_reels'; durationSec: number }
+  | { type: 'view_feed_stories'; maxRings: number; perStoryDwellSec: number }
   | { type: 'hashtag_like'; hashtag: string; count: number }
   | { type: 'hashtag_follow'; hashtag: string; count: number }
   | { type: 'location_like'; location: string; count: number }
@@ -115,6 +117,21 @@ async function runAction(page: any, action: WarmupAction): Promise<WarmupResult>
       await viewReels(page, ms);
       sendProgress(1, 1);
       return { action: 'view_reels', viewedMs: ms };
+    }
+    case 'view_feed_stories': {
+      const dwellMs = Math.max(800, action.perStoryDwellSec * 1000);
+      sendLog('info', `Watching feed stories (max ${action.maxRings} rings)`);
+      sendProgress(0, 1);
+      const r = await viewOwnFeedStories(page, {
+        maxStoryRings: action.maxRings,
+        perStoryDwellMs: [Math.floor(dwellMs * 0.7), Math.floor(dwellMs * 1.3)],
+      });
+      sendProgress(1, 1);
+      return {
+        action: 'view_feed_stories',
+        visited: r.rings,
+        viewedMs: r.totalDwellMs,
+      };
     }
     case 'hashtag_like': {
       const count = Math.max(1, action.count);

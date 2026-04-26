@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Database, Flame, FolderTree, History, Home, Instagram, ListTodo, LogOut, MessageSquareText, Send, Settings, Users } from 'lucide-react';
+import { Database, Eye, Flame, FolderTree, History, Home, Inbox, Instagram, ListTodo, LogOut, MessageSquareText, Send, Settings, Sparkles, Users, Workflow } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/context/SessionContext';
 import { useJobs } from '@/context/JobsContext';
@@ -21,9 +21,13 @@ interface Item {
 const items: Item[] = [
   { to: '/', label: 'Home', icon: Home },
   { to: '/accounts', label: 'Accounts', icon: Instagram },
+  { to: '/inbox', label: 'Inbox', icon: Inbox },
   { to: '/scrape', label: 'Scrape Leads', icon: Users },
   { to: '/warmup', label: 'Warmup', icon: Flame },
+  { to: '/story-watcher', label: 'Story Watcher', icon: Eye },
   { to: '/cold-dm', label: 'Cold DM', icon: Send },
+  { to: '/auto-responder', label: 'Auto-Responder', icon: Sparkles },
+  { to: '/followups', label: 'Follow-ups', icon: Workflow },
   { to: '/queue', label: 'Queue', icon: ListTodo },
   { to: '/data', label: 'Leads', icon: Database },
   { to: '/categories', label: 'Categories', icon: FolderTree },

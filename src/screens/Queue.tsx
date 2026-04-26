@@ -30,6 +30,12 @@ const NON_SCRAPE_TITLE: Record<Exclude<JobKind, ScrapeKind>, string> = {
   login: 'Login',
   mass_dm: 'Cold DM campaign',
   warmup: 'Warmup',
+  inbox_poll: 'Inbox sync',
+  inbox_backfill: 'Inbox backfill',
+  inbox_thread_fetch: 'Inbox thread fetch',
+  inbox_send: 'Inbox send',
+  story_watcher: 'Story watcher',
+  followup_send: 'Follow-up send',
 };
 
 function formatElapsed(startedAt: number): string {

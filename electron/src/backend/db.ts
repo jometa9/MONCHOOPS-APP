@@ -333,7 +333,146 @@ function migrate(db: Database): void {
     db.exec(`ALTER TABLE mass_dm_sends ADD COLUMN message TEXT;`);
   }
 
-  db.pragma('user_version = 16');
+  if (current < 17) {
+    // Phase 7 — Unified Inbox + AI Responder + Follow-ups.
+    // One thread per (account, IG conversation). Messages live in inbox_messages.
+    // Sync state per account drives the polling scheduler.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS inbox_threads (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        ig_thread_id TEXT NOT NULL,
+        peer_username TEXT NOT NULL,
+        peer_display_name TEXT,
+        peer_pic_url TEXT,
+        is_group INTEGER NOT NULL DEFAULT 0,
+        last_message_at INTEGER,
+        last_message_preview TEXT,
+        last_message_from_me INTEGER NOT NULL DEFAULT 0,
+        unread_count INTEGER NOT NULL DEFAULT 0,
+        is_pinned INTEGER NOT NULL DEFAULT 0,
+        ai_responder_enabled INTEGER NOT NULL DEFAULT 0,
+        followup_disabled INTEGER NOT NULL DEFAULT 0,
+        history_backfilled_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(account_id, ig_thread_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_inbox_threads_account_lastmsg
+        ON inbox_threads(account_id, last_message_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_inbox_threads_unread
+        ON inbox_threads(unread_count) WHERE unread_count > 0;
+
+      CREATE TABLE IF NOT EXISTS inbox_messages (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL REFERENCES inbox_threads(id) ON DELETE CASCADE,
+        ig_message_id TEXT,
+        direction TEXT NOT NULL,
+        sender_username TEXT NOT NULL,
+        body TEXT,
+        media_kind TEXT,
+        media_caption TEXT,
+        sent_at INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        UNIQUE(thread_id, ig_message_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_inbox_messages_thread_sent
+        ON inbox_messages(thread_id, sent_at ASC);
+
+      CREATE TABLE IF NOT EXISTS inbox_sync_state (
+        account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+        last_poll_started_at INTEGER,
+        last_poll_finished_at INTEGER,
+        last_poll_status TEXT,
+        last_poll_error TEXT,
+        threads_seen INTEGER NOT NULL DEFAULT 0,
+        active_monitoring INTEGER NOT NULL DEFAULT 0,
+        next_poll_due_at INTEGER
+      );
+
+      CREATE TABLE IF NOT EXISTS inbox_drafts (
+        thread_id TEXT PRIMARY KEY REFERENCES inbox_threads(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        model TEXT,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS ai_responder_account_settings (
+        account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        mode TEXT NOT NULL DEFAULT 'suggest',
+        max_per_hour INTEGER NOT NULL DEFAULT 10,
+        max_per_day INTEGER NOT NULL DEFAULT 50
+      );
+
+      CREATE TABLE IF NOT EXISTS ai_responder_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        thread_id TEXT NOT NULL REFERENCES inbox_threads(id) ON DELETE CASCADE,
+        message_id TEXT REFERENCES inbox_messages(id) ON DELETE SET NULL,
+        status TEXT NOT NULL,
+        reason TEXT,
+        prompt_tokens INTEGER,
+        completion_tokens INTEGER,
+        cost_usd REAL,
+        model TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_log_thread
+        ON ai_responder_log(thread_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ai_log_created
+        ON ai_responder_log(created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS followup_sequences (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_archived INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS followup_steps (
+        id TEXT PRIMARY KEY,
+        sequence_id TEXT NOT NULL REFERENCES followup_sequences(id) ON DELETE CASCADE,
+        step_index INTEGER NOT NULL,
+        delay_hours INTEGER NOT NULL,
+        variant_ids_json TEXT NOT NULL,
+        stop_on_reply INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(sequence_id, step_index)
+      );
+
+      CREATE TABLE IF NOT EXISTS followup_enrollments (
+        id TEXT PRIMARY KEY,
+        sequence_id TEXT NOT NULL REFERENCES followup_sequences(id) ON DELETE CASCADE,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        thread_id TEXT REFERENCES inbox_threads(id) ON DELETE SET NULL,
+        peer_username TEXT NOT NULL,
+        current_step_index INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        enrolled_at INTEGER NOT NULL,
+        next_run_at INTEGER NOT NULL,
+        last_step_run_at INTEGER,
+        cancelled_reason TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_followup_due
+        ON followup_enrollments(status, next_run_at);
+      CREATE INDEX IF NOT EXISTS idx_followup_thread
+        ON followup_enrollments(thread_id);
+
+      CREATE TABLE IF NOT EXISTS followup_send_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        enrollment_id TEXT NOT NULL REFERENCES followup_enrollments(id) ON DELETE CASCADE,
+        step_index INTEGER NOT NULL,
+        variant_id TEXT,
+        message_id TEXT REFERENCES inbox_messages(id) ON DELETE SET NULL,
+        status TEXT NOT NULL,
+        reason TEXT,
+        ran_at INTEGER NOT NULL
+      );
+    `);
+  }
+
+  db.pragma('user_version = 17');
 }
 
 // meta helpers — used by license.ts for ad-hoc key/value state.

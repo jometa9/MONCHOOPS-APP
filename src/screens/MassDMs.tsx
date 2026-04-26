@@ -68,16 +68,20 @@ interface InteractionsState {
   enabled: boolean;
   follow: boolean;
   likeCount: number;
+  watchStories: boolean;
+  storyDwellSec: number;
 }
 
 const DEFAULT_INTERACTIONS: InteractionsState = {
   enabled: false,
   follow: false,
   likeCount: 0,
+  watchStories: false,
+  storyDwellSec: 3,
 };
 
 function interactionsHaveEffect(s: InteractionsState): boolean {
-  return s.enabled && (s.follow || s.likeCount > 0);
+  return s.enabled && (s.follow || s.likeCount > 0 || s.watchStories);
 }
 
 function formatKind(kind: string): string {
@@ -87,7 +91,12 @@ function formatKind(kind: string): string {
 
 function interactionsPayload(s: InteractionsState): MassDmInteractionsConfig | null {
   if (!interactionsHaveEffect(s)) return null;
-  return { follow: s.follow, likeCount: s.likeCount };
+  return {
+    follow: s.follow,
+    likeCount: s.likeCount,
+    watchStories: s.watchStories,
+    storyDwellSec: s.storyDwellSec,
+  };
 }
 
 export function MassDMs() {
@@ -125,7 +134,11 @@ export function MassDMs() {
     1: !!accountId,
     2: !!source,
     3: nonEmptyVariants.length > 0 && intervalSec >= 30,
-    4: !interactions.enabled || interactions.follow || interactions.likeCount > 0,
+    4:
+      !interactions.enabled ||
+      interactions.follow ||
+      interactions.likeCount > 0 ||
+      interactions.watchStories,
     5: true,
   };
 
@@ -1302,6 +1315,38 @@ function InteractionsStep({
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="border border-border bg-background">
+            <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              <div className="flex min-w-0 items-start gap-2">
+                <Sparkles className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
+                <div>
+                  <div className="font-medium">Watch their stories first</div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Silently views any active stories before the DM. Adds a few seconds per
+                    target; nudges reply rate up. Skipped when no story is available.
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={value.watchStories}
+                onCheckedChange={(watchStories) => update({ watchStories })}
+              />
+            </div>
+            {value.watchStories ? (
+              <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-xs">
+                <span className="text-muted-foreground">Dwell per story (s)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={15}
+                  value={value.storyDwellSec}
+                  onChange={(e) => update({ storyDwellSec: Number(e.target.value) || 3 })}
+                  className="h-7 w-16 rounded border border-border bg-transparent px-2 text-right outline-none focus:border-primary"
+                />
+              </div>
+            ) : null}
           </div>
 
           <p className="text-[11px] text-muted-foreground">

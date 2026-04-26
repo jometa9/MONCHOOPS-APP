@@ -43,7 +43,14 @@ import type {
 // User-facing action groups. The "like" / "follow" groups are fanned out
 // server-side into one or two concrete WarmupActions (hashtag_* and/or
 // location_*) depending on which targets the user filled in.
-type ActionGroupId = 'view_feed' | 'view_explore' | 'view_reels' | 'like' | 'follow' | 'combo';
+type ActionGroupId =
+  | 'view_feed'
+  | 'view_explore'
+  | 'view_reels'
+  | 'view_feed_stories'
+  | 'like'
+  | 'follow'
+  | 'combo';
 
 interface ActionConfig {
   id: ActionGroupId;
@@ -69,6 +76,12 @@ const ACTIONS: ActionConfig[] = [
     id: 'view_reels',
     label: 'Browse reels',
     description: 'Scroll the reels feed like a normal user.',
+    icon: Film,
+  },
+  {
+    id: 'view_feed_stories',
+    label: 'Watch feed stories',
+    description: 'Open and watch the top story rings on the home feed.',
     icon: Film,
   },
   {
@@ -206,6 +219,12 @@ function WarmupActionSummary({ action }: { action: WarmupAction }) {
       return <span>Browse explore {action.durationSec}s</span>;
     case 'view_reels':
       return <span>Browse reels {action.durationSec}s</span>;
+    case 'view_feed_stories':
+      return (
+        <span>
+          Watch {action.maxRings} feed stories ({action.perStoryDwellSec}s each)
+        </span>
+      );
     case 'hashtag_like':
       return (
         <span className="inline-flex items-center gap-1">
@@ -1014,6 +1033,26 @@ function ActionDialog({
           defaultSec={180}
           onClose={onClose}
           onRun={(durationSec) => onRun([{ type: 'view_reels', durationSec }])}
+        />
+      );
+    case 'view_feed_stories':
+      return (
+        <DurationDialog
+          title="Watch feed stories"
+          description="Open the top story rings on the home feed and watch a few stories per ring."
+          icon={Film}
+          targetLabel={targetLabel}
+          defaultSec={5}
+          onClose={onClose}
+          onRun={(perStoryDwellSec) =>
+            onRun([
+              {
+                type: 'view_feed_stories',
+                maxRings: 6,
+                perStoryDwellSec: Math.max(1, Math.min(15, perStoryDwellSec)),
+              },
+            ])
+          }
         />
       );
     case 'like':
