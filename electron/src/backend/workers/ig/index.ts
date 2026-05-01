@@ -47,19 +47,6 @@ export type {
   HashtagActResult,
 } from './interactions';
 
-export {
-  fetchInboxThreads,
-  fetchThreadMessages,
-  sendThreadMessage,
-} from './inbox';
-export type {
-  ParsedThreadDelta,
-  ParsedMessageDelta,
-  FetchInboxOpts,
-  FetchThreadMessagesOpts,
-  SendMessageResult,
-} from './inbox';
-
 export { viewOwnFeedStories, viewUserStories } from './stories';
 export type {
   OwnFeedStoriesOpts,

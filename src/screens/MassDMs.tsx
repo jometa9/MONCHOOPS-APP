@@ -134,11 +134,7 @@ export function MassDMs() {
     1: !!accountId,
     2: !!source,
     3: nonEmptyVariants.length > 0 && intervalSec >= 30,
-    4:
-      !interactions.enabled ||
-      interactions.follow ||
-      interactions.likeCount > 0 ||
-      interactions.watchStories,
+    4: true,
     5: true,
   };
 
@@ -147,6 +143,12 @@ export function MassDMs() {
   }
   function next() {
     if (!canContinue[step]) return;
+    // Leaving Interactions with the section toggled on but no concrete action
+    // chosen is treated as "no interactions" — collapse the master toggle so
+    // the Review summary doesn't render an empty-interactions tip.
+    if (step === 4 && interactions.enabled && !interactionsHaveEffect(interactions)) {
+      setInteractions((prev) => ({ ...prev, enabled: false }));
+    }
     if (step < 5) setStep((step + 1) as Step);
   }
   function back() {
@@ -1364,6 +1366,7 @@ function summariseInteractions(s: InteractionsState): string {
   const parts: string[] = [];
   if (s.follow) parts.push('Follow');
   if (s.likeCount > 0) parts.push(`Like ${s.likeCount} post${s.likeCount === 1 ? '' : 's'}`);
+  if (s.watchStories) parts.push(`Watch stories ${s.storyDwellSec}s`);
   return parts.join(' · ');
 }
 

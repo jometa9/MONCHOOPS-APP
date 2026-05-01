@@ -22,10 +22,6 @@ import { Categories } from '@/screens/Categories';
 import { CategoryLeadsDetail } from '@/screens/CategoryLeadsDetail';
 import { MessageVariants } from '@/screens/MessageVariants';
 import { Settings } from '@/screens/Settings';
-import { Inbox } from '@/screens/Inbox';
-import { AutoResponder } from '@/screens/AutoResponder';
-import { Followups } from '@/screens/Followups';
-import { StoryWatcher } from '@/screens/StoryWatcher';
 
 function Gate() {
   const { status, session } = useSession();
@@ -74,10 +70,6 @@ function Gate() {
             <Route path="categories" element={<Categories />} />
             <Route path="categories/:categoryId" element={<CategoryLeadsDetail />} />
             <Route path="message-variants" element={<MessageVariants />} />
-            <Route path="inbox" element={<Inbox />} />
-            <Route path="auto-responder" element={<AutoResponder />} />
-            <Route path="followups" element={<Followups />} />
-            <Route path="story-watcher" element={<StoryWatcher />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

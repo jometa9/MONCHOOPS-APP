@@ -23,19 +23,14 @@ export type JobKind =
   | 'scrape_by_post'
   | 'scrape_by_hashtag'
   | 'scrape_by_location'
-  | 'warmup'
-  | 'inbox_poll'
-  | 'inbox_backfill'
-  | 'inbox_thread_fetch'
-  | 'inbox_send'
-  | 'story_watcher'
-  | 'followup_send';
+  | 'warmup';
 
 export type WarmupAction =
   | { type: 'view_feed'; durationSec: number }
   | { type: 'view_explore'; durationSec: number }
   | { type: 'view_reels'; durationSec: number }
-  | { type: 'view_feed_stories'; maxRings: number; perStoryDwellSec: number }
+  | { type: 'view_feed_stories'; durationSec: number }
+  | { type: 'view_user_stories'; usernamesCsvPath: string; durationSec: number }
   | { type: 'hashtag_like'; hashtag: string; count: number }
   | { type: 'hashtag_follow'; hashtag: string; count: number }
   | { type: 'location_like'; location: string; count: number }
@@ -175,15 +170,7 @@ export type JobEvent =
   | { type: 'jobs:progress'; jobId: string; done: number; total: number | null; item?: string }
   | { type: 'jobs:done'; jobId: string; status: JobStatus }
   | { type: 'jobs:accountDrained'; accountId: string; status: JobStatus }
-  | { type: 'jobs:loginFinished'; jobId: string; status: JobStatus }
-  | {
-      type: 'jobs:result';
-      jobId: string;
-      kind: JobKind;
-      accountId: string | null;
-      status: JobStatus;
-      result: unknown;
-    };
+  | { type: 'jobs:loginFinished'; jobId: string; status: JobStatus };
 
 const listeners = new Set<Listener>();
 const runningChildren = new Map<string, ChildProcess>();
@@ -576,16 +563,6 @@ function workerForKind(kind: JobKind): string {
   if (kind === 'login') return workerScriptPath('login');
   if (kind === 'mass_dm') return workerScriptPath('massDm');
   if (kind === 'warmup') return workerScriptPath('warmup');
-  if (
-    kind === 'inbox_poll' ||
-    kind === 'inbox_backfill' ||
-    kind === 'inbox_thread_fetch' ||
-    kind === 'inbox_send'
-  ) {
-    return workerScriptPath('inbox');
-  }
-  if (kind === 'story_watcher') return workerScriptPath('storyWatcher');
-  if (kind === 'followup_send') return workerScriptPath('massDm');
   return workerScriptPath('scrape');
 }
 
@@ -881,9 +858,14 @@ function validateWarmupAction(action: WarmupAction): WarmupAction {
       return { type: action.type, durationSec };
     }
     case 'view_feed_stories': {
-      const maxRings = Math.max(1, Math.min(15, Math.floor(action.maxRings)));
-      const perStoryDwellSec = Math.max(1, Math.min(15, Math.floor(action.perStoryDwellSec)));
-      return { type: 'view_feed_stories', maxRings, perStoryDwellSec };
+      const durationSec = Math.max(10, Math.min(1800, Math.floor(action.durationSec)));
+      return { type: 'view_feed_stories', durationSec };
+    }
+    case 'view_user_stories': {
+      const usernamesCsvPath = (action.usernamesCsvPath || '').trim();
+      if (!usernamesCsvPath) throw new Error('Pick a list of users to watch');
+      const durationSec = Math.max(10, Math.min(1800, Math.floor(action.durationSec)));
+      return { type: 'view_user_stories', usernamesCsvPath, durationSec };
     }
     case 'hashtag_like':
     case 'hashtag_follow': {
@@ -1081,36 +1063,6 @@ function dispatchNextForAccount(accountId: string): boolean {
       emit({ type: 'jobs:done', jobId: row.id, status: 'failed' });
       return dispatchNextForAccount(accountId);
     }
-  } else if (
-    row.kind === 'inbox_poll' ||
-    row.kind === 'inbox_backfill' ||
-    row.kind === 'inbox_thread_fetch' ||
-    row.kind === 'inbox_send'
-  ) {
-    spawnInboxWorker(row.id, accountId, row.kind, secrets, {
-      accountId,
-      mode:
-        row.kind === 'inbox_poll'
-          ? 'poll'
-          : row.kind === 'inbox_backfill'
-          ? 'backfill'
-          : row.kind === 'inbox_thread_fetch'
-          ? 'thread_fetch'
-          : 'send_message',
-      igThreadId: typeof params.igThreadId === 'string' ? params.igThreadId : null,
-      text: typeof params.text === 'string' ? params.text : null,
-      knownThreads: Array.isArray(params.knownThreads) ? params.knownThreads : [],
-      maxThreads: typeof params.maxThreads === 'number' ? params.maxThreads : undefined,
-      maxMessagesPerThread: typeof params.maxMessagesPerThread === 'number' ? params.maxMessagesPerThread : undefined,
-    });
-  } else if (row.kind === 'story_watcher') {
-    spawnStoryWatcherWorker(row.id, accountId, secrets, {
-      usernames: Array.isArray(params.usernames) ? params.usernames : [],
-      perUserDwellSec: Number(params.perUserDwellSec) || 3,
-      intervalBetweenUsersSec: Number(params.intervalBetweenUsersSec) || 8,
-      skipIfNoStory: !!params.skipIfNoStory,
-      maxStoriesPerUser: Number(params.maxStoriesPerUser) || 5,
-    });
   } else {
     spawnScrapeWorker(
       row.id,
@@ -1121,164 +1073,6 @@ function dispatchNextForAccount(accountId: string): boolean {
     );
   }
   return true;
-}
-
-export interface StartInboxJobArgs {
-  accountId: string;
-  mode: 'poll' | 'backfill' | 'thread_fetch' | 'send_message';
-  igThreadId?: string | null;
-  text?: string | null;
-  knownThreads?: Array<{ igThreadId: string; lastMessageAt: number | null }>;
-  maxThreads?: number;
-  maxMessagesPerThread?: number;
-}
-
-export function startInboxJob(args: StartInboxJobArgs): string {
-  const acc = getAccount(args.accountId);
-  if (!acc) throw new Error('Account not found');
-
-  // Map worker mode → JobKind for the jobs table + worker dispatch.
-  const kind: JobKind =
-    args.mode === 'poll'
-      ? 'inbox_poll'
-      : args.mode === 'backfill'
-      ? 'inbox_backfill'
-      : args.mode === 'thread_fetch'
-      ? 'inbox_thread_fetch'
-      : 'inbox_send';
-
-  // Inbox jobs share the per-account FIFO with everything else so polling
-  // never collides with a Mass DM that the user already started.
-  if (hasPendingJobForAccount(args.accountId)) {
-    const jobId = insertQueuedJob(kind, args.accountId, args);
-    emit({ type: 'jobs:changed' });
-    return jobId;
-  }
-
-  const secrets = getAccountSecrets(args.accountId);
-  if (!secrets) throw new Error('Account secrets not available');
-
-  const jobId = insertJob(kind, args.accountId, args);
-  spawnInboxWorker(jobId, args.accountId, kind, secrets, args);
-  emit({ type: 'jobs:changed' });
-  return jobId;
-}
-
-function spawnInboxWorker(
-  jobId: string,
-  accountId: string,
-  kind: JobKind,
-  secrets: NonNullable<ReturnType<typeof getAccountSecrets>>,
-  args: StartInboxJobArgs
-): void {
-  // Inbox jobs always run headless. The user never needs to see the browser
-  // for an inbox poll, and headless avoids stealing window slots from
-  // user-facing jobs (warmup, mass DM) that benefit from monitoring.
-  const child = spawnWorker(
-    workerForKind(kind),
-    jobId,
-    {
-      type: 'init',
-      payload: {
-        jobId,
-        accountId,
-        secrets,
-        mode: args.mode,
-        igThreadId: args.igThreadId ?? null,
-        text: args.text ?? null,
-        knownThreads: args.knownThreads ?? [],
-        maxThreads: args.maxThreads,
-        maxMessagesPerThread: args.maxMessagesPerThread,
-        headless: true,
-      },
-    },
-    { headed: false }
-  );
-  runningChildren.set(jobId, child);
-  runningMeta.set(jobId, { startedAt: Date.now(), accountId, kind });
-  setAccountStatus(accountId, 'busy');
-}
-
-export interface StartStoryWatcherArgs {
-  accountId: string;
-  usernames: string[];
-  perUserDwellSec: number;
-  intervalBetweenUsersSec: number;
-  skipIfNoStory: boolean;
-  maxStoriesPerUser: number;
-}
-
-export function startStoryWatcher(args: StartStoryWatcherArgs): string {
-  const acc = getAccount(args.accountId);
-  if (!acc) throw new Error('Account not found');
-
-  const usernames = Array.from(
-    new Set(
-      (args.usernames ?? [])
-        .map((u) => String(u).trim().replace(/^@+/, ''))
-        .filter(Boolean)
-    )
-  );
-  if (usernames.length === 0) throw new Error('No usernames provided');
-
-  const params = {
-    usernames,
-    perUserDwellSec: Math.max(1, Math.min(15, Math.floor(args.perUserDwellSec))),
-    intervalBetweenUsersSec: Math.max(1, Math.min(120, Math.floor(args.intervalBetweenUsersSec))),
-    skipIfNoStory: !!args.skipIfNoStory,
-    maxStoriesPerUser: Math.max(1, Math.min(20, Math.floor(args.maxStoriesPerUser))),
-  };
-
-  if (hasPendingJobForAccount(args.accountId)) {
-    const jobId = insertQueuedJob('story_watcher', args.accountId, params);
-    emit({ type: 'jobs:changed' });
-    return jobId;
-  }
-  const secrets = getAccountSecrets(args.accountId);
-  if (!secrets) throw new Error('Account secrets not available');
-
-  const jobId = insertJob('story_watcher', args.accountId, params);
-  spawnStoryWatcherWorker(jobId, args.accountId, secrets, params);
-  emit({ type: 'jobs:changed' });
-  return jobId;
-}
-
-function spawnStoryWatcherWorker(
-  jobId: string,
-  accountId: string,
-  secrets: NonNullable<ReturnType<typeof getAccountSecrets>>,
-  params: {
-    usernames: string[];
-    perUserDwellSec: number;
-    intervalBetweenUsersSec: number;
-    skipIfNoStory: boolean;
-    maxStoriesPerUser: number;
-  }
-): void {
-  const headless = getHeadlessPref();
-  const dwellMs = params.perUserDwellSec * 1000;
-  const intervalMs = params.intervalBetweenUsersSec * 1000;
-  const child = spawnWorker(
-    workerForKind('story_watcher'),
-    jobId,
-    {
-      type: 'init',
-      payload: {
-        jobId,
-        secrets,
-        usernames: params.usernames,
-        perUserDwellMs: [Math.floor(dwellMs * 0.7), Math.floor(dwellMs * 1.3)],
-        intervalBetweenUsersMs: [Math.floor(intervalMs * 0.7), Math.floor(intervalMs * 1.3)],
-        skipIfNoStory: params.skipIfNoStory,
-        maxStoriesPerUser: params.maxStoriesPerUser,
-        headless,
-      },
-    },
-    { headed: !headless }
-  );
-  runningChildren.set(jobId, child);
-  runningMeta.set(jobId, { startedAt: Date.now(), accountId, kind: 'story_watcher' });
-  setAccountStatus(accountId, 'busy');
 }
 
 export function cancelJob(jobId: string): void {
@@ -1666,20 +1460,6 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
   }
 
   pendingLoginProxies.delete(jobId);
-
-  // Generic result-pipe — modules outside jobs.ts (inboxScheduler,
-  // followupScheduler, aiResponder) subscribe to this to persist their
-  // worker output into their own tables.
-  if (meta) {
-    emit({
-      type: 'jobs:result',
-      jobId,
-      kind: meta.kind,
-      accountId: meta.accountId,
-      status: finalStatus,
-      result: result ?? null,
-    });
-  }
 
   emit({ type: 'jobs:done', jobId, status: finalStatus });
 

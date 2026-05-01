@@ -4,7 +4,6 @@ import { Switch } from '@/components/ui/switch';
 import { useSession } from '@/context/SessionContext';
 import { useTheme } from '@/context/ThemeContext';
 import { usePreferences } from '@/context/PreferencesContext';
-import { AiProviderSection } from '@/components/common/AiProviderSection';
 import { b2dm } from '@/lib/b2dm';
 
 function SectionHeader({ title }: { title: string }) {
@@ -175,9 +174,6 @@ export function Settings() {
               onCheckedChange={setSoundsEnabled}
             />
           </div>
-
-          {/* AI Provider */}
-          <AiProviderSection />
 
           {/* Data */}
           <div className="border border-border bg-background">

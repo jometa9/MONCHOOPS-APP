@@ -472,7 +472,34 @@ function migrate(db: Database): void {
     `);
   }
 
-  db.pragma('user_version = 17');
+  if (current < 18) {
+    // Drop the inbox / AI responder / follow-up tables introduced in v17.
+    // The product was simplified down to scrape + warmup + cold DM, and
+    // none of these surfaces survive. Existing rows are wiped along with
+    // the tables; the schedulers, workers, and IPC handlers that wrote
+    // them are gone.
+    db.exec(`
+      DROP TABLE IF EXISTS followup_send_log;
+      DROP TABLE IF EXISTS followup_enrollments;
+      DROP TABLE IF EXISTS followup_steps;
+      DROP TABLE IF EXISTS followup_sequences;
+      DROP TABLE IF EXISTS ai_responder_log;
+      DROP TABLE IF EXISTS ai_responder_account_settings;
+      DROP TABLE IF EXISTS inbox_drafts;
+      DROP TABLE IF EXISTS inbox_sync_state;
+      DROP TABLE IF EXISTS inbox_messages;
+      DROP TABLE IF EXISTS inbox_threads;
+      DELETE FROM meta WHERE key LIKE 'ai\\_%' ESCAPE '\\';
+      DELETE FROM meta WHERE key IN (
+        'ai_provider', 'ai_model', 'ai_default_max_tokens',
+        'ai_api_key_encrypted', 'ai_prompt_md',
+        'ai_history_depth', 'ai_default_mode', 'ai_kill_switch',
+        'ai_exclude_keywords', 'ai_min_inbound_len', 'ai_max_ai_streak'
+      );
+    `);
+  }
+
+  db.pragma('user_version = 18');
 }
 
 // meta helpers — used by license.ts for ad-hoc key/value state.

@@ -1,32 +1,16 @@
 import type { SessionSnapshot } from '@/types/session';
 import type {
-  AccountAiSettings,
   AccountPublic,
-  AiCostSummary,
-  AiLogEntry,
-  AiSettings,
-  AnthropicModelId,
-  AnthropicModelInfo,
-  CreateSequenceInput,
-  FollowupEnrollmentPublic,
-  FollowupSequencePublic,
-  FollowupStepPublic,
-  InboxMessagePublic,
-  InboxSyncStatePublic,
-  InboxThreadPublic,
   JobPublic,
   LeadCategoryPublic,
   LeadPublic,
-  ListEnrollmentsArgs,
   MassDmInteractionsConfig,
   MassDmResultPublic,
   MassDmSendPublic,
   MessageVariantGroupPublic,
-  ResponderMode,
   ScrapeKind,
   ScrapeResultPublic,
   ScrapeUsernameRow,
-  StartStoryWatcherArgs,
   WarmupAction,
   WarmupResultPublic,
   WarmupSchedulePublic,
@@ -210,106 +194,6 @@ export interface SettingsApi {
   setFullWindow(full: boolean): Promise<void>;
 }
 
-export interface InboxApi {
-  listThreads(args?: {
-    accountIds?: string[];
-    from?: number | null;
-    to?: number | null;
-    unreadOnly?: boolean;
-    query?: string | null;
-    limit?: number;
-    offset?: number;
-  }): Promise<InboxThreadPublic[]>;
-  getThread(args: {
-    threadId: string;
-    limit?: number;
-    before?: number | null;
-  }): Promise<{ thread: InboxThreadPublic; messages: InboxMessagePublic[] } | null>;
-  listSyncStates(): Promise<InboxSyncStatePublic[]>;
-  refreshAccount(accountId: string): Promise<string | null>;
-  backfillAccount(accountId: string): Promise<string | null>;
-  fetchThread(args: { threadId: string; maxMessages?: number }): Promise<string>;
-  setActiveMonitoring(args: { accountId: string; enabled: boolean }): Promise<void>;
-  setThreadFlags(args: {
-    threadId: string;
-    flags: { aiResponderEnabled?: boolean; followupDisabled?: boolean; isPinned?: boolean };
-  }): Promise<void>;
-  sendMessage(args: { threadId: string; text: string }): Promise<string>;
-  saveDraft(args: { threadId: string; body: string }): Promise<void>;
-  clearDraft(threadId: string): Promise<void>;
-  suggestReply(args: {
-    threadId: string;
-  }): Promise<{ kind: 'draft' | 'send'; body: string; model: string } | null>;
-  onChange(cb: (payload: { accountId?: string; threadIds?: string[] }) => void): Unsubscribe;
-  onNewInbound(cb: (payload: { accountId: string; count: number }) => void): Unsubscribe;
-}
-
-export interface AiApi {
-  listModels(): Promise<AnthropicModelInfo[]>;
-  getSettings(): Promise<AiSettings>;
-  setSettings(input: {
-    provider?: 'anthropic';
-    model?: AnthropicModelId;
-    defaultMaxTokens?: number;
-  }): Promise<AiSettings>;
-  setApiKey(key: string | null): Promise<AiSettings>;
-  hasApiKey(): Promise<boolean>;
-  testApiKey(args: {
-    apiKey: string;
-    model?: AnthropicModelId;
-  }): Promise<{ ok: true; model: string } | { ok: false; error: string }>;
-  getPrompt(): Promise<{ md: string; defaultMd: string }>;
-  setPrompt(md: string): Promise<void>;
-  getDefaults(): Promise<{
-    historyDepth: number;
-    mode: ResponderMode;
-    killSwitch: boolean;
-    excludeKeywords: string[];
-    minInboundLen: number;
-    maxAiStreak: number;
-  }>;
-  setDefaults(input: {
-    historyDepth?: number;
-    mode?: ResponderMode;
-    killSwitch?: boolean;
-    excludeKeywords?: string[];
-    minInboundLen?: number;
-    maxAiStreak?: number;
-  }): Promise<void>;
-  listAccountSettings(): Promise<AccountAiSettings[]>;
-  getAccountSettings(accountId: string): Promise<AccountAiSettings>;
-  setAccountSettings(input: AccountAiSettings): Promise<AccountAiSettings>;
-  listLog(limit?: number): Promise<AiLogEntry[]>;
-  getMonthCost(): Promise<AiCostSummary>;
-}
-
-export interface FollowupsApi {
-  listSequences(includeArchived?: boolean): Promise<FollowupSequencePublic[]>;
-  getSequence(
-    id: string
-  ): Promise<{ sequence: FollowupSequencePublic; steps: FollowupStepPublic[] } | null>;
-  createSequence(input: CreateSequenceInput): Promise<FollowupSequencePublic>;
-  updateSequence(args: {
-    id: string;
-    input: CreateSequenceInput;
-  }): Promise<FollowupSequencePublic>;
-  archiveSequence(id: string): Promise<void>;
-  listEnrollments(args?: ListEnrollmentsArgs): Promise<FollowupEnrollmentPublic[]>;
-  enrollPeer(args: {
-    sequenceId: string;
-    accountId: string;
-    peerUsername: string;
-    threadId?: string | null;
-  }): Promise<FollowupEnrollmentPublic>;
-  pause(id: string): Promise<void>;
-  resume(id: string): Promise<void>;
-  cancel(id: string): Promise<void>;
-}
-
-export interface StoryWatcherApi {
-  start(args: StartStoryWatcherArgs): Promise<string>;
-}
-
 export interface B2dmApi {
   // Platform
   getPlatform(): Promise<NodeJS.Platform>;
@@ -343,10 +227,6 @@ export interface B2dmApi {
   settings: SettingsApi;
   stats: StatsApi;
   updater: UpdaterApi;
-  inbox: InboxApi;
-  ai: AiApi;
-  followups: FollowupsApi;
-  storyWatcher: StoryWatcherApi;
 }
 
 declare global {

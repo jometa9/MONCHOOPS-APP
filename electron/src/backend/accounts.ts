@@ -247,16 +247,6 @@ export function createAccount(input: CreateAccountInput): AccountPublic {
       now,
       now
     );
-  // Newly-added accounts get an immediate inbox backfill so the user sees
-  // their existing chat history without manual steps. Imported dynamically
-  // to avoid a circular dep between accounts.ts ↔ jobs.ts ↔ inboxScheduler.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { enqueueBackfill } = require('./inboxScheduler') as typeof import('./inboxScheduler');
-    enqueueBackfill(id);
-  } catch (err) {
-    console.warn('[accounts] inbox backfill enqueue failed:', err);
-  }
   return getAccount(id)!;
 }
 

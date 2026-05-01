@@ -3,6 +3,7 @@
 // init payload. Each action composes primitives from ./ig/interactions
 // and reports per-step progress back to main via sendProgress(done,total).
 
+import fs from 'fs';
 import {
   isCancelled,
   launchBrowser,
@@ -22,6 +23,7 @@ import {
   viewFeed,
   viewOwnFeedStories,
   viewReels,
+  viewUserStories,
 } from './ig';
 import type { AccountSecrets } from '../accounts';
 
@@ -29,7 +31,8 @@ export type WarmupAction =
   | { type: 'view_feed'; durationSec: number }
   | { type: 'view_explore'; durationSec: number }
   | { type: 'view_reels'; durationSec: number }
-  | { type: 'view_feed_stories'; maxRings: number; perStoryDwellSec: number }
+  | { type: 'view_feed_stories'; durationSec: number }
+  | { type: 'view_user_stories'; usernamesCsvPath: string; durationSec: number }
   | { type: 'hashtag_like'; hashtag: string; count: number }
   | { type: 'hashtag_follow'; hashtag: string; count: number }
   | { type: 'location_like'; location: string; count: number }
@@ -92,6 +95,18 @@ onInit<WarmupInit>(async (init) => {
   }
 });
 
+function readUsernamesCsv(csvPath: string): string[] {
+  if (!csvPath || !fs.existsSync(csvPath)) return [];
+  const raw = fs.readFileSync(csvPath, 'utf8');
+  const seen = new Set<string>();
+  for (const line of raw.split(/\r?\n/)) {
+    const first = (line.split(',')[0] ?? '').trim().replace(/^[@#]+/, '');
+    if (!first || first.toLowerCase() === 'username') continue;
+    seen.add(first);
+  }
+  return Array.from(seen);
+}
+
 async function runAction(page: any, action: WarmupAction): Promise<WarmupResult> {
   switch (action.type) {
     case 'view_feed': {
@@ -119,19 +134,57 @@ async function runAction(page: any, action: WarmupAction): Promise<WarmupResult>
       return { action: 'view_reels', viewedMs: ms };
     }
     case 'view_feed_stories': {
-      const dwellMs = Math.max(800, action.perStoryDwellSec * 1000);
-      sendLog('info', `Watching feed stories (max ${action.maxRings} rings)`);
+      const totalMs = Math.max(2000, action.durationSec * 1000);
+      sendLog('info', `Watching feed stories for ${action.durationSec}s`);
       sendProgress(0, 1);
-      const r = await viewOwnFeedStories(page, {
-        maxStoryRings: action.maxRings,
-        perStoryDwellMs: [Math.floor(dwellMs * 0.7), Math.floor(dwellMs * 1.3)],
-      });
+      const r = await viewOwnFeedStories(page, { totalDurationMs: totalMs });
       sendProgress(1, 1);
       return {
         action: 'view_feed_stories',
-        visited: r.rings,
+        visited: r.stories,
         viewedMs: r.totalDwellMs,
       };
+    }
+    case 'view_user_stories': {
+      const usernames = readUsernamesCsv(action.usernamesCsvPath);
+      if (usernames.length === 0) {
+        sendLog('warn', `No usernames in ${action.usernamesCsvPath}`);
+        return { action: 'view_user_stories', visited: 0, skipped: 0, viewedMs: 0 };
+      }
+      const totalMs = Math.max(2000, action.durationSec * 1000);
+      sendLog('info', `Watching stories from ${usernames.length} users for ${action.durationSec}s`);
+      sendProgress(0, usernames.length);
+
+      const deadline = Date.now() + totalMs;
+      let visited = 0;
+      let skipped = 0;
+      let viewedMs = 0;
+      for (let i = 0; i < usernames.length; i++) {
+        if (isCancelled() || Date.now() >= deadline) break;
+        const username = usernames[i]!;
+        const remainingUsers = usernames.length - i;
+        const remainingMs = deadline - Date.now();
+        // Distribute the remaining budget evenly across remaining users so a
+        // long list doesn't starve later targets.
+        const userBudgetMs = Math.max(2000, Math.floor(remainingMs / remainingUsers));
+        try {
+          const r = await viewUserStories(page, username, {
+            totalDurationMs: userBudgetMs,
+            perStoryDwellMs: [3000, 5000],
+          });
+          if (r.hadStories) {
+            visited += 1;
+            viewedMs += r.totalDwellMs;
+          } else {
+            skipped += 1;
+          }
+        } catch (err) {
+          sendLog('warn', `viewUserStories failed for @${username}: ${err instanceof Error ? err.message : String(err)}`);
+          skipped += 1;
+        }
+        sendProgress(i + 1, usernames.length, `@${username}`);
+      }
+      return { action: 'view_user_stories', visited, skipped, viewedMs };
     }
     case 'hashtag_like': {
       const count = Math.max(1, action.count);

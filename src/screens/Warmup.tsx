@@ -4,6 +4,7 @@ import {
   CalendarClock,
   Check,
   Compass,
+  Eye,
   Film,
   Flame,
   Hash,
@@ -16,6 +17,7 @@ import {
   Search,
   Trash2,
   UserPlus,
+  Users as UsersIcon,
   X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +50,7 @@ type ActionGroupId =
   | 'view_explore'
   | 'view_reels'
   | 'view_feed_stories'
+  | 'view_user_stories'
   | 'like'
   | 'follow'
   | 'combo';
@@ -81,8 +84,14 @@ const ACTIONS: ActionConfig[] = [
   {
     id: 'view_feed_stories',
     label: 'Watch feed stories',
-    description: 'Open and watch the top story rings on the home feed.',
-    icon: Film,
+    description: 'Open the first story on the home feed and let it play for a while.',
+    icon: Eye,
+  },
+  {
+    id: 'view_user_stories',
+    label: 'Watch user stories',
+    description: 'Watch stories from a list of usernames (manual list or category).',
+    icon: UsersIcon,
   },
   {
     id: 'like',
@@ -220,11 +229,9 @@ function WarmupActionSummary({ action }: { action: WarmupAction }) {
     case 'view_reels':
       return <span>Browse reels {action.durationSec}s</span>;
     case 'view_feed_stories':
-      return (
-        <span>
-          Watch {action.maxRings} feed stories ({action.perStoryDwellSec}s each)
-        </span>
-      );
+      return <span>Watch feed stories {action.durationSec}s</span>;
+    case 'view_user_stories':
+      return <span>Watch user stories {action.durationSec}s</span>;
     case 'hashtag_like':
       return (
         <span className="inline-flex items-center gap-1">
@@ -1039,20 +1046,22 @@ function ActionDialog({
       return (
         <DurationDialog
           title="Watch feed stories"
-          description="Open the top story rings on the home feed and watch a few stories per ring."
-          icon={Film}
+          description="Open the first story on the home feed and let it play. No counters, just dwell."
+          icon={Eye}
           targetLabel={targetLabel}
-          defaultSec={5}
+          defaultSec={60}
           onClose={onClose}
-          onRun={(perStoryDwellSec) =>
-            onRun([
-              {
-                type: 'view_feed_stories',
-                maxRings: 6,
-                perStoryDwellSec: Math.max(1, Math.min(15, perStoryDwellSec)),
-              },
-            ])
+          onRun={(durationSec) =>
+            onRun([{ type: 'view_feed_stories', durationSec }])
           }
+        />
+      );
+    case 'view_user_stories':
+      return (
+        <UserStoriesDialog
+          targetLabel={targetLabel}
+          onClose={onClose}
+          onRun={(action) => onRun([action])}
         />
       );
     case 'like':
@@ -1165,6 +1174,204 @@ function DurationDialog({
           Between 30s and 30min. Around 2–5 minutes is the typical warmup slot.
         </p>
       </div>
+      {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+    </Dialog>
+  );
+}
+
+type UserStoriesSource = 'manual' | 'category' | 'scrape';
+
+function UserStoriesDialog({
+  targetLabel,
+  onClose,
+  onRun,
+}: {
+  targetLabel: string;
+  onClose: () => void;
+  onRun: (action: WarmupAction) => Promise<void>;
+}) {
+  const [source, setSource] = useState<UserStoriesSource>('manual');
+  const [usernamesText, setUsernamesText] = useState('');
+  const [categories, setCategories] = useState<{ id: string; name: string; leadCount: number }[]>(
+    []
+  );
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [scrapes, setScrapes] = useState<
+    { jobId: string; summary: string; usernameCount: number; completedAt: number }[]
+  >([]);
+  const [scrapeId, setScrapeId] = useState<string | null>(null);
+  const [durationSec, setDurationSec] = useState(120);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [cats, scs] = await Promise.all([
+          b2dm.categories.list(),
+          b2dm.scrapes.list(),
+        ]);
+        if (cancelled) return;
+        setCategories(cats.map((c) => ({ id: c.id, name: c.name, leadCount: c.leadCount })));
+        setScrapes(
+          scs
+            .filter((s) => s.status === 'completed' && s.usernameCount > 0)
+            .map((s) => ({
+              jobId: s.jobId,
+              summary: s.summary,
+              usernameCount: s.usernameCount,
+              completedAt: s.completedAt,
+            }))
+        );
+      } catch (err) {
+        console.error('UserStoriesDialog: load sources failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      let csv: { path: string; count: number };
+      if (source === 'manual') {
+        const usernames = usernamesText
+          .split(/[\s,]+/)
+          .map((u) => u.trim().replace(/^@+/, ''))
+          .filter(Boolean);
+        if (usernames.length === 0) throw new Error('Add at least one username');
+        csv = await b2dm.csv.persistFromUsernames(usernames);
+      } else if (source === 'category') {
+        if (!categoryId) throw new Error('Pick a category');
+        csv = await b2dm.csv.persistFromCategory(categoryId);
+      } else {
+        if (!scrapeId) throw new Error('Pick a scrape');
+        csv = await b2dm.csv.persistFromScrape(scrapeId);
+      }
+      if (csv.count === 0) throw new Error('The selected source has no usernames');
+      await onRun({
+        type: 'view_user_stories',
+        usernamesCsvPath: csv.path,
+        durationSec: Math.max(10, Math.min(1800, durationSec)),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start warmup');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onClose={busy ? () => {} : onClose}
+      title="Watch user stories"
+      description="Watch stories from a list of users. Time is split evenly across them."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={() => void submit()} disabled={busy}>
+            {busy ? <Spinner /> : <Play className="h-3.5 w-3.5" />}
+            {busy ? 'Starting…' : 'Run warmup'}
+          </Button>
+        </>
+      }
+    >
+      <DialogHeader icon={UsersIcon} targetLabel={targetLabel} />
+
+      <div className="mb-3 flex border border-border">
+        {(['manual', 'category', 'scrape'] as UserStoriesSource[]).map((s, i) => {
+          const active = source === s;
+          const label = s === 'manual' ? 'Paste list' : s === 'category' ? 'From category' : 'From scrape';
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSource(s)}
+              className={cn(
+                'inline-flex h-8 flex-1 items-center justify-center px-3 text-xs font-medium transition-colors',
+                i !== 0 && 'border-l border-border',
+                active
+                  ? 'bg-accent text-accent-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {source === 'manual' ? (
+        <div className="space-y-1">
+          <Label htmlFor="warmup-user-stories-list">Usernames</Label>
+          <textarea
+            id="warmup-user-stories-list"
+            value={usernamesText}
+            onChange={(e) => setUsernamesText(e.target.value)}
+            placeholder="user1, user2, user3 (or one per line)"
+            className="block h-24 w-full resize-none border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-foreground"
+          />
+          <p className="text-[11px] text-muted-foreground">Comma- or newline-separated.</p>
+        </div>
+      ) : source === 'category' ? (
+        <div className="space-y-1">
+          <Label htmlFor="warmup-user-stories-cat">Category</Label>
+          <select
+            id="warmup-user-stories-cat"
+            value={categoryId ?? ''}
+            onChange={(e) => setCategoryId(e.target.value || null)}
+            className="block h-9 w-full border border-border bg-background px-2 text-sm outline-none focus:border-foreground"
+          >
+            <option value="">— pick a category —</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.leadCount})
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <Label htmlFor="warmup-user-stories-scrape">Scrape</Label>
+          <select
+            id="warmup-user-stories-scrape"
+            value={scrapeId ?? ''}
+            onChange={(e) => setScrapeId(e.target.value || null)}
+            className="block h-9 w-full border border-border bg-background px-2 text-sm outline-none focus:border-foreground"
+          >
+            <option value="">— pick a scrape —</option>
+            {scrapes.map((s) => (
+              <option key={s.jobId} value={s.jobId}>
+                {s.summary} ({s.usernameCount})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="mt-3 space-y-1">
+        <Label htmlFor="warmup-user-stories-duration">Total duration (seconds)</Label>
+        <Input
+          id="warmup-user-stories-duration"
+          type="number"
+          min={10}
+          max={1800}
+          value={durationSec}
+          onChange={(e) => setDurationSec(Number(e.target.value) || 0)}
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Between 10s and 30min. Time is split evenly across users; each user is opened, dwelled
+          on, and exited.
+        </p>
+      </div>
+
       {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
     </Dialog>
   );
