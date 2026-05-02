@@ -69,6 +69,16 @@ import {
   initUpdater,
   installUpdateAndRestart,
 } from './updater';
+import {
+  getStatus as getBridgeStatus,
+  listPairedClients,
+  resolvePairing as resolveBridgePairing,
+  revokePairedClient,
+  setPairRequestHandler,
+  startBridgeServer,
+  stopBridgeServer,
+  type BridgePairRequest,
+} from './extensionBridge';
 
 interface BackendOptions {
   onDeepLink?: (url: string) => void;
@@ -121,6 +131,16 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   subscribeToJobs(broadcastJobEvent);
   startWarmupScheduler();
   initUpdater(broadcast);
+
+  // Local HTTP bridge for the Chrome extension. Starts in the background;
+  // failures (port range exhausted, OS firewall) are logged but never block
+  // the main app boot.
+  setPairRequestHandler((req: BridgePairRequest) => {
+    broadcast('bridge:pair-request', req);
+  });
+  void startBridgeServer().catch((err) => {
+    console.warn('[backend] bridge server failed to start', err);
+  });
 
   ipcMain.handle('session:get', async () => getSession());
   ipcMain.handle('license:validate', async (_e, key: string) => {
@@ -565,9 +585,26 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     broadcast('messageVariants:changed');
   });
 
+  // Bridge IPCs — drive the pairing modal and Settings status UI.
+  ipcMain.handle('bridge:getStatus', async () => getBridgeStatus());
+  ipcMain.handle('bridge:listPaired', async () => listPairedClients());
+  ipcMain.handle('bridge:revoke', async (_e, id: string) => {
+    revokePairedClient(id);
+    broadcast('bridge:changed');
+  });
+  ipcMain.handle(
+    'bridge:resolvePairing',
+    async (_e, payload: { pairingId: string; accept: boolean }) => {
+      const ok = resolveBridgePairing(payload.pairingId, payload.accept);
+      if (ok && payload.accept) broadcast('bridge:changed');
+      return { ok };
+    }
+  );
+
   let shutdownStarted = false;
   app.on('before-quit', (event) => {
     stopWarmupScheduler();
+    void stopBridgeServer().catch(() => {});
     if (listRunningJobs().length === 0) return;
     // Block every before-quit cycle until the flush is done — otherwise the
     // second app.quit() (from main.ts's 5s prepare-quit timer) would tear the

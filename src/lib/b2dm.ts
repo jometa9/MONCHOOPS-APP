@@ -179,6 +179,34 @@ export interface UpdaterApi {
   onStateChange(cb: (state: UpdateStatus) => void): Unsubscribe;
 }
 
+export interface BridgeStatus {
+  running: boolean;
+  port: number | null;
+  pairedCount: number;
+}
+
+export interface BridgePairRequest {
+  pairingId: string;
+  code: string;
+  name: string;
+}
+
+export interface BridgePairedClient {
+  id: string;
+  name: string;
+  createdAt: number;
+  lastSeenAt: number;
+}
+
+export interface BridgeApi {
+  getStatus(): Promise<BridgeStatus>;
+  listPaired(): Promise<BridgePairedClient[]>;
+  revoke(id: string): Promise<void>;
+  resolvePairing(pairingId: string, accept: boolean): Promise<{ ok: boolean }>;
+  onPairRequest(cb: (req: BridgePairRequest) => void): Unsubscribe;
+  onChange(cb: () => void): Unsubscribe;
+}
+
 export interface SettingsApi {
   refreshSession(): Promise<import('@/types/session').SessionSnapshot>;
   deleteAllAccounts(): Promise<void>;
@@ -227,6 +255,7 @@ export interface B2dmApi {
   settings: SettingsApi;
   stats: StatsApi;
   updater: UpdaterApi;
+  bridge: BridgeApi;
 }
 
 declare global {
