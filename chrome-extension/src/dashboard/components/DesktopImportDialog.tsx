@@ -15,6 +15,7 @@ import {
   type DesktopScrape,
 } from '@/shared/desktop-bridge';
 import { formatDateTime } from '@/shared/format';
+import type { CampaignSource } from '@/shared/types';
 
 type Step =
   | { kind: 'connecting' }
@@ -27,7 +28,7 @@ type Step =
   | { kind: 'fatal'; message: string };
 
 interface Props {
-  onImport: (leads: DesktopLead[], sourceLabel: string) => void;
+  onImport: (leads: DesktopLead[], source: CampaignSource) => void;
   onClose: () => void;
 }
 
@@ -123,7 +124,11 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
     setStep({ kind: 'loading_leads' });
     try {
       const leads = await listCategoryLeads(c.id);
-      onImport(leads, `Category — ${c.name}`);
+      onImport(leads, {
+        kind: 'desktop_category',
+        desktopId: c.id,
+        label: `Category — ${c.name}`,
+      });
       onClose();
     } catch (err) {
       if (err instanceof BridgeError && err.code === 'unauthorized') {
@@ -142,7 +147,7 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
     try {
       const leads = await listScrapeLeads(s.jobId);
       const label = s.targetName ? `Scrape — ${s.targetName}` : `Scrape — ${s.summary}`;
-      onImport(leads, label);
+      onImport(leads, { kind: 'desktop_scrape', desktopJobId: s.jobId, label });
       onClose();
     } catch (err) {
       if (err instanceof BridgeError && err.code === 'unauthorized') {

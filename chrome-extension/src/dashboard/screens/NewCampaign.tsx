@@ -7,7 +7,13 @@ import { db } from '@/shared/db';
 import { parseUsernamesFile, parseUsernamesText, type CsvLead } from '@/shared/csv';
 import { uuid } from '@/shared/format';
 import { ScreenHeader } from '../components/ScreenHeader';
-import type { Campaign, InteractionsConfig, ScheduleWindow, VariantGroup } from '@/shared/types';
+import type {
+  Campaign,
+  CampaignSource,
+  InteractionsConfig,
+  ScheduleWindow,
+  VariantGroup,
+} from '@/shared/types';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -40,7 +46,7 @@ export function NewCampaign() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDesktopImport, setShowDesktopImport] = useState(false);
-  const [importedSourceLabel, setImportedSourceLabel] = useState<string | null>(null);
+  const [source, setSource] = useState<CampaignSource>({ kind: 'manual' });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -72,6 +78,18 @@ export function NewCampaign() {
       }
       return merged;
     });
+  }
+
+  function applyDesktopSource(list: CsvLead[], src: CampaignSource) {
+    // When the user picks a live desktop source, replace any existing list
+    // (we don't merge with manually-typed leads — the source IS the list).
+    setLeads(list);
+    setSource(src);
+  }
+
+  function clearDesktopSource() {
+    setSource({ kind: 'manual' });
+    setLeads([]);
   }
 
   function addManual() {
@@ -127,6 +145,7 @@ export function NewCampaign() {
         id,
         name: name.trim(),
         createdAt: Date.now(),
+        source,
         variants: cleanedVariants,
         interactions: interactionsEnabled ? { ...interactions } : null,
         schedule: scheduleToUse,
@@ -193,64 +212,69 @@ export function NewCampaign() {
               <span className="text-xs text-muted-foreground">{leads.length} loaded</span>
             }
           >
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
-              >
-                <FileUp className="h-3.5 w-3.5" />
-                Import CSV
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowDesktopImport(true)}
-                className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
-              >
-                <MonitorSmartphone className="h-3.5 w-3.5" />
-                Import from desktop
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv,text/plain"
-                hidden
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void onUpload(f);
-                  e.currentTarget.value = '';
-                }}
+            {source.kind !== 'manual' ? (
+              <DesktopSourcePanel
+                source={source}
+                leadsCount={leads.length}
+                onResync={() => setShowDesktopImport(true)}
+                onClear={clearDesktopSource}
               />
-              <div className="flex flex-1 items-center gap-2">
-                <input
-                  value={manualUsername}
-                  onChange={(e) => setManualUsername(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addManual();
-                    }
-                  }}
-                  placeholder="Add usernames manually (comma or new-line separated)"
-                  className="h-9 flex-1 border border-border bg-background px-3 text-xs outline-none focus:border-foreground"
-                />
-                <button
-                  type="button"
-                  onClick={addManual}
-                  disabled={!manualUsername.trim()}
-                  className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add
-                </button>
-              </div>
-            </div>
-
-            {importedSourceLabel ? (
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Last imported from: <span className="font-medium text-foreground">{importedSourceLabel}</span>
-              </p>
-            ) : null}
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
+                  >
+                    <FileUp className="h-3.5 w-3.5" />
+                    Import CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDesktopImport(true)}
+                    className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
+                  >
+                    <MonitorSmartphone className="h-3.5 w-3.5" />
+                    Use desktop source
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,text/csv,text/plain"
+                    hidden
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void onUpload(f);
+                      e.currentTarget.value = '';
+                    }}
+                  />
+                  <div className="flex flex-1 items-center gap-2">
+                    <input
+                      value={manualUsername}
+                      onChange={(e) => setManualUsername(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addManual();
+                        }
+                      }}
+                      placeholder="Add usernames manually (comma or new-line separated)"
+                      className="h-9 flex-1 border border-border bg-background px-3 text-xs outline-none focus:border-foreground"
+                    />
+                    <button
+                      type="button"
+                      onClick={addManual}
+                      disabled={!manualUsername.trim()}
+                      className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
 
             {leads.length > 0 ? (
               <div className="mt-3 max-h-56 overflow-auto border border-border">
@@ -260,26 +284,28 @@ export function NewCampaign() {
                       <tr key={l.username} className="border-b border-border last:border-b-0">
                         <td className="px-3 py-1.5">@{l.displayName}</td>
                         <td className="px-2 py-1.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => removeLead(l.username)}
-                            className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground hover:text-destructive"
-                            aria-label={`Remove ${l.displayName}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {source.kind === 'manual' ? (
+                            <button
+                              type="button"
+                              onClick={() => removeLead(l.username)}
+                              className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground hover:text-destructive"
+                              aria-label={`Remove ${l.displayName}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : (
+            ) : source.kind === 'manual' ? (
               <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Users className="h-3.5 w-3.5" />
-                No leads yet — import a CSV or add usernames above.
+                No leads yet — pick a desktop source, import a CSV, or type usernames above.
               </p>
-            )}
+            ) : null}
           </Section>
 
           {/* Variants */}
@@ -472,12 +498,53 @@ export function NewCampaign() {
       {showDesktopImport ? (
         <DesktopImportDialog
           onClose={() => setShowDesktopImport(false)}
-          onImport={(list, label) => {
-            mergeLeads(list);
-            setImportedSourceLabel(label);
-          }}
+          onImport={(list, src) => applyDesktopSource(list, src)}
         />
       ) : null}
+    </div>
+  );
+}
+
+function DesktopSourcePanel({
+  source,
+  leadsCount,
+  onResync,
+  onClear,
+}: {
+  source: CampaignSource;
+  leadsCount: number;
+  onResync: () => void;
+  onClear: () => void;
+}) {
+  if (source.kind === 'manual') return null;
+  return (
+    <div className="flex items-center justify-between border border-border bg-muted/30 p-3 text-xs">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 font-medium">
+          <MonitorSmartphone className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="truncate">{source.label}</span>
+        </div>
+        <p className="mt-0.5 text-muted-foreground">
+          {leadsCount} leads — pulled live from the desktop app. Click re-fetch to pick up new
+          leads added on the desktop after this campaign was started.
+        </p>
+      </div>
+      <div className="flex flex-none items-center gap-2">
+        <button
+          type="button"
+          onClick={onResync}
+          className="inline-flex h-8 items-center border border-border bg-background px-3 text-[11px] font-medium hover:bg-accent"
+        >
+          Re-fetch
+        </button>
+        <button
+          type="button"
+          onClick={onClear}
+          className="inline-flex h-8 items-center px-2 text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          Clear
+        </button>
+      </div>
     </div>
   );
 }

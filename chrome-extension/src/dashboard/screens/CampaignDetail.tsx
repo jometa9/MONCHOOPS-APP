@@ -1,10 +1,16 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ArrowLeft, Pause, Play, Zap } from 'lucide-react';
+import { ArrowLeft, MonitorSmartphone, Pause, Play, RefreshCw, Zap } from 'lucide-react';
 import { db } from '@/shared/db';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { formatDateTime } from '@/shared/format';
-import type { Lead } from '@/shared/types';
+import {
+  BridgeError,
+  listCategoryLeads,
+  listScrapeLeads,
+} from '@/shared/desktop-bridge';
+import type { Campaign, Lead } from '@/shared/types';
 
 export function CampaignDetail() {
   const navigate = useNavigate();
@@ -115,6 +121,10 @@ export function CampaignDetail() {
               </li>
             ))}
           </ul>
+          {campaign.source?.kind === 'desktop_category' ||
+          campaign.source?.kind === 'desktop_scrape' ? (
+            <DesktopSourcePanel campaign={campaign} />
+          ) : null}
           {campaign.interactions ? (
             <>
               <h3 className="mt-4 mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -182,6 +192,112 @@ export function CampaignDetail() {
         </section>
       </div>
     </div>
+  );
+}
+
+function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
+  const src = campaign.source;
+  if (src.kind === 'manual') return null;
+
+  async function sync() {
+    if (src.kind === 'manual') return; // unreachable — guarded by early return
+    setBusy(true);
+    setMessage(null);
+    try {
+      const fresh =
+        src.kind === 'desktop_category'
+          ? await listCategoryLeads(src.desktopId)
+          : await listScrapeLeads(src.desktopJobId);
+      const existing = new Set(
+        (await db.leads.where('campaignId').equals(campaign.id).toArray()).map((l) => l.username)
+      );
+      const newOnes = fresh.filter((l) => !existing.has(l.username));
+      if (newOnes.length === 0) {
+        setMessage({ kind: 'info', text: 'No new leads on the desktop.' });
+        return;
+      }
+      await db.transaction('rw', db.campaigns, db.leads, async () => {
+        await db.leads.bulkAdd(
+          newOnes.map((l) => ({
+            campaignId: campaign.id,
+            username: l.username,
+            displayName: l.displayName,
+            status: 'pending' as const,
+          }))
+        );
+        await db.campaigns.update(campaign.id, {
+          totalLeads: campaign.totalLeads + newOnes.length,
+          // If the campaign had finished, re-open it so the SW picks
+          // up the new pending leads.
+          status: campaign.status === 'done' ? 'scheduled' : campaign.status,
+          completedAt: campaign.status === 'done' ? undefined : campaign.completedAt,
+          nextRunAt: Date.now(),
+        });
+      });
+      // Re-arm the scheduler if we re-opened a finished campaign.
+      if (campaign.status === 'done') {
+        await chrome.runtime.sendMessage({
+          type: 'sw/scheduleCampaign',
+          campaignId: campaign.id,
+        });
+      }
+      setMessage({ kind: 'info', text: `Pulled ${newOnes.length} new leads.` });
+    } catch (err) {
+      const text =
+        err instanceof BridgeError
+          ? err.code === 'no_desktop'
+            ? 'Desktop app is not running.'
+            : err.message
+          : err instanceof Error
+          ? err.message
+          : String(err);
+      setMessage({ kind: 'error', text });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <h3 className="mt-4 mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        Desktop source
+      </h3>
+      <div className="border border-border bg-background p-3 text-xs">
+        <div className="flex items-start gap-2">
+          <MonitorSmartphone className="mt-0.5 h-3.5 w-3.5 flex-none text-muted-foreground" />
+          <div className="min-w-0">
+            <div className="truncate font-medium">{src.label}</div>
+            <p className="mt-0.5 text-muted-foreground">
+              Linked to the desktop app. Click sync to pull leads added there after this
+              campaign was created.
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void sync()}
+            disabled={busy}
+            className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-[11px] font-medium transition-colors hover:bg-accent disabled:opacity-50"
+          >
+            <RefreshCw className={'h-3 w-3 ' + (busy ? 'animate-spin' : '')} />
+            {busy ? 'Syncing…' : 'Sync from desktop'}
+          </button>
+        </div>
+        {message ? (
+          <p
+            className={
+              'mt-2 text-[11px] ' +
+              (message.kind === 'error' ? 'text-destructive' : 'text-muted-foreground')
+            }
+          >
+            {message.text}
+          </p>
+        ) : null}
+      </div>
+    </>
   );
 }
 

@@ -64,11 +64,21 @@ export interface ScheduleWindow {
 
 export type CampaignStatus = 'draft' | 'running' | 'scheduled' | 'paused' | 'done';
 
+export type CampaignSource =
+  | { kind: 'manual' }
+  | { kind: 'desktop_category'; desktopId: string; label: string }
+  | { kind: 'desktop_scrape'; desktopJobId: string; label: string };
+
 export interface Campaign {
   /** uuid */
   id: string;
   name: string;
   createdAt: number;
+  /** Where the leads came from. When kind !== 'manual' the campaign is
+   *  linked to a live desktop source — CampaignDetail offers a "Sync"
+   *  button that re-queries the desktop and pulls in any leads added to
+   *  that category/scrape after the campaign was created. */
+  source: CampaignSource;
   /** message variants — one is picked at random per send.
    *  Use {{username}} to inject the target's handle. */
   variants: string[];
