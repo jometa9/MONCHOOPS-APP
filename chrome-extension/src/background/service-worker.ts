@@ -3,11 +3,13 @@
 // Why alarms: MV3 service workers are evicted after ~30s of inactivity.
 // chrome.alarms is the only API that wakes us back up reliably even when
 // the dashboard tab is closed. We register a global "tick" alarm and let
-// every campaign be re-evaluated on each fire — no per-campaign alarms,
-// no in-memory job state to lose.
+// every running campaign be re-evaluated on each fire — no per-campaign
+// alarms, no in-memory job state to lose.
 //
 // Why one DM at a time: IG hates parallel sends from the same account.
-// The single content-script tab guarantees serialization.
+// The single content-script tab guarantees serialization. The dashboard
+// also locks its navigation while a campaign is running so the user can't
+// start another one in parallel.
 //
 // Tab strategy: we keep a dedicated background IG tab pinned (created on
 // demand, reused across ticks). It has to exist before we can talk to the
@@ -15,7 +17,6 @@
 // reuse the first eligible IG tab we find.
 
 import { db, nextPendingLead, countLeads } from '@/shared/db';
-import { isInsideWindow, nextWindowOpen } from '@/shared/schedule';
 import { jitter, pickVariant, uuid } from '@/shared/format';
 import type { Campaign, Lead } from '@/shared/types';
 import type { IgSendRequest, IgSendResult } from '@/shared/messages';
@@ -74,15 +75,14 @@ chrome.runtime.onMessage.addListener((req, _sender, sendResponse) => {
           sendResponse({ ok: true, data: { loggedIn: !!c?.value } });
           return;
         }
-        case 'sw/scheduleCampaign':
         case 'sw/runCampaignNow': {
           const id = (req as { campaignId: string }).campaignId;
           await db.campaigns.update(id, {
-            status: type === 'sw/runCampaignNow' ? 'running' : 'scheduled',
+            status: 'running',
             nextRunAt: Date.now(),
           });
           await ensureTick();
-          // Run a tick right away so a "Run now" doesn't have to wait
+          // Run a tick right away so a "Start" doesn't have to wait
           // up to a minute for the next periodic fire.
           void tick();
           sendResponse({ ok: true });
@@ -96,7 +96,7 @@ chrome.runtime.onMessage.addListener((req, _sender, sendResponse) => {
         }
         case 'sw/resumeCampaign': {
           const id = (req as { campaignId: string }).campaignId;
-          await db.campaigns.update(id, { status: 'scheduled', nextRunAt: Date.now() });
+          await db.campaigns.update(id, { status: 'running', nextRunAt: Date.now() });
           void tick();
           sendResponse({ ok: true });
           return;
@@ -144,17 +144,12 @@ async function tick(): Promise<void> {
   try {
     const candidates = await db.campaigns
       .where('status')
-      .anyOf('running', 'scheduled')
+      .equals('running')
       .toArray();
 
     const now = Date.now();
     for (const campaign of candidates) {
       if (campaign.nextRunAt && campaign.nextRunAt > now) continue;
-      if (campaign.schedule && !isInsideWindow(campaign.schedule, new Date(now))) {
-        const next = nextWindowOpen(campaign.schedule, new Date(now));
-        await db.campaigns.update(campaign.id, { nextRunAt: next, status: 'scheduled' });
-        continue;
-      }
       const lead = await nextPendingLead(campaign.id);
       if (!lead || lead.id === undefined) {
         await db.campaigns.update(campaign.id, {
@@ -172,9 +167,8 @@ async function tick(): Promise<void> {
         console.error('[b2dm] processOne crashed', err);
       }
       // Schedule the next attempt with jitter.
-      const baseInterval = campaign.schedule?.intervalMs ?? 90_000;
       await db.campaigns.update(campaign.id, {
-        nextRunAt: Date.now() + jitter(baseInterval),
+        nextRunAt: Date.now() + jitter(campaign.intervalMs),
       });
     }
   } finally {

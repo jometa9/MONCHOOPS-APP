@@ -142,7 +142,7 @@ function ActionCard({
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </div>
-      <span className="mt-4 inline-flex h-9 items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors group-hover:bg-primary/90">
+      <span className="mt-4 inline-flex h-9 cursor-pointer items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors group-hover:bg-primary/90">
         {cta}
       </span>
     </Link>

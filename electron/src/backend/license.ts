@@ -17,6 +17,10 @@ interface ExternalLicenseResponse {
   name?: string;
   plan?: string;
   version?: string;
+  accountLimit?: number | null;
+  dmMonthlyLimit?: number | null;
+  accountUsage?: number;
+  dmUsage?: number;
 }
 
 function normalisePlan(plan?: string): { plan: string; active: boolean } {
@@ -134,7 +138,22 @@ export async function validateLicense(licenseKey: string): Promise<SessionSnapsh
 
   const profile: ProfileInfo = { email, name: data.name ?? '' };
   const { plan, active } = normalisePlan(data.plan);
-  const subscription: SubscriptionInfo = { plan, active, version: data.version };
+  const subscription: SubscriptionInfo = {
+    plan,
+    active,
+    version: data.version,
+    accountLimit:
+      data.accountLimit === null || typeof data.accountLimit === 'number'
+        ? data.accountLimit
+        : undefined,
+    dmMonthlyLimit:
+      data.dmMonthlyLimit === null || typeof data.dmMonthlyLimit === 'number'
+        ? data.dmMonthlyLimit
+        : undefined,
+    accountUsage:
+      typeof data.accountUsage === 'number' ? data.accountUsage : undefined,
+    dmUsage: typeof data.dmUsage === 'number' ? data.dmUsage : undefined,
+  };
 
   ensureOwnerMatches(email);
   saveLicenseKey(trimmed);

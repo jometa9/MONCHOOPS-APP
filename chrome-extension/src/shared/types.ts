@@ -51,18 +51,9 @@ export interface InteractionsConfig {
   storyDwellSec: number;
 }
 
-export interface ScheduleWindow {
-  /** 0 = Sunday, 1 = Monday, … 6 = Saturday */
-  daysOfWeek: number[];
-  /** "HH:MM" 24h, inclusive */
-  startTime: string;
-  /** "HH:MM" 24h, inclusive */
-  endTime: string;
-  /** average ms between sends inside the window */
-  intervalMs: number;
-}
-
-export type CampaignStatus = 'draft' | 'running' | 'scheduled' | 'paused' | 'done';
+/** Only `running` campaigns are actively progressing. The dashboard locks
+ *  navigation while a campaign is in flight so we never run two at once. */
+export type CampaignStatus = 'running' | 'paused' | 'done';
 
 export type CampaignSource =
   | { kind: 'manual' }
@@ -84,27 +75,20 @@ export interface Campaign {
   variants: string[];
   /** optional pre-DM interactions */
   interactions: InteractionsConfig | null;
-  /** when null, send back-to-back; when set, only send during the window */
-  schedule: ScheduleWindow | null;
+  /** average ms between sends (a small jitter is applied per send) */
+  intervalMs: number;
   status: CampaignStatus;
   /** progress counters — kept on the campaign for cheap rendering, the
    *  source of truth for which leads are pending lives in the leads table */
   totalLeads: number;
   sentCount: number;
   failedCount: number;
-  /** epoch ms — when the next attempt is allowed (set when paused, throttled,
-   *  or outside the schedule window) */
+  /** epoch ms — when the next attempt is allowed (set when paused or
+   *  throttled between sends). `running` campaigns past this timestamp
+   *  are eligible to send. */
   nextRunAt?: number;
   /** epoch ms — populated when status flips to 'done' */
   completedAt?: number;
-}
-
-export interface VariantGroup {
-  id: string;
-  name: string;
-  variants: string[];
-  createdAt: number;
-  updatedAt: number;
 }
 
 export interface DmHistoryRow {

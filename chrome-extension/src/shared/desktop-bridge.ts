@@ -46,6 +46,14 @@ export interface DesktopLead {
   displayName: string;
 }
 
+export interface DesktopVariantGroup {
+  id: string;
+  name: string;
+  variants: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export class BridgeError extends Error {
   constructor(public readonly code: 'no_desktop' | 'unauthorized' | 'request_failed', message: string) {
     super(message);
@@ -166,12 +174,23 @@ export async function pairWithDesktop(opts: {
   throw new BridgeError('request_failed', 'Pairing timed out.');
 }
 
-async function authedFetch(path: string): Promise<Response> {
+async function authedFetch(
+  path: string,
+  init?: { method?: string; body?: unknown }
+): Promise<Response> {
   const { port } = await discoverDesktop();
   const token = await getStoredToken();
   if (!token) throw new BridgeError('unauthorized', 'Not paired with the desktop app yet.');
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  let body: string | undefined;
+  if (init?.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(init.body);
+  }
   const res = await fetch(`http://127.0.0.1:${port}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    method: init?.method ?? 'GET',
+    headers,
+    body,
   });
   if (res.status === 401) {
     // Token was revoked from the desktop side. Wipe it so the next call
@@ -204,6 +223,64 @@ export async function listScrapeLeads(jobId: string): Promise<DesktopLead[]> {
   const res = await authedFetch(`/leads/scrapes/${encodeURIComponent(jobId)}`);
   if (!res.ok) throw new BridgeError('request_failed', `scrape leads returned ${res.status}`);
   return (await res.json()) as DesktopLead[];
+}
+
+// --- variant groups ------------------------------------------------------
+//
+// The desktop app is the source of truth for variant groups. The extension
+// reads/writes through these wrappers so a group created here shows up in
+// the desktop UI without a manual refresh, and vice versa.
+
+export async function listVariantGroups(): Promise<DesktopVariantGroup[]> {
+  const res = await authedFetch('/variants');
+  if (!res.ok) throw new BridgeError('request_failed', `variants returned ${res.status}`);
+  return (await res.json()) as DesktopVariantGroup[];
+}
+
+export async function createVariantGroup(payload: {
+  name: string;
+  variants: string[];
+}): Promise<DesktopVariantGroup> {
+  const res = await authedFetch('/variants', { method: 'POST', body: payload });
+  if (!res.ok) {
+    const msg = await readErrorMessage(res);
+    throw new BridgeError('request_failed', msg);
+  }
+  return (await res.json()) as DesktopVariantGroup;
+}
+
+export async function updateVariantGroup(
+  id: string,
+  payload: { name: string; variants: string[] }
+): Promise<DesktopVariantGroup> {
+  const res = await authedFetch(`/variants/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: payload,
+  });
+  if (!res.ok) {
+    const msg = await readErrorMessage(res);
+    throw new BridgeError('request_failed', msg);
+  }
+  return (await res.json()) as DesktopVariantGroup;
+}
+
+export async function deleteVariantGroup(id: string): Promise<void> {
+  const res = await authedFetch(`/variants/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const msg = await readErrorMessage(res);
+    throw new BridgeError('request_failed', msg);
+  }
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: string };
+    return body?.error ?? `request failed: ${res.status}`;
+  } catch {
+    return `request failed: ${res.status}`;
+  }
 }
 
 function sleep(ms: number): Promise<void> {

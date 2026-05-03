@@ -31,26 +31,16 @@ export {
 export type { LocationSearchOpts } from './search';
 
 export {
-  likePost,
   followUser,
   likeNPostsOfUser,
-  viewFeed,
-  viewExplore,
-  viewReels,
-  iterHashtagAndAct,
-  iterLocationAndAct,
 } from './interactions';
 export type {
   InteractionOutcome,
   LikeNResult,
-  HashtagActOpts,
-  HashtagActResult,
 } from './interactions';
 
-export { viewOwnFeedStories, viewUserStories } from './stories';
+export { viewUserStories } from './stories';
 export type {
-  OwnFeedStoriesOpts,
-  OwnFeedStoriesResult,
   UserStoriesOpts,
   UserStoriesResult,
 } from './stories';

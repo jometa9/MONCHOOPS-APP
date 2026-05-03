@@ -11,6 +11,13 @@ export interface SubscriptionInfo {
   plan: string;              // "free" | "pro" | "unlimited" | …
   active: boolean;           // derived: plan !== 'free' && plan !== 'none' && plan
   version?: string;
+  // null for fields below means "unlimited" (e.g. on the unlimited plan).
+  // Absent means the server didn't return them — treat as unknown, fall back
+  // to local-only behaviour and don't enforce limits.
+  accountLimit?: number | null;
+  dmMonthlyLimit?: number | null;
+  accountUsage?: number;
+  dmUsage?: number;
 }
 
 export interface SessionSnapshot {

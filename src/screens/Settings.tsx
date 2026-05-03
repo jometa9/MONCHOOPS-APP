@@ -157,12 +157,13 @@ export function Settings() {
               checked={prefs.headless}
               onCheckedChange={setHeadless}
             />
-            <SwitchRow
-              label="Full window"
-              checked={prefs.fullWindow}
-              onCheckedChange={setFullWindow}
-              disabled={prefs.headless}
-            />
+            {!prefs.headless && (
+              <SwitchRow
+                label="Full window"
+                checked={prefs.fullWindow}
+                onCheckedChange={setFullWindow}
+              />
+            )}
             <SwitchRow
               label="Dark theme"
               checked={resolvedTheme === 'dark'}

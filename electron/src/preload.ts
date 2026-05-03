@@ -81,10 +81,6 @@ const jobsApi = {
     kind: 'scrape_by_username' | 'scrape_by_post' | 'scrape_by_hashtag' | 'scrape_by_location';
     params: Record<string, unknown>;
   }) => invoke<string>('jobs:startScrape', payload),
-  startWarmup: (payload: {
-    accountId: string;
-    action: import('./backend/jobs').WarmupAction;
-  }) => invoke<string>('jobs:startWarmup', payload),
   onChange: (cb: () => void) => listen<void>('jobs:changed', () => cb()),
   onProgress: (
     cb: (evt: { jobId: string; done: number; total: number | null; item?: string }) => void
@@ -125,28 +121,6 @@ const massDmsApi = {
     invoke<import('./backend/jobs').MassDmSendPublic[]>('massDms:listSends', jobId),
   listDmedUsernames: (accountId: string) =>
     invoke<string[]>('massDms:listDmedUsernames', accountId),
-};
-
-const warmupsApi = {
-  list: () => invoke<import('./backend/jobs').WarmupResultPublic[]>('warmups:list'),
-  listSchedules: (accountId?: string) =>
-    invoke<import('./backend/warmupSchedules').WarmupSchedulePublic[]>(
-      'warmupSchedules:list',
-      accountId ?? undefined
-    ),
-  createSchedule: (payload: {
-    accountId: string;
-    startDate: number;
-    endDate: number;
-    timeOfDaySec: number;
-    actions: import('./backend/jobs').WarmupAction[];
-  }) =>
-    invoke<import('./backend/warmupSchedules').WarmupSchedulePublic>(
-      'warmupSchedules:create',
-      payload
-    ),
-  deleteSchedule: (id: string) => invoke<void>('warmupSchedules:delete', id),
-  onSchedulesChange: (cb: () => void) => listen<void>('warmupSchedules:changed', () => cb()),
 };
 
 const csvApi = {
@@ -248,7 +222,6 @@ contextBridge.exposeInMainWorld('b2dm', {
   jobs: jobsApi,
   scrapes: scrapesApi,
   massDms: massDmsApi,
-  warmups: warmupsApi,
   categories: categoriesApi,
   messageVariants: messageVariantsApi,
   csv: csvApi,

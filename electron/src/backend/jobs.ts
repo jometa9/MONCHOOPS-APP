@@ -15,6 +15,7 @@ import {
 } from './accounts';
 import { ingestLeadsFromCsv, resolveCategoryRef } from './leads';
 import { acquireSlot, releaseSlot, type WindowBounds } from './windowSlots';
+import { fetchUsage, queueDmReport } from './cloudSync';
 
 export type JobKind =
   | 'login'
@@ -22,45 +23,7 @@ export type JobKind =
   | 'scrape_by_username'
   | 'scrape_by_post'
   | 'scrape_by_hashtag'
-  | 'scrape_by_location'
-  | 'warmup';
-
-export type WarmupAction =
-  | { type: 'view_feed'; durationSec: number }
-  | { type: 'view_explore'; durationSec: number }
-  | { type: 'view_reels'; durationSec: number }
-  | { type: 'view_feed_stories'; durationSec: number }
-  | { type: 'view_user_stories'; usernamesCsvPath: string; durationSec: number }
-  | { type: 'hashtag_like'; hashtag: string; count: number }
-  | { type: 'hashtag_follow'; hashtag: string; count: number }
-  | { type: 'location_like'; location: string; count: number }
-  | { type: 'location_follow'; location: string; count: number }
-  | {
-      type: 'combo';
-      feedSec: number;
-      exploreSec: number;
-      reelsSec: number;
-      hashtag: string | null;
-      location: string | null;
-      likeCount: number;
-      followCount: number;
-    };
-
-export interface WarmupResultPublic {
-  jobId: string;
-  accountId: string | null;
-  accountUsername: string | null;
-  actionType: WarmupAction['type'];
-  action: WarmupAction;
-  visited: number;
-  liked: number;
-  followed: number;
-  skipped: number;
-  failed: number;
-  viewedMs: number;
-  durationMs: number;
-  completedAt: number;
-}
+  | 'scrape_by_location';
 
 export interface MassDmInteractionsConfig {
   /** Follow the target username before DMing them. */
@@ -481,56 +444,6 @@ export function listDmedUsernamesForAccount(accountId: string): string[] {
   return rows.map((r) => r.username);
 }
 
-interface WarmupResultRow {
-  job_id: string;
-  account_id: string | null;
-  account_username: string | null;
-  action_type: string;
-  action_json: string;
-  result_json: string;
-  duration_ms: number;
-  completed_at: number;
-}
-
-const WARMUP_RESULT_SELECT = `
-  SELECT
-    wr.*,
-    a.username AS account_username
-  FROM warmup_results wr
-  LEFT JOIN accounts a ON a.id = wr.account_id
-`;
-
-function warmupRowToPublic(row: WarmupResultRow): WarmupResultPublic {
-  let action: WarmupAction = { type: 'view_feed', durationSec: 0 };
-  try { action = JSON.parse(row.action_json) as WarmupAction; } catch {}
-  let counters: Record<string, unknown> = {};
-  try { counters = JSON.parse(row.result_json) as Record<string, unknown>; } catch {}
-  return {
-    jobId: row.job_id,
-    accountId: row.account_id,
-    accountUsername: row.account_username,
-    actionType: action.type,
-    action,
-    visited: Number(counters.visited) || 0,
-    liked: Number(counters.liked) || 0,
-    followed: Number(counters.followed) || 0,
-    skipped: Number(counters.skipped) || 0,
-    failed: Number(counters.failed) || 0,
-    viewedMs: Number(counters.viewedMs) || 0,
-    durationMs: row.duration_ms,
-    completedAt: row.completed_at,
-  };
-}
-
-export function listWarmupResults(): WarmupResultPublic[] {
-  const rows = getDb()
-    .prepare<[], WarmupResultRow>(
-      `${WARMUP_RESULT_SELECT} ORDER BY wr.completed_at DESC`
-    )
-    .all();
-  return rows.map(warmupRowToPublic);
-}
-
 function scrapesDir(): string {
   const d = path.join(app.getPath('userData'), 'scrapes');
   fs.mkdirSync(d, { recursive: true });
@@ -562,7 +475,6 @@ function getFullWindowPref(): boolean {
 function workerForKind(kind: JobKind): string {
   if (kind === 'login') return workerScriptPath('login');
   if (kind === 'mass_dm') return workerScriptPath('massDm');
-  if (kind === 'warmup') return workerScriptPath('warmup');
   return workerScriptPath('scrape');
 }
 
@@ -737,6 +649,14 @@ export interface StartMassDmArgs {
 
 const MAX_DM_VARIANTS = 20;
 
+// Resolved by the IPC layer (which can `await`) before invoking the
+// synchronous job-spawn path. Treat 0 as "unlimited / unknown — don't gate".
+let nextMassDmRemainingHint: number | null = null;
+
+export function setMassDmRemainingHint(remaining: number | null): void {
+  nextMassDmRemainingHint = remaining;
+}
+
 export function startMassDm(args: StartMassDmArgs): string {
   const acc = getAccount(args.accountId);
   if (!acc) throw new Error('Account not found');
@@ -746,6 +666,17 @@ export function startMassDm(args: StartMassDmArgs): string {
     .filter((m) => m.length > 0)
     .slice(0, MAX_DM_VARIANTS);
   if (messages.length === 0) throw new Error('At least one message variant is required');
+
+  if (typeof nextMassDmRemainingHint === 'number' && nextMassDmRemainingHint <= 0) {
+    nextMassDmRemainingHint = null;
+    throw new Error(
+      'You have reached your monthly DM limit for this plan. Upgrade or wait until next month.'
+    );
+  }
+  // Consume the hint — it only applies to the next start call. The DM
+  // batcher in cloudSync will stop the job mid-run if the cap is hit while
+  // sending, so an outdated hint here is fine.
+  nextMassDmRemainingHint = null;
 
   const interactions = normaliseInteractions(args.interactions);
   const excludeUsernames = Array.isArray(args.excludeUsernames)
@@ -822,118 +753,9 @@ function spawnMassDmWorker(
   setAccountStatus(accountId, 'busy');
 }
 
-export interface StartWarmupArgs {
-  accountId: string;
-  action: WarmupAction;
-}
-
-export function startWarmup(args: StartWarmupArgs): string {
-  const acc = getAccount(args.accountId);
-  if (!acc) throw new Error('Account not found');
-
-  const action = validateWarmupAction(args.action);
-  const params = { action };
-
-  if (hasPendingJobForAccount(args.accountId)) {
-    const jobId = insertQueuedJob('warmup', args.accountId, params);
-    emit({ type: 'jobs:changed' });
-    return jobId;
-  }
-
-  const secrets = getAccountSecrets(args.accountId);
-  if (!secrets) throw new Error('Account not found');
-
-  const jobId = insertJob('warmup', args.accountId, params);
-  spawnWarmupWorker(jobId, args.accountId, secrets, action);
-  emit({ type: 'jobs:changed' });
-  return jobId;
-}
-
-function validateWarmupAction(action: WarmupAction): WarmupAction {
-  switch (action.type) {
-    case 'view_feed':
-    case 'view_explore':
-    case 'view_reels': {
-      const durationSec = Math.max(30, Math.min(1800, Math.floor(action.durationSec)));
-      return { type: action.type, durationSec };
-    }
-    case 'view_feed_stories': {
-      const durationSec = Math.max(10, Math.min(1800, Math.floor(action.durationSec)));
-      return { type: 'view_feed_stories', durationSec };
-    }
-    case 'view_user_stories': {
-      const usernamesCsvPath = (action.usernamesCsvPath || '').trim();
-      if (!usernamesCsvPath) throw new Error('Pick a list of users to watch');
-      const durationSec = Math.max(10, Math.min(1800, Math.floor(action.durationSec)));
-      return { type: 'view_user_stories', usernamesCsvPath, durationSec };
-    }
-    case 'hashtag_like':
-    case 'hashtag_follow': {
-      const hashtag = (action.hashtag || '').replace(/^#+/, '').trim();
-      if (!hashtag) throw new Error('Hashtag is required');
-      const count = Math.max(1, Math.min(50, Math.floor(action.count)));
-      return { type: action.type, hashtag, count };
-    }
-    case 'location_like':
-    case 'location_follow': {
-      const location = (action.location || '').trim();
-      if (!location) throw new Error('Location URL or slug is required');
-      const count = Math.max(1, Math.min(50, Math.floor(action.count)));
-      return { type: action.type, location, count };
-    }
-    case 'combo': {
-      const hashtag = action.hashtag ? action.hashtag.replace(/^#+/, '').trim() : '';
-      const location = action.location ? action.location.trim() : '';
-      const likeCount = Math.max(0, Math.min(100, Math.floor(action.likeCount)));
-      const followCount = Math.max(0, Math.min(100, Math.floor(action.followCount)));
-      if ((likeCount > 0 || followCount > 0) && !hashtag && !location) {
-        throw new Error('Enable at least one source (hashtag or location) for likes/follows');
-      }
-      return {
-        type: 'combo',
-        feedSec: Math.max(0, Math.min(1800, Math.floor(action.feedSec))),
-        exploreSec: Math.max(0, Math.min(1800, Math.floor(action.exploreSec))),
-        reelsSec: Math.max(0, Math.min(1800, Math.floor(action.reelsSec))),
-        hashtag: hashtag || null,
-        location: location || null,
-        likeCount,
-        followCount,
-      };
-    }
-    default:
-      throw new Error('Unknown warmup action');
-  }
-}
-
-function spawnWarmupWorker(
-  jobId: string,
-  accountId: string,
-  secrets: NonNullable<ReturnType<typeof getAccountSecrets>>,
-  action: WarmupAction
-): void {
-  const headless = getHeadlessPref();
-  const child = spawnWorker(
-    workerForKind('warmup'),
-    jobId,
-    {
-      type: 'init',
-      payload: {
-        jobId,
-        secrets,
-        action,
-        headless,
-      },
-    },
-    { headed: !headless }
-  );
-  runningChildren.set(jobId, child);
-  runningMeta.set(jobId, { startedAt: Date.now(), accountId, kind: 'warmup' });
-  setAccountStatus(accountId, 'busy');
-}
-
 export interface StartScrapeArgs {
   accountId: string;
-  kind: Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>;
+  kind: Exclude<JobKind, 'login' | 'mass_dm'>;
   params: Record<string, unknown>;
 }
 
@@ -978,7 +800,7 @@ export function startScrape(args: StartScrapeArgs): string {
 function spawnScrapeWorker(
   jobId: string,
   accountId: string,
-  kind: Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>,
+  kind: Exclude<JobKind, 'login' | 'mass_dm'>,
   secrets: NonNullable<ReturnType<typeof getAccountSecrets>>,
   params: Record<string, unknown>
 ): void {
@@ -1050,24 +872,11 @@ function dispatchNextForAccount(accountId: string): boolean {
       interactions: normaliseInteractions(params.interactions ?? null),
       excludeUsernames: Array.isArray(params.excludeUsernames) ? params.excludeUsernames : [],
     });
-  } else if (row.kind === 'warmup') {
-    try {
-      spawnWarmupWorker(
-        row.id,
-        accountId,
-        secrets,
-        validateWarmupAction(params.action as WarmupAction)
-      );
-    } catch (err) {
-      finaliseJob(row.id, 'failed', err instanceof Error ? err.message : String(err));
-      emit({ type: 'jobs:done', jobId: row.id, status: 'failed' });
-      return dispatchNextForAccount(accountId);
-    }
   } else {
     spawnScrapeWorker(
       row.id,
       accountId,
-      row.kind as Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>,
+      row.kind as Exclude<JobKind, 'login' | 'mass_dm'>,
       secrets,
       params
     );
@@ -1201,6 +1010,7 @@ function persistDmSend(jobId: string, payload: any): void {
   const status = payload.status === 'sent' || payload.status === 'failed' ? payload.status : null;
   if (!status) return;
   const meta = runningMeta.get(jobId);
+  const sentAt = Date.now();
   try {
     getDb()
       .prepare(
@@ -1214,10 +1024,24 @@ function persistDmSend(jobId: string, payload: any): void {
         status,
         typeof payload.message === 'string' && payload.message.length > 0 ? payload.message : null,
         typeof payload.error === 'string' ? payload.error : null,
-        Date.now()
+        sentAt
       );
   } catch (err) {
     console.error(`[jobs ${jobId}] failed to persist dm-send:`, err);
+  }
+
+  // Mirror successful DMs to the cloud so monthly counts stay in sync. Only
+  // 'sent' counts toward the user's plan quota — failed attempts don't burn
+  // the cap (the recipient never saw a message).
+  if (status === 'sent' && meta?.accountId) {
+    const fromAccount = getAccount(meta.accountId);
+    if (fromAccount?.username) {
+      queueDmReport({
+        fromUsername: fromAccount.username,
+        targetUsername: username,
+        sentAt,
+      });
+    }
   }
 }
 
@@ -1304,9 +1128,9 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
   // (completed / cancelled / failed) so the history screen can surface the
   // full picture — cancelled keeps whatever partial CSV the worker flushed,
   // failed may have no CSV at all but we still want the row + retry action.
-  // For login / mass_dm / warmup we keep the previous behaviour (persist on
+  // For login / mass_dm we keep the previous behaviour (persist on
   // completed or cancelled only).
-  const isScrape = meta && meta.kind !== 'login' && meta.kind !== 'mass_dm' && meta.kind !== 'warmup';
+  const isScrape = meta && meta.kind !== 'login' && meta.kind !== 'mass_dm';
   const shouldPersistResult = finalStatus === 'completed' || finalStatus === 'cancelled';
   if (meta && isScrape && finalStatus === 'failed') {
     try {
@@ -1391,32 +1215,6 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
           );
       } catch (err) {
         console.error('[jobs] failed to persist mass_dm result:', err);
-      }
-    } else if (meta.kind === 'warmup') {
-      try {
-        const params = (() => {
-          try { return JSON.parse(jobRow?.params_json ?? '{}'); } catch { return {}; }
-        })();
-        const action = params.action ?? null;
-        const actionType = typeof r.action === 'string' ? r.action : action?.type ?? 'unknown';
-        getDb()
-          .prepare(
-            `INSERT OR REPLACE INTO warmup_results(
-               job_id, account_id, action_type, action_json, result_json,
-               duration_ms, completed_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?)`
-          )
-          .run(
-            jobId,
-            meta.accountId,
-            actionType,
-            JSON.stringify(action ?? {}),
-            JSON.stringify(r),
-            Date.now() - meta.startedAt,
-            Date.now()
-          );
-      } catch (err) {
-        console.error('[jobs] failed to persist warmup result:', err);
       }
     } else if (r.csvPath) {
       try {

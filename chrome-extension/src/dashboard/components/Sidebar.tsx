@@ -7,6 +7,8 @@ import { cn } from '@/shared/cn';
 interface Props {
   session: Session;
   onLogout: () => void;
+  /** When true, navigation is disabled because a campaign is in progress. */
+  locked?: boolean;
 }
 
 const NAV = [
@@ -16,7 +18,7 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
-export function Sidebar({ session, onLogout }: Props) {
+export function Sidebar({ session, onLogout, locked }: Props) {
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -36,21 +38,35 @@ export function Sidebar({ session, onLogout }: Props) {
       <button
         type="button"
         onClick={() => navigate('/campaigns/new')}
-        className="m-3 inline-flex h-9 items-center justify-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        disabled={locked}
+        className="m-3 inline-flex h-9 items-center justify-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
       >
         <Plus className="h-3.5 w-3.5" />
         New cold DM
       </button>
+
+      {locked ? (
+        <div className="mx-3 mb-2 border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-800">
+          A campaign is in progress. Pause it from its detail screen to use the rest of the app.
+        </div>
+      ) : null}
 
       <nav className="flex flex-col">
         {NAV.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
+            onClick={(e) => {
+              if (locked) e.preventDefault();
+            }}
+            tabIndex={locked ? -1 : 0}
+            aria-disabled={locked}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors',
-                isActive
+                locked
+                  ? 'pointer-events-none text-muted-foreground/50'
+                  : isActive
                   ? 'bg-accent text-accent-foreground'
                   : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'
               )
@@ -66,7 +82,8 @@ export function Sidebar({ session, onLogout }: Props) {
         <button
           type="button"
           onClick={handleLogout}
-          className="inline-flex h-8 w-full items-center justify-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
+          disabled={locked}
+          className="inline-flex h-8 w-full items-center justify-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
         >
           <LogOut className="h-3 w-3" />
           Log out

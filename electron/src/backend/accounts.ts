@@ -1,11 +1,7 @@
 import crypto from 'crypto';
 import { getDb } from './db';
 import { encryptString, decryptString, encryptJson, decryptJson } from './crypto';
-import {
-  DAY_MS,
-  WARMUP_MIN_DAYS_SINCE_CREATION,
-  WARMUP_MIN_DISTINCT_ACTIVE_DAYS,
-} from './warmupConfig';
+import { registerAccount, unregisterAccount } from './cloudSync';
 
 export type AccountStatus = 'idle' | 'busy' | 'error';
 
@@ -24,18 +20,6 @@ export interface AccountPublic {
   lastError: string | null;
   createdAt: number;
   updatedAt: number;
-  /** Count of distinct local-calendar days on which at least one warmup
-   *  result was recorded against this account. Drives the "warmed"
-   *  classification below. */
-  warmupActiveDays: number;
-  /** Timestamp of the most recent warmup result for this account, or
-   *  null if it has never been warmed up. */
-  lastWarmupAt: number | null;
-  /** Computed flag: true when the account has existed for at least
-   *  WARMUP_MIN_DAYS_SINCE_CREATION days AND has warmupActiveDays ≥
-   *  WARMUP_MIN_DISTINCT_ACTIVE_DAYS. Surfaced as a secondary badge in
-   *  the UI. */
-  isWarmed: boolean;
 }
 
 interface AccountRow {
@@ -77,47 +61,7 @@ export interface AccountSecrets {
   };
 }
 
-interface WarmupMetrics {
-  warmupActiveDays: number;
-  lastWarmupAt: number | null;
-}
-
-// Compute per-account warmup metrics by bucketing warmup_results by
-// local-day. We scope the distinct-day count to the rows tied to the
-// given account(s) — a single query with GROUP BY is faster than
-// round-tripping per account for large account lists.
-function loadWarmupMetrics(accountIds: string[]): Map<string, WarmupMetrics> {
-  if (accountIds.length === 0) return new Map();
-  const placeholders = accountIds.map(() => '?').join(',');
-  // date(ms/1000, 'unixepoch', 'localtime') collapses each timestamp to
-  // a YYYY-MM-DD string in the user's local tz — exactly what
-  // "distinct calendar days of activity" means for the UI.
-  const rows = getDb()
-    .prepare<string[], { account_id: string; active_days: number; last_at: number }>(
-      `SELECT
-         account_id,
-         COUNT(DISTINCT date(completed_at/1000, 'unixepoch', 'localtime')) AS active_days,
-         MAX(completed_at) AS last_at
-       FROM warmup_results
-       WHERE account_id IN (${placeholders})
-       GROUP BY account_id`
-    )
-    .all(...accountIds);
-  const out = new Map<string, WarmupMetrics>();
-  for (const r of rows) {
-    out.set(r.account_id, {
-      warmupActiveDays: Number(r.active_days) || 0,
-      lastWarmupAt: r.last_at ?? null,
-    });
-  }
-  return out;
-}
-
-function rowToPublic(row: AccountRow, metrics?: WarmupMetrics): AccountPublic {
-  const m: WarmupMetrics = metrics ?? { warmupActiveDays: 0, lastWarmupAt: null };
-  const ageMs = Date.now() - row.created_at;
-  const isOldEnough = ageMs >= WARMUP_MIN_DAYS_SINCE_CREATION * DAY_MS;
-  const isWarmed = isOldEnough && m.warmupActiveDays >= WARMUP_MIN_DISTINCT_ACTIVE_DAYS;
+function rowToPublic(row: AccountRow): AccountPublic {
   return {
     id: row.id,
     username: row.username,
@@ -133,9 +77,6 @@ function rowToPublic(row: AccountRow, metrics?: WarmupMetrics): AccountPublic {
     lastError: row.last_error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    warmupActiveDays: m.warmupActiveDays,
-    lastWarmupAt: m.lastWarmupAt,
-    isWarmed,
   };
 }
 
@@ -155,8 +96,7 @@ export function listAccounts(): AccountPublic[] {
   const rows = getDb()
     .prepare<[], AccountRow>('SELECT * FROM accounts ORDER BY created_at DESC')
     .all();
-  const metrics = loadWarmupMetrics(rows.map((r) => r.id));
-  return rows.map((r) => rowToPublic(r, metrics.get(r.id)));
+  return rows.map((r) => rowToPublic(r));
 }
 
 export function getAccount(id: string): AccountPublic | null {
@@ -164,8 +104,7 @@ export function getAccount(id: string): AccountPublic | null {
     .prepare<[string], AccountRow>('SELECT * FROM accounts WHERE id = ?')
     .get(id);
   if (!row) return null;
-  const metrics = loadWarmupMetrics([row.id]);
-  return rowToPublic(row, metrics.get(row.id));
+  return rowToPublic(row);
 }
 
 export function getAccountSecrets(id: string): AccountSecrets | null {
@@ -247,6 +186,13 @@ export function createAccount(input: CreateAccountInput): AccountPublic {
       now,
       now
     );
+  // Mirror to the cloud so cross-device account counts stay in sync. The
+  // hard limit check runs *before* login is started (see ipcMain handlers in
+  // backend/index.ts), so by the time we get here the slot has already been
+  // validated. Best-effort: a network failure does not unwind the local row.
+  void registerAccount(input.username).catch((err) => {
+    console.warn(`[accounts] cloud register failed for @${input.username}:`, err);
+  });
   return getAccount(id)!;
 }
 
@@ -315,13 +261,18 @@ export function getAccountPassword(id: string): string | null {
   }
 }
 
-export function deleteAccount(id: string): void {
+export async function deleteAccount(id: string): Promise<void> {
   const row = getDb()
     .prepare<[string], AccountRow>('SELECT * FROM accounts WHERE id = ?')
     .get(id);
   if (!row) return;
   if (row.status === 'busy') throw new Error('Cannot delete an account while a job is running');
   getDb().prepare('DELETE FROM accounts WHERE id = ?').run(id);
+  try {
+    await unregisterAccount(row.username);
+  } catch (err) {
+    console.warn(`[accounts] cloud unregister failed for @${row.username}:`, err);
+  }
 }
 
 export interface ProxyConfig {

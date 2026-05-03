@@ -29,7 +29,6 @@ function formatKind(kind: string): string {
 const NON_SCRAPE_TITLE: Record<Exclude<JobKind, ScrapeKind>, string> = {
   login: 'Login',
   mass_dm: 'Cold DM campaign',
-  warmup: 'Warmup',
 };
 
 function formatElapsed(startedAt: number): string {

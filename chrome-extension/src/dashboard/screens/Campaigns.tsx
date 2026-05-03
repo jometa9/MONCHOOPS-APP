@@ -127,7 +127,7 @@ function CampaignRow({ campaign, onOpen }: { campaign: Campaign; onOpen: () => v
             >
               <Play className="h-3.5 w-3.5" />
             </button>
-          ) : campaign.status === 'running' || campaign.status === 'scheduled' ? (
+          ) : campaign.status === 'running' ? (
             <button
               type="button"
               onClick={pause}
@@ -161,9 +161,7 @@ function CampaignRow({ campaign, onOpen }: { campaign: Campaign; onOpen: () => v
 
 function StatusPill({ status }: { status: Campaign['status'] }) {
   const map: Record<Campaign['status'], { label: string; className: string }> = {
-    draft: { label: 'Draft', className: 'bg-muted text-muted-foreground' },
     running: { label: 'Running', className: 'bg-emerald-100 text-emerald-700' },
-    scheduled: { label: 'Scheduled', className: 'bg-blue-100 text-blue-700' },
     paused: { label: 'Paused', className: 'bg-amber-100 text-amber-700' },
     done: { label: 'Done', className: 'bg-muted text-muted-foreground' },
   };

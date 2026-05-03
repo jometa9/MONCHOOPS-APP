@@ -1,29 +1,39 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { ArrowLeft, FileUp, MonitorSmartphone, Plus, Trash2, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  FileUp,
+  MonitorSmartphone,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { DesktopImportDialog } from '../components/DesktopImportDialog';
 import { db } from '@/shared/db';
 import { parseUsernamesFile, parseUsernamesText, type CsvLead } from '@/shared/csv';
 import { uuid } from '@/shared/format';
 import { ScreenHeader } from '../components/ScreenHeader';
+import {
+  BridgeError,
+  createVariantGroup,
+  listVariantGroups,
+  type DesktopVariantGroup,
+} from '@/shared/desktop-bridge';
 import type {
   Campaign,
   CampaignSource,
   InteractionsConfig,
-  ScheduleWindow,
-  VariantGroup,
 } from '@/shared/types';
 
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DEFAULT_INTERVAL_MS = 90_000;
 
 export function NewCampaign() {
   const navigate = useNavigate();
-  const variantGroups = useLiveQuery(
-    () => db.variantGroups.orderBy('updatedAt').reverse().toArray(),
-    [],
-    [] as VariantGroup[]
-  );
+  const [variantGroups, setVariantGroups] = useState<DesktopVariantGroup[] | null>(null);
+  const [variantsError, setVariantsError] = useState<string | null>(null);
+  const [variantsLoading, setVariantsLoading] = useState(false);
 
   const [name, setName] = useState('');
   const [leads, setLeads] = useState<CsvLead[]>([]);
@@ -35,20 +45,43 @@ export function NewCampaign() {
     watchStories: false,
     storyDwellSec: 3,
   });
-  const [scheduleEnabled, setScheduleEnabled] = useState(true);
-  const [schedule, setSchedule] = useState<ScheduleWindow>({
-    daysOfWeek: [1, 2, 3, 4, 5],
-    startTime: '10:00',
-    endTime: '18:00',
-    intervalMs: 90_000,
-  });
+  const [intervalSec, setIntervalSec] = useState(Math.floor(DEFAULT_INTERVAL_MS / 1000));
   const [manualUsername, setManualUsername] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDesktopImport, setShowDesktopImport] = useState(false);
   const [source, setSource] = useState<CampaignSource>({ kind: 'manual' });
 
+  const [saveAsGroup, setSaveAsGroup] = useState(false);
+  const [groupName, setGroupName] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refreshVariantGroups = useCallback(async () => {
+    setVariantsLoading(true);
+    setVariantsError(null);
+    try {
+      const groups = await listVariantGroups();
+      setVariantGroups(groups);
+    } catch (err) {
+      setVariantGroups([]);
+      setVariantsError(
+        err instanceof BridgeError
+          ? err.code === 'no_desktop'
+            ? 'Desktop app not running — variant groups will not load.'
+            : err.message
+          : err instanceof Error
+          ? err.message
+          : String(err)
+      );
+    } finally {
+      setVariantsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshVariantGroups();
+  }, [refreshVariantGroups]);
 
   const cleanedVariants = useMemo(
     () => variants.map((v) => v.trim()).filter(Boolean),
@@ -59,6 +92,7 @@ export function NewCampaign() {
     name.trim().length > 0 &&
     leads.length > 0 &&
     cleanedVariants.length > 0 &&
+    intervalSec >= 30 &&
     !submitting;
 
   async function onUpload(file: File) {
@@ -119,27 +153,30 @@ export function NewCampaign() {
     setVariants((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
   }
 
-  function toggleDay(d: number) {
-    setSchedule((prev) => ({
-      ...prev,
-      daysOfWeek: prev.daysOfWeek.includes(d)
-        ? prev.daysOfWeek.filter((x) => x !== d)
-        : [...prev.daysOfWeek, d].sort((a, b) => a - b),
-    }));
-  }
-
   async function startNow() {
-    await create('running', null);
-  }
-  async function scheduleIt() {
-    await create('scheduled', scheduleEnabled ? schedule : null);
-  }
-
-  async function create(status: 'running' | 'scheduled', scheduleToUse: ScheduleWindow | null) {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
+      // If the user opted in, persist these variants as a named group on
+      // the desktop app first. We keep going even if the save fails — the
+      // campaign itself doesn't depend on the group existing.
+      if (saveAsGroup && groupName.trim().length > 0 && cleanedVariants.length > 0) {
+        try {
+          await createVariantGroup({
+            name: groupName.trim(),
+            variants: cleanedVariants,
+          });
+        } catch (err) {
+          setError(
+            'Could not save the variant group on the desktop app: ' +
+              (err instanceof Error ? err.message : String(err))
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const id = uuid();
       const campaign: Campaign = {
         id,
@@ -148,8 +185,8 @@ export function NewCampaign() {
         source,
         variants: cleanedVariants,
         interactions: interactionsEnabled ? { ...interactions } : null,
-        schedule: scheduleToUse,
-        status,
+        intervalMs: Math.max(30, intervalSec) * 1000,
+        status: 'running',
         totalLeads: leads.length,
         sentCount: 0,
         failedCount: 0,
@@ -166,8 +203,7 @@ export function NewCampaign() {
           }))
         );
       });
-      const msgType = status === 'running' ? 'sw/runCampaignNow' : 'sw/scheduleCampaign';
-      await chrome.runtime.sendMessage({ type: msgType, campaignId: id });
+      await chrome.runtime.sendMessage({ type: 'sw/runCampaignNow', campaignId: id });
       navigate(`/campaigns/${id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create campaign');
@@ -180,7 +216,7 @@ export function NewCampaign() {
     <div className="flex flex-1 flex-col">
       <ScreenHeader
         title="New cold DM"
-        description="Pick your audience, write your message, choose when to send."
+        description="Pick your audience, write your message, hit Start. The browser handles the rest."
         actions={
           <button
             type="button"
@@ -195,7 +231,6 @@ export function NewCampaign() {
 
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="mx-auto max-w-3xl space-y-6 p-6">
-          {/* Name */}
           <Section title="Campaign name">
             <input
               value={name}
@@ -205,7 +240,6 @@ export function NewCampaign() {
             />
           </Section>
 
-          {/* Leads */}
           <Section
             title="Leads"
             right={
@@ -308,33 +342,47 @@ export function NewCampaign() {
             ) : null}
           </Section>
 
-          {/* Variants */}
           <Section
             title="Message variants"
             right={
-              variantGroups && variantGroups.length > 0 ? (
-                <select
-                  onChange={(e) => {
-                    if (e.target.value) applyVariantGroup(e.target.value);
-                    e.target.value = '';
-                  }}
-                  className="h-8 border border-border bg-background px-2 text-xs"
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void refreshVariantGroups()}
+                  disabled={variantsLoading}
+                  className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-2 text-[11px] font-medium hover:bg-accent disabled:opacity-50"
                 >
-                  <option value="">Apply variant group…</option>
-                  {variantGroups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
-              ) : null
+                  <RefreshCw className={'h-3 w-3 ' + (variantsLoading ? 'animate-spin' : '')} />
+                  Refresh
+                </button>
+                {variantGroups && variantGroups.length > 0 ? (
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) applyVariantGroup(e.target.value);
+                      e.target.value = '';
+                    }}
+                    className="h-8 border border-border bg-background px-2 text-xs"
+                  >
+                    <option value="">Apply variant group…</option>
+                    {variantGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
             }
           >
             <p className="text-xs text-muted-foreground">
               One variant is picked at random per DM. Use{' '}
               <code className="rounded bg-muted px-1 py-0.5 text-[11px]">{'{{username}}'}</code> to
-              inject the target's handle.
+              inject the target's handle. Variant groups are pulled from the desktop app — saving a
+              new one here pushes it back so the desktop sees it too.
             </p>
+            {variantsError ? (
+              <p className="mt-2 text-[11px] text-amber-600">{variantsError}</p>
+            ) : null}
             <div className="mt-3 space-y-2">
               {variants.map((v, i) => (
                 <div key={i} className="flex items-start gap-2">
@@ -365,9 +413,30 @@ export function NewCampaign() {
               <Plus className="h-3.5 w-3.5" />
               Add variant
             </button>
+
+            <div className="mt-4 border-t border-border pt-3">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={saveAsGroup}
+                  onChange={(e) => setSaveAsGroup(e.target.checked)}
+                />
+                <span className="inline-flex items-center gap-1">
+                  <Save className="h-3 w-3" />
+                  Save these variants as a new group on the desktop
+                </span>
+              </label>
+              {saveAsGroup ? (
+                <input
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  placeholder="Group name"
+                  className="mt-2 h-9 w-full border border-border bg-background px-3 text-sm outline-none focus:border-foreground"
+                />
+              ) : null}
+            </div>
           </Section>
 
-          {/* Interactions */}
           <Section
             title="Pre-DM interactions"
             right={
@@ -410,60 +479,17 @@ export function NewCampaign() {
             </div>
           </Section>
 
-          {/* Schedule */}
-          <Section
-            title="Schedule"
-            right={
-              <Toggle
-                checked={scheduleEnabled}
-                onChange={setScheduleEnabled}
-                label="Use schedule"
-              />
-            }
-          >
+          <Section title="Send rate">
             <p className="text-xs text-muted-foreground">
-              When the schedule is on, sends only happen during the selected days and time
-              range. The browser does the rest in the background — you can close this tab.
+              Average wait between sends. A small jitter is applied so the cadence is not robotic.
             </p>
-            <div className={scheduleEnabled ? 'mt-3 space-y-4' : 'mt-3 space-y-4 opacity-50 pointer-events-none'}>
-              <div>
-                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Days</div>
-                <div className="flex gap-1">
-                  {DAY_LABELS.map((d, i) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => toggleDay(i)}
-                      className={
-                        'inline-flex h-8 flex-1 items-center justify-center text-xs font-medium transition-colors ' +
-                        (schedule.daysOfWeek.includes(i)
-                          ? 'bg-primary text-primary-foreground'
-                          : 'border border-border bg-background hover:bg-accent')
-                      }
-                    >
-                      {d}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <TimeField
-                  label="Start time"
-                  value={schedule.startTime}
-                  onChange={(v) => setSchedule((p) => ({ ...p, startTime: v }))}
-                />
-                <TimeField
-                  label="End time"
-                  value={schedule.endTime}
-                  onChange={(v) => setSchedule((p) => ({ ...p, endTime: v }))}
-                />
-              </div>
+            <div className="mt-3">
               <NumberField
                 label="Avg seconds between DMs"
                 min={30}
                 max={3600}
-                value={Math.floor(schedule.intervalMs / 1000)}
-                onChange={(s) => setSchedule((p) => ({ ...p, intervalMs: s * 1000 }))}
+                value={intervalSec}
+                onChange={setIntervalSec}
               />
             </div>
           </Section>
@@ -479,17 +505,9 @@ export function NewCampaign() {
               type="button"
               onClick={startNow}
               disabled={!canSubmit}
-              className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-4 text-xs font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-            >
-              Start now
-            </button>
-            <button
-              type="button"
-              onClick={scheduleIt}
-              disabled={!canSubmit}
               className="inline-flex h-9 items-center gap-1.5 bg-primary px-4 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
             >
-              {scheduleEnabled ? 'Schedule' : 'Queue (no schedule)'}
+              {submitting ? 'Starting…' : 'Start'}
             </button>
           </div>
         </div>
@@ -623,30 +641,6 @@ function NumberField({
         disabled={disabled}
         onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value) || 0)))}
         className="h-8 w-24 border border-border bg-background px-2 text-xs outline-none focus:border-foreground"
-      />
-    </label>
-  );
-}
-
-function TimeField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-xs">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <input
-        type="time"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 border border-border bg-background px-2 text-xs outline-none focus:border-foreground"
       />
     </label>
   );

@@ -15,7 +15,6 @@ import { MassDMs } from '@/screens/MassDMs';
 import { ColdDmHistory } from '@/screens/ColdDmHistory';
 import { ColdDmHistoryDetail } from '@/screens/ColdDmHistoryDetail';
 import { Scrape } from '@/screens/Scrape';
-import { Warmup } from '@/screens/Warmup';
 import { Queue } from '@/screens/Queue';
 import { Data } from '@/screens/Data';
 import { LeadsDetail } from '@/screens/LeadsDetail';
@@ -65,7 +64,6 @@ function Gate() {
             <Route path="dm-history" element={<ColdDmHistory />} />
             <Route path="dm-history/:jobId" element={<ColdDmHistoryDetail />} />
             <Route path="scrape" element={<Scrape />} />
-            <Route path="warmup" element={<Warmup />} />
             <Route path="queue" element={<Queue />} />
             <Route path="data" element={<Data />} />
             <Route path="data/:jobId" element={<LeadsDetail />} />

@@ -9,7 +9,6 @@ export type SwRequest =
   | { type: 'sw/ping' }
   | { type: 'sw/openDashboard' }
   | { type: 'sw/igSessionCheck' }
-  | { type: 'sw/scheduleCampaign'; campaignId: string }
   | { type: 'sw/pauseCampaign'; campaignId: string }
   | { type: 'sw/resumeCampaign'; campaignId: string }
   | { type: 'sw/runCampaignNow'; campaignId: string };

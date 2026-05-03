@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, AtSign, Eye, EyeOff, FileUp, Flame, Globe, Instagram, KeyRound, Loader2, MousePointerClick, Plus, RefreshCw, Search, Trash2, Upload, Users } from 'lucide-react';
+import { AlertTriangle, AtSign, Eye, EyeOff, FileUp, Globe, Instagram, KeyRound, Loader2, MousePointerClick, Plus, RefreshCw, Search, Trash2, Upload, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -13,7 +13,7 @@ import { useAccounts } from '@/context/AccountsContext';
 import { b2dm } from '@/lib/b2dm';
 import type { AccountPublic } from '@/types/domain';
 
-type StatusFilter = 'all' | AccountPublic['status'] | 'warmed';
+type StatusFilter = 'all' | AccountPublic['status'];
 
 function normalizeProxyUrl(url: string): string {
   const trimmed = url.trim();
@@ -26,15 +26,6 @@ function StatusBadge({ status }: { status: AccountPublic['status'] }) {
   if (status === 'busy') return <Badge variant="warning">Running</Badge>;
   if (status === 'error') return <Badge variant="destructive">Error</Badge>;
   return <Badge variant="success">Idle</Badge>;
-}
-
-function WarmedBadge() {
-  return (
-    <Badge variant="default">
-      <Flame className="h-2.5 w-2.5" />
-      Warmed
-    </Badge>
-  );
 }
 
 function AccountRow({
@@ -72,7 +63,6 @@ function AccountRow({
       <td className="px-3 py-1.5">
         <div className="flex flex-wrap items-center gap-1">
           <StatusBadge status={account.status} />
-          {account.isWarmed ? <WarmedBadge /> : null}
         </div>
       </td>
       <td className="px-3 py-1.5">
@@ -244,7 +234,6 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'idle', label: 'Idle' },
   { value: 'busy', label: 'Running' },
-  { value: 'warmed', label: 'Warmed' },
   { value: 'error', label: 'Error' },
 ];
 
@@ -480,7 +469,7 @@ type AddMode = 'manual' | 'credentials' | 'bulk';
 
 const ADD_MODES: { id: AddMode; label: string; icon: typeof MousePointerClick }[] = [
   { id: 'manual', label: 'Manual', icon: MousePointerClick },
-  { id: 'credentials', label: 'Credentials', icon: KeyRound },
+  { id: 'credentials', label: 'Auto login', icon: KeyRound },
   { id: 'bulk', label: 'Bulk import', icon: Users },
 ];
 
@@ -1063,9 +1052,7 @@ export function InstagramAccounts() {
   const filteredAccounts = useMemo(() => {
     const q = query.trim().toLowerCase();
     return accounts.filter((account) => {
-      if (statusFilter === 'warmed') {
-        if (!account.isWarmed) return false;
-      } else if (statusFilter !== 'all' && account.status !== statusFilter) {
+      if (statusFilter !== 'all' && account.status !== statusFilter) {
         return false;
       }
       if (!q) return true;

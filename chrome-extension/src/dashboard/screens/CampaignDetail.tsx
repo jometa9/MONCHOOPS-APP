@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ArrowLeft, MonitorSmartphone, Pause, Play, RefreshCw, Zap } from 'lucide-react';
+import { ArrowLeft, MonitorSmartphone, Pause, Play, RefreshCw } from 'lucide-react';
 import { db } from '@/shared/db';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { formatDateTime } from '@/shared/format';
@@ -49,9 +49,6 @@ export function CampaignDetail() {
   async function resume() {
     await chrome.runtime.sendMessage({ type: 'sw/resumeCampaign', campaignId: id });
   }
-  async function runNow() {
-    await chrome.runtime.sendMessage({ type: 'sw/runCampaignNow', campaignId: id });
-  }
 
   return (
     <div className="flex flex-1 flex-col">
@@ -78,7 +75,7 @@ export function CampaignDetail() {
                 Resume
               </button>
             ) : null}
-            {campaign.status === 'scheduled' || campaign.status === 'running' ? (
+            {campaign.status === 'running' ? (
               <button
                 type="button"
                 onClick={pause}
@@ -86,16 +83,6 @@ export function CampaignDetail() {
               >
                 <Pause className="h-3.5 w-3.5" />
                 Pause
-              </button>
-            ) : null}
-            {campaign.status !== 'done' ? (
-              <button
-                type="button"
-                onClick={runNow}
-                className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
-              >
-                <Zap className="h-3.5 w-3.5" />
-                Run now
               </button>
             ) : null}
           </div>
@@ -141,25 +128,12 @@ export function CampaignDetail() {
               </ul>
             </>
           ) : null}
-          {campaign.schedule ? (
-            <>
-              <h3 className="mt-4 mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Schedule
-              </h3>
-              <ul className="space-y-1 text-xs text-muted-foreground">
-                <li>
-                  Days:{' '}
-                  {campaign.schedule.daysOfWeek
-                    .map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d])
-                    .join(', ')}
-                </li>
-                <li>
-                  Window: {campaign.schedule.startTime} – {campaign.schedule.endTime}
-                </li>
-                <li>Avg interval: {Math.round(campaign.schedule.intervalMs / 1000)}s</li>
-              </ul>
-            </>
-          ) : null}
+          <h3 className="mt-4 mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Send rate
+          </h3>
+          <ul className="space-y-1 text-xs text-muted-foreground">
+            <li>Avg interval: {Math.round(campaign.intervalMs / 1000)}s</li>
+          </ul>
         </aside>
 
         <section className="col-span-2 min-h-0 overflow-auto">
@@ -231,15 +205,15 @@ function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
           totalLeads: campaign.totalLeads + newOnes.length,
           // If the campaign had finished, re-open it so the SW picks
           // up the new pending leads.
-          status: campaign.status === 'done' ? 'scheduled' : campaign.status,
+          status: campaign.status === 'done' ? 'running' : campaign.status,
           completedAt: campaign.status === 'done' ? undefined : campaign.completedAt,
           nextRunAt: Date.now(),
         });
       });
-      // Re-arm the scheduler if we re-opened a finished campaign.
+      // Re-arm the worker if we re-opened a finished campaign.
       if (campaign.status === 'done') {
         await chrome.runtime.sendMessage({
-          type: 'sw/scheduleCampaign',
+          type: 'sw/runCampaignNow',
           campaignId: campaign.id,
         });
       }

@@ -1,44 +1,112 @@
-import { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
-import { db } from '@/shared/db';
+import { useCallback, useEffect, useState } from 'react';
+import { Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { formatDateTime, uuid } from '@/shared/format';
-import type { VariantGroup } from '@/shared/types';
+import { formatDateTime } from '@/shared/format';
+import {
+  BridgeError,
+  createVariantGroup,
+  deleteVariantGroup,
+  listVariantGroups,
+  updateVariantGroup,
+  type DesktopVariantGroup,
+} from '@/shared/desktop-bridge';
 
 const MAX_VARIANTS = 20;
 
+type LoadState =
+  | { kind: 'loading' }
+  | { kind: 'ready'; groups: DesktopVariantGroup[] }
+  | { kind: 'error'; message: string; offline: boolean };
+
 export function Variants() {
-  const groups = useLiveQuery(
-    () => db.variantGroups.orderBy('updatedAt').reverse().toArray(),
-    [],
-    [] as VariantGroup[]
-  );
-  const [editing, setEditing] = useState<VariantGroup | 'new' | null>(null);
+  const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  const [editing, setEditing] = useState<DesktopVariantGroup | 'new' | null>(null);
+
+  const refresh = useCallback(async () => {
+    setState({ kind: 'loading' });
+    try {
+      const groups = await listVariantGroups();
+      setState({ kind: 'ready', groups });
+    } catch (err) {
+      const offline = err instanceof BridgeError && err.code === 'no_desktop';
+      setState({
+        kind: 'error',
+        message:
+          err instanceof BridgeError
+            ? err.message
+            : err instanceof Error
+            ? err.message
+            : String(err),
+        offline,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   return (
     <div className="flex flex-1 flex-col">
       <ScreenHeader
         title="Variants"
-        description="Reusable message-variant groups. Apply them when creating a campaign."
+        description="Reusable message-variant groups, synced with the desktop app."
         actions={
-          <button
-            type="button"
-            onClick={() => setEditing('new')}
-            className="inline-flex h-8 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New group
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing('new')}
+              disabled={state.kind !== 'ready'}
+              className="inline-flex h-8 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New group
+            </button>
+          </div>
         }
       />
 
-      {groups && groups.length === 0 ? (
+      {state.kind === 'loading' ? (
+        <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading variants from desktop…
+        </div>
+      ) : null}
+
+      {state.kind === 'error' ? (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="max-w-sm text-center">
+            <p className="text-sm font-medium">
+              {state.offline ? 'Desktop app not running' : 'Could not load variants'}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{state.message}</p>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="mt-4 inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {state.kind === 'ready' && state.groups.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="max-w-sm text-center">
             <p className="text-sm font-medium">No variants saved yet</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Save a named set of DM variations once, reuse it across campaigns.
+              Save a named set of DM variations once on the desktop app or here, reuse it across
+              campaigns.
             </p>
             <button
               type="button"
@@ -52,7 +120,7 @@ export function Variants() {
         </div>
       ) : null}
 
-      {groups && groups.length > 0 ? (
+      {state.kind === 'ready' && state.groups.length > 0 ? (
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 border-b border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -64,7 +132,7 @@ export function Variants() {
               </tr>
             </thead>
             <tbody>
-              {groups.map((g) => (
+              {state.groups.map((g) => (
                 <tr
                   key={g.id}
                   className="cursor-pointer border-b border-border transition-colors hover:bg-accent/40 last:border-b-0"
@@ -90,7 +158,12 @@ export function Variants() {
                         type="button"
                         onClick={async () => {
                           if (!confirm(`Delete "${g.name}"?`)) return;
-                          await db.variantGroups.delete(g.id);
+                          try {
+                            await deleteVariantGroup(g.id);
+                            await refresh();
+                          } catch (err) {
+                            alert(err instanceof Error ? err.message : String(err));
+                          }
                         }}
                         className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground hover:text-destructive"
                         aria-label="Delete"
@@ -110,6 +183,10 @@ export function Variants() {
         <EditDialog
           group={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            void refresh();
+          }}
         />
       ) : null}
     </div>
@@ -119,9 +196,11 @@ export function Variants() {
 function EditDialog({
   group,
   onClose,
+  onSaved,
 }: {
-  group: VariantGroup | null;
+  group: DesktopVariantGroup | null;
   onClose: () => void;
+  onSaved: () => void;
 }) {
   const [name, setName] = useState(group?.name ?? '');
   const [variants, setVariants] = useState<string[]>(
@@ -138,23 +217,12 @@ function EditDialog({
     setError(null);
     try {
       const cleaned = variants.map((v) => v.trim()).filter(Boolean);
-      const now = Date.now();
       if (group) {
-        await db.variantGroups.update(group.id, {
-          name: name.trim(),
-          variants: cleaned,
-          updatedAt: now,
-        });
+        await updateVariantGroup(group.id, { name: name.trim(), variants: cleaned });
       } else {
-        await db.variantGroups.put({
-          id: uuid(),
-          name: name.trim(),
-          variants: cleaned,
-          createdAt: now,
-          updatedAt: now,
-        });
+        await createVariantGroup({ name: name.trim(), variants: cleaned });
       }
-      onClose();
+      onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save');
     } finally {
@@ -176,7 +244,8 @@ function EditDialog({
             {group ? `Edit ${group.name}` : 'New variant group'}
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            One variant is picked at random per DM when this group is used in a campaign.
+            One variant is picked at random per DM when this group is used in a campaign. Saved
+            groups sync with the desktop app.
           </p>
         </header>
 

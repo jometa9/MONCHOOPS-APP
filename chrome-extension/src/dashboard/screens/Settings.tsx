@@ -50,11 +50,10 @@ export function Settings() {
   }
 
   async function clearAllData() {
-    if (!confirm('Delete all campaigns, leads, history, and variant groups? This cannot be undone.')) return;
+    if (!confirm('Delete all campaigns, leads, and history from this browser? Variant groups live on the desktop app and are not affected.')) return;
     await db.campaigns.clear();
     await db.leads.clear();
     await db.history.clear();
-    await db.variantGroups.clear();
     alert('All data cleared.');
   }
 

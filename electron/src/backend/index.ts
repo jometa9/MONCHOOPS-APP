@@ -22,19 +22,17 @@ import {
   listMassDmSends,
   listRunningJobs,
   listScrapeResults,
-  listWarmupResults,
   getScrapeResult,
   readScrapeUsernames,
   reconcileOnStartup,
+  setMassDmRemainingHint,
   shutdownAllJobs,
   startLogin,
   startAutoLogin,
   startBulkAutoLogin,
   startMassDm,
   startScrape,
-  startWarmup,
   type BulkLoginRow,
-  type WarmupAction,
   type MassDmInteractionsConfig,
   subscribe as subscribeToJobs,
   type JobEvent,
@@ -54,14 +52,8 @@ import {
   listMessageVariantGroups,
   updateMessageVariantGroup,
 } from './messageVariants';
-import {
-  createWarmupSchedule,
-  deleteWarmupSchedule,
-  listWarmupSchedules,
-  startWarmupScheduler,
-  stopWarmupScheduler,
-} from './warmupSchedules';
 import { wipeUserData } from './userData';
+import { fetchUsage, flushDmBuffer, registerAccount, unregisterAccount } from './cloudSync';
 import type { SessionSnapshot } from './types';
 import {
   checkForUpdatesManual,
@@ -74,6 +66,7 @@ import {
   listPairedClients,
   resolvePairing as resolveBridgePairing,
   revokePairedClient,
+  setMutationHandler as setBridgeMutationHandler,
   setPairRequestHandler,
   startBridgeServer,
   stopBridgeServer,
@@ -129,7 +122,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   }
 
   subscribeToJobs(broadcastJobEvent);
-  startWarmupScheduler();
   initUpdater(broadcast);
 
   // Local HTTP bridge for the Chrome extension. Starts in the background;
@@ -137,6 +129,11 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   // the main app boot.
   setPairRequestHandler((req: BridgePairRequest) => {
     broadcast('bridge:pair-request', req);
+  });
+  // The bridge can mutate variant groups; forward the change so the desktop
+  // UI re-renders without a manual refresh.
+  setBridgeMutationHandler((channel) => {
+    broadcast(channel);
   });
   void startBridgeServer().catch((err) => {
     console.warn('[backend] bridge server failed to start', err);
@@ -156,12 +153,48 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   // Accounts
   ipcMain.handle('accounts:list', async () => listAccounts());
   ipcMain.handle('accounts:get', async (_e, id: string) => getAccount(id));
+
+  // Hard quota check: refuse to even open the login window when the user is
+  // already at the per-plan account limit. Pass the usernames you're about
+  // to log in if you know them (auto-login + bulk); pass an empty list for
+  // manual login where the username isn't known yet — in that case we
+  // assume one new slot is needed.
+  async function ensureAccountSlotAvailable(
+    requestedUsernames: string[]
+  ): Promise<void> {
+    const usage = await fetchUsage();
+    if (!usage) return; // Server unreachable — fall back to local-only behaviour.
+    if (usage.accounts.limit == null) return; // unlimited plan / admin
+    const localUsernames = new Set(
+      listAccounts().map((a) => a.username.toLowerCase())
+    );
+    // Pre-existing local accounts (re-logins) don't take a new slot since
+    // they're already counted on the server. Filter them out of the ask.
+    const newSlotsNeeded =
+      requestedUsernames.length === 0
+        ? 1
+        : requestedUsernames.filter(
+            (u) => !localUsernames.has(u.trim().replace(/^@+/, '').toLowerCase())
+          ).length;
+    if (newSlotsNeeded === 0) return;
+    const remaining = usage.accounts.remaining ?? 0;
+    if (remaining < newSlotsNeeded) {
+      const plan = usage.plan;
+      throw new Error(
+        `Your ${plan} plan allows ${usage.accounts.limit} Instagram account${
+          usage.accounts.limit === 1 ? '' : 's'
+        } (you have ${usage.accounts.used}). Upgrade to add more.`
+      );
+    }
+  }
+
   ipcMain.handle(
     'accounts:startLogin',
     async (
       _e,
       proxy: { url: string; username?: string | null; password?: string | null } | null
     ) => {
+      await ensureAccountSlotAvailable([]);
       const jobId = startLogin({ proxy: proxy ?? null });
       return { jobId };
     }
@@ -176,6 +209,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
         proxy: { url: string; username?: string | null; password?: string | null } | null;
       }
     ) => {
+      await ensureAccountSlotAvailable([payload.username]);
       const jobId = startAutoLogin({
         username: payload.username,
         password: payload.password,
@@ -192,6 +226,11 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     async (_e, payload: { id: string; password?: string | null }) => {
       const acc = getAccount(payload.id);
       if (!acc) throw new Error('Account not found');
+      // Retry is on an account that's already in our local list — the server
+      // has either already counted it or doesn't know about it yet. Either
+      // way we don't want to *block* a retry just because the user is at
+      // their cap, so we skip the slot check here. The post-success register
+      // will be a no-op for already-tracked usernames.
       const password =
         typeof payload.password === 'string' && payload.password.length > 0
           ? payload.password
@@ -204,11 +243,12 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     }
   );
   ipcMain.handle('accounts:startBulkAutoLogin', async (_e, rows: BulkLoginRow[]) => {
+    await ensureAccountSlotAvailable(rows.map((r) => r.username));
     const jobId = startBulkAutoLogin(rows);
     return { jobId };
   });
   ipcMain.handle('accounts:delete', async (_e, id: string) => {
-    deleteAccount(id);
+    await deleteAccount(id);
     broadcast('accounts:changed');
   });
   ipcMain.handle(
@@ -254,6 +294,17 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       interactions?: MassDmInteractionsConfig | null;
       excludeUsernames?: string[] | null;
     }) => {
+      // Hand startMassDm a fresh remaining-quota number so it can refuse
+      // to even spawn the worker once the user is at their cap. fetchUsage
+      // returning null (server unreachable) leaves the hint cleared, so
+      // the local job runs and the in-flight DM batcher catches a 403
+      // mid-run if needed.
+      const usage = await fetchUsage();
+      if (usage && usage.dms.remaining != null) {
+        setMassDmRemainingHint(usage.dms.remaining);
+      } else {
+        setMassDmRemainingHint(null);
+      }
       return startMassDm(payload);
     }
   );
@@ -261,16 +312,10 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     'jobs:startScrape',
     async (_e, payload: {
       accountId: string;
-      kind: Exclude<JobKind, 'login' | 'mass_dm' | 'warmup'>;
+      kind: Exclude<JobKind, 'login' | 'mass_dm'>;
       params: Record<string, unknown>;
     }) => {
       return startScrape(payload);
-    }
-  );
-  ipcMain.handle(
-    'jobs:startWarmup',
-    async (_e, payload: { accountId: string; action: WarmupAction }) => {
-      return startWarmup(payload);
     }
   );
 
@@ -281,32 +326,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   ipcMain.handle('massDms:listDmedUsernames', async (_e, accountId: string) =>
     listDmedUsernamesForAccount(accountId)
   );
-
-  // Warmup history
-  ipcMain.handle('warmups:list', async () => listWarmupResults());
-
-  // Warmup schedules
-  ipcMain.handle('warmupSchedules:list', async (_e, accountId?: string) =>
-    listWarmupSchedules(accountId)
-  );
-  ipcMain.handle(
-    'warmupSchedules:create',
-    async (_e, payload: {
-      accountId: string;
-      startDate: number;
-      endDate: number;
-      timeOfDaySec: number;
-      actions: WarmupAction[];
-    }) => {
-      const row = createWarmupSchedule(payload);
-      broadcast('warmupSchedules:changed');
-      return row;
-    }
-  );
-  ipcMain.handle('warmupSchedules:delete', async (_e, id: string) => {
-    deleteWarmupSchedule(id);
-    broadcast('warmupSchedules:changed');
-  });
 
   // Scrape results
   ipcMain.handle('scrapes:list', async () => listScrapeResults());
@@ -471,7 +490,10 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     // Cancel all running jobs first
     const running = listRunningJobs();
     for (const job of running) cancelJob(job.id);
+    const all = listAccounts();
     getDb().prepare('DELETE FROM accounts').run();
+    // Mirror to the cloud so the per-user count drops back to zero.
+    await Promise.allSettled(all.map((a) => unregisterAccount(a.username)));
     broadcast('accounts:changed');
   });
 
@@ -493,7 +515,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     broadcast('accounts:changed');
     broadcast('jobs:changed');
     broadcast('categories:changed');
-    broadcast('warmupSchedules:changed');
   });
 
   ipcMain.handle('app:selectDirectory', async () => {
@@ -603,8 +624,8 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
 
   let shutdownStarted = false;
   app.on('before-quit', (event) => {
-    stopWarmupScheduler();
     void stopBridgeServer().catch(() => {});
+    void flushDmBuffer().catch(() => {});
     if (listRunningJobs().length === 0) return;
     // Block every before-quit cycle until the flush is done — otherwise the
     // second app.quit() (from main.ts's 5s prepare-quit timer) would tear the
@@ -615,6 +636,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     void (async () => {
       try {
         await shutdownAllJobs(15_000);
+        await flushDmBuffer();
       } catch (err) {
         console.error('[backend] shutdown failed:', err);
       } finally {

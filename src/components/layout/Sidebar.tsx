@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Database, Flame, FolderTree, History, Home, Instagram, ListTodo, LogOut, MessageSquareText, Send, Settings, Users } from 'lucide-react';
+import { Database, FolderTree, History, Home, Instagram, ListTodo, LogOut, MessageSquareText, Send, Settings, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/context/SessionContext';
 import { useJobs } from '@/context/JobsContext';
@@ -22,7 +22,6 @@ const items: Item[] = [
   { to: '/', label: 'Home', icon: Home },
   { to: '/accounts', label: 'Accounts', icon: Instagram },
   { to: '/scrape', label: 'Scrape Leads', icon: Users },
-  { to: '/warmup', label: 'Warmup', icon: Flame },
   { to: '/cold-dm', label: 'Cold DM', icon: Send },
   { to: '/queue', label: 'Queue', icon: ListTodo },
   { to: '/data', label: 'Leads', icon: Database },

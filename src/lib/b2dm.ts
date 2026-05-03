@@ -11,9 +11,6 @@ import type {
   ScrapeKind,
   ScrapeResultPublic,
   ScrapeUsernameRow,
-  WarmupAction,
-  WarmupResultPublic,
-  WarmupSchedulePublic,
 } from '@/types/domain';
 
 type Unsubscribe = () => void;
@@ -72,10 +69,6 @@ export interface JobsApi {
     kind: ScrapeKind;
     params: Record<string, unknown>;
   }): Promise<string>;
-  startWarmup(payload: {
-    accountId: string;
-    action: WarmupAction;
-  }): Promise<string>;
   onChange(cb: () => void): Unsubscribe;
   onProgress(
     cb: (evt: { jobId: string; done: number; total: number | null; item?: string }) => void
@@ -98,20 +91,6 @@ export interface MassDmsApi {
   get(jobId: string): Promise<MassDmResultPublic | null>;
   listSends(jobId: string): Promise<MassDmSendPublic[]>;
   listDmedUsernames(accountId: string): Promise<string[]>;
-}
-
-export interface WarmupsApi {
-  list(): Promise<WarmupResultPublic[]>;
-  listSchedules(accountId?: string): Promise<WarmupSchedulePublic[]>;
-  createSchedule(payload: {
-    accountId: string;
-    startDate: number;
-    endDate: number;
-    timeOfDaySec: number;
-    actions: WarmupAction[];
-  }): Promise<WarmupSchedulePublic>;
-  deleteSchedule(id: string): Promise<void>;
-  onSchedulesChange(cb: () => void): Unsubscribe;
 }
 
 export interface CategoriesApi {
@@ -248,7 +227,6 @@ export interface B2dmApi {
   jobs: JobsApi;
   scrapes: ScrapesApi;
   massDms: MassDmsApi;
-  warmups: WarmupsApi;
   categories: CategoriesApi;
   messageVariants: MessageVariantsApi;
   csv: CsvApi;

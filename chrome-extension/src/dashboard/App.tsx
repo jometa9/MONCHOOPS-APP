@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { LicenseGate } from './components/LicenseGate';
 import { NewCampaign } from './screens/NewCampaign';
@@ -11,6 +11,7 @@ import { Settings } from './screens/Settings';
 import { getSession } from '@/shared/license';
 import type { Session } from '@/shared/types';
 import { EMPTY_SESSION } from '@/shared/types';
+import { useRunningCampaign } from './useRunningCampaign';
 
 export function App() {
   const [session, setSession] = useState<Session>(EMPTY_SESSION);
@@ -38,7 +39,40 @@ export function App() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <Sidebar session={session} onLogout={() => setSession(EMPTY_SESSION)} />
+      <Routes>
+        <Route
+          path="*"
+          element={
+            <Shell session={session} onLogout={() => setSession(EMPTY_SESSION)} />
+          }
+        />
+      </Routes>
+    </div>
+  );
+}
+
+function Shell({
+  session,
+  onLogout,
+}: {
+  session: Session;
+  onLogout: () => void;
+}) {
+  const running = useRunningCampaign();
+  const location = useLocation();
+
+  // While a campaign is running, force the user onto its detail page —
+  // they can pause from there but cannot navigate elsewhere.
+  if (running) {
+    const detailPath = `/campaigns/${running.id}`;
+    if (location.pathname !== detailPath) {
+      return <Navigate to={detailPath} replace />;
+    }
+  }
+
+  return (
+    <>
+      <Sidebar session={session} onLogout={onLogout} locked={!!running} />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Routes>
           <Route index element={<Navigate to="/campaigns" replace />} />
@@ -51,6 +85,6 @@ export function App() {
           <Route path="*" element={<Navigate to="/campaigns" replace />} />
         </Routes>
       </main>
-    </div>
+    </>
   );
 }

@@ -1,7 +1,6 @@
-// Interaction primitives: like a post/reel, follow a user, plus "human
-// activity" loops (browse feed / explore, act on a hashtag grid). Designed
-// to be composed freely by the warmup worker and by the Mass DM worker
-// when the user opts into pre-DM interactions.
+// Interaction primitives: like a post/reel, follow a user. Used by the
+// Mass DM worker when the user opts into pre-DM interactions (like N
+// recent posts of the recipient, follow them).
 //
 // Every action is idempotent-safe: liking an already-liked post is a noop
 // (returns { ok:true, skipped:true, reason:'already_liked' }), following
@@ -11,8 +10,6 @@
 import { safeGoto, sendLog, waitFor, jitter, isCancelled } from '../lib';
 import { waitForPageReady } from './network';
 import { iterUserPosts } from './profile';
-import { readPostAuthor } from './post';
-import { iterPostsByHashtag, iterPostsByLocation } from './search';
 
 type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -28,7 +25,7 @@ function sanitizeUsername(raw: string): string {
 /** Like the post/reel at `postUrl`. Detects already-liked state via the
  *  heart's aria-label ("Like" = not liked yet; "Unlike" = already liked).
  *  Supports both English and Spanish labels. */
-export async function likePost(page: Page, postUrl: string): Promise<InteractionOutcome> {
+async function likePost(page: Page, postUrl: string): Promise<InteractionOutcome> {
   if (!postUrl) return { ok: false, reason: 'missing_post_url' };
 
   try {
@@ -364,216 +361,5 @@ export async function likeNPostsOfUser(
     await waitFor(jitter(1800));
   }
   return { attempted: urls.length, liked, skipped, failed };
-}
-
-/** Park on the home feed and scroll for `durationMs` with human-ish
- *  pauses, occasionally playing a reel that scrolls into view. No likes
- *  or follows — just "I'm here, I'm looking" activity. */
-export async function viewFeed(page: Page, durationMs: number): Promise<void> {
-  await safeGoto(page, 'https://www.instagram.com/');
-  await waitForPageReady(page);
-  await scrollForDuration(page, durationMs);
-}
-
-/** Same idea on /explore/: loads the grid and scrolls through it for the
- *  given duration. */
-export async function viewExplore(page: Page, durationMs: number): Promise<void> {
-  await safeGoto(page, 'https://www.instagram.com/explore/');
-  await waitForPageReady(page);
-  await scrollForDuration(page, durationMs);
-}
-
-/** Same idea on /reels/, but the reels surface is a full-viewport snap
- *  feed — pixel scrolling just jiggles the current clip. Instead, we advance
- *  reel-by-reel with the ArrowDown key and dwell for a watch-time-ish
- *  interval between each. */
-export async function viewReels(page: Page, durationMs: number): Promise<void> {
-  await safeGoto(page, 'https://www.instagram.com/reels/');
-  await waitForPageReady(page);
-  // The reels viewer only routes ArrowDown after a real user click — focus()
-  // alone doesn't arm it. Click near the middle of the viewport to hand
-  // keyboard focus to the reels container.
-  try {
-    const box = await page.evaluate(() => ({
-      w: window.innerWidth,
-      h: window.innerHeight,
-    }));
-    await page.mouse.click(Math.floor(box.w / 2), Math.floor(box.h / 2));
-  } catch {}
-
-  const deadline = Date.now() + durationMs;
-  // Dwell on the first reel before advancing.
-  await waitFor(jitter(4500, 0.6));
-  while (Date.now() < deadline) {
-    if (isCancelled()) return;
-    try {
-      await page.keyboard.press('ArrowDown');
-    } catch {
-      // page may have been closed mid-loop during cancel
-      return;
-    }
-    // Watch-time per reel: most people linger 3–10s. 5s ± 60% gives a
-    // realistic spread without going too robotic.
-    await waitFor(jitter(5000, 0.6));
-  }
-}
-
-async function scrollForDuration(page: Page, durationMs: number): Promise<void> {
-  const deadline = Date.now() + durationMs;
-  while (Date.now() < deadline) {
-    if (isCancelled()) return;
-    // Scroll a random amount — not a full page — to look less robotic.
-    const by = 400 + Math.floor(Math.random() * 600);
-    try {
-      await page.evaluate((px: number) => window.scrollBy({ top: px, behavior: 'smooth' }), by);
-    } catch {
-      // page may have been closed mid-loop during cancel — swallow
-    }
-    await waitFor(jitter(2500, 0.5));
-  }
-}
-
-export interface HashtagActOpts {
-  /** Like each post encountered. Default false. */
-  like?: boolean;
-  /** Follow each post's author. Default false. */
-  follow?: boolean;
-  /** Max posts to touch. Required — hashtags have effectively infinite
-   *  posts and we need an upper bound. */
-  count: number;
-  /** Invoked after every post iteration with the running tally. Lets the
-   *  caller push live progress / counter updates to the UI instead of
-   *  waiting for the whole run to finish. */
-  onStep?: (tally: HashtagActResult) => void;
-}
-
-export interface HashtagActResult {
-  visited: number;
-  liked: number;
-  followed: number;
-  skipped: number;
-  failed: number;
-}
-
-/** Walk a hashtag grid and apply like/follow actions to each of the first
- *  `count` posts. The scrape worker uses the same iterator so behavior is
- *  consistent. */
-export async function iterHashtagAndAct(
-  page: Page,
-  hashtag: string,
-  opts: HashtagActOpts
-): Promise<HashtagActResult> {
-  const clean = hashtag.replace(/^#+/, '').trim();
-  if (!clean) throw new Error('hashtag is required');
-  return actOnGridIterator(
-    page,
-    iterPostsByHashtag(page, clean),
-    opts,
-    `hashtag #${clean}`
-  );
-}
-
-/** Walk a location grid (recent tab) and apply like/follow actions to each
- *  of the first `count` posts. Mirrors `iterHashtagAndAct` so the warmup
- *  worker can treat location and hashtag as interchangeable sources. */
-export async function iterLocationAndAct(
-  page: Page,
-  location: string,
-  opts: HashtagActOpts
-): Promise<HashtagActResult> {
-  const raw = location.trim();
-  if (!raw) throw new Error('location is required');
-  return actOnGridIterator(
-    page,
-    iterPostsByLocation(page, raw, { recent: true }),
-    opts,
-    `location ${raw}`
-  );
-}
-
-async function actOnGridIterator(
-  page: Page,
-  iter: AsyncIterable<string>,
-  opts: HashtagActOpts,
-  sourceLabel: string
-): Promise<HashtagActResult> {
-  if (opts.count <= 0) return { visited: 0, liked: 0, followed: 0, skipped: 0, failed: 0 };
-
-  // `count` is the target of NEW actions (likes or follows), not the number
-  // of posts to visit. Already-liked posts or already-followed authors land
-  // in `skipped` and do NOT consume a slot, so we keep iterating until we
-  // reach the target. Safety cap keeps us from looping forever on sources
-  // where most content is already actioned.
-  const target = opts.count;
-  const maxVisits = Math.max(target * 5, target + 20);
-
-  let visited = 0;
-  let liked = 0;
-  let followed = 0;
-  let skipped = 0;
-  let failed = 0;
-
-  for await (const url of iter) {
-    if (isCancelled()) break;
-    const achieved = opts.like ? liked : opts.follow ? followed : 0;
-    if (achieved >= target) break;
-    if (visited >= maxVisits) {
-      sendLog('warn', `${sourceLabel}: visited ${visited} posts without hitting target (${achieved}/${target}) — stopping`);
-      break;
-    }
-
-    try {
-      await safeGoto(page, url);
-      await waitForPageReady(page);
-
-      if (opts.like) {
-        const state = await detectLikeState(page);
-        if (state === 'not_liked') {
-          const clicked = await clickLikeButton(page);
-          if (clicked) {
-            await waitForPageReady(page);
-            const after = await detectLikeState(page);
-            if (after === 'liked') liked += 1;
-            else failed += 1;
-          } else {
-            failed += 1;
-          }
-        } else if (state === 'liked') {
-          skipped += 1;
-        } else {
-          failed += 1;
-        }
-      }
-
-      if (opts.follow) {
-        const author = await readPostAuthor(page);
-        if (author) {
-          const res = await followUser(page, author);
-          if (res.ok && !res.skipped) {
-            followed += 1;
-            sendLog('info', `  [follow] ✓ followed @${author}`);
-          } else if (res.ok && res.skipped) {
-            skipped += 1;
-            sendLog('info', `  [follow] · @${author} (${res.reason})`);
-          } else {
-            failed += 1;
-            sendLog('warn', `  [follow] ✗ @${author} (${res.reason})`);
-          }
-        } else {
-          failed += 1;
-        }
-      }
-    } catch (err) {
-      sendLog(
-        'warn',
-        `${sourceLabel} act on ${url} failed: ${err instanceof Error ? err.message : String(err)}`
-      );
-      failed += 1;
-    }
-    visited += 1;
-    opts.onStep?.({ visited, liked, followed, skipped, failed });
-    await waitFor(jitter(2200));
-  }
-  return { visited, liked, followed, skipped, failed };
 }
 

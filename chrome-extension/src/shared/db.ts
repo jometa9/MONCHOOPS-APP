@@ -1,24 +1,18 @@
 // IndexedDB-backed persistence. Mirrors the SQLite schema of the desktop
-// app but only for the slice the extension needs: campaigns, leads,
-// reusable variant groups, DM history, and a small key/value meta store.
+// app but only for the slice the extension owns: campaigns, leads, DM
+// history, and a small key/value meta store. Variant groups live on the
+// desktop app — the extension reads/writes them through the bridge.
 //
 // Service worker, popup, and dashboard all open the same Dexie instance —
 // IndexedDB serializes writes per-store across contexts, so concurrent
 // access from multiple extension pages is safe without explicit locking.
 
 import Dexie, { type Table } from 'dexie';
-import type {
-  Campaign,
-  DmHistoryRow,
-  Lead,
-  MetaRow,
-  VariantGroup,
-} from './types';
+import type { Campaign, DmHistoryRow, Lead, MetaRow } from './types';
 
 class B2dmExtDb extends Dexie {
   campaigns!: Table<Campaign, string>;
   leads!: Table<Lead, number>;
-  variantGroups!: Table<VariantGroup, string>;
   history!: Table<DmHistoryRow, string>;
   meta!: Table<MetaRow, string>;
 
@@ -26,11 +20,19 @@ class B2dmExtDb extends Dexie {
     super('b2dm-ext');
     this.version(1).stores({
       campaigns: 'id, status, createdAt',
-      // ++id = autoinc primary key. Compound index on
-      // [campaignId+status] lets the scheduler grab the next pending lead
-      // for a campaign with a single index range query.
       leads: '++id, campaignId, status, [campaignId+status], username',
       variantGroups: 'id, updatedAt',
+      history: 'id, campaignId, timestamp, status',
+      meta: 'key',
+    });
+    // v2: variantGroups moved to the desktop app over the bridge. Drop the
+    // local table so we stop double-bookkeeping. Existing rows are silently
+    // discarded — users still on a stale install lose only the local copy
+    // they were never using, since the desktop is now the source of truth.
+    this.version(2).stores({
+      campaigns: 'id, status, createdAt',
+      leads: '++id, campaignId, status, [campaignId+status], username',
+      variantGroups: null,
       history: 'id, campaignId, timestamp, status',
       meta: 'key',
     });

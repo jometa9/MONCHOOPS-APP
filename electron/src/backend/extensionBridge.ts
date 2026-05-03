@@ -28,6 +28,13 @@ import {
   listScrapeResults,
   readScrapeUsernames,
 } from './jobs';
+import {
+  createMessageVariantGroup,
+  deleteMessageVariantGroup,
+  getMessageVariantGroup,
+  listMessageVariantGroups,
+  updateMessageVariantGroup,
+} from './messageVariants';
 import { BUILD_CONFIG } from '../buildConfig';
 
 const PORT_RANGE_START = 17775;
@@ -76,9 +83,27 @@ let listeningPort: number | null = null;
 const pendingPairings = new Map<string, PendingPairing>();
 
 let onPairRequest: ((req: BridgePairRequest) => void) | null = null;
+let onMutation: ((channel: string) => void) | null = null;
 
 export function setPairRequestHandler(cb: (req: BridgePairRequest) => void): void {
   onPairRequest = cb;
+}
+
+/** Fires when the bridge mutates renderer-visible state (e.g. the extension
+ *  creates a variant group). Wire this to your renderer broadcast so the
+ *  desktop UI re-renders. */
+export function setMutationHandler(cb: (channel: string) => void): void {
+  onMutation = cb;
+}
+
+function notifyMutation(channel: string): void {
+  if (!onMutation) return;
+  try {
+    onMutation(channel);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[bridge] mutation handler threw', err);
+  }
 }
 
 export function getStatus(): BridgeStatus {
@@ -263,6 +288,40 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
       return;
     }
 
+    if (req.method === 'GET' && path === '/variants') {
+      respondJson(res, 200, listMessageVariantGroups());
+      return;
+    }
+
+    if (req.method === 'POST' && path === '/variants') {
+      void handleVariantCreate(req, res);
+      return;
+    }
+
+    const variantMatch = path.match(/^\/variants\/([\w-]+)$/);
+    if (variantMatch) {
+      const id = variantMatch[1]!;
+      if (req.method === 'GET') {
+        const group = getMessageVariantGroup(id);
+        if (!group) {
+          respondJson(res, 404, { error: 'not_found' });
+          return;
+        }
+        respondJson(res, 200, group);
+        return;
+      }
+      if (req.method === 'PUT') {
+        void handleVariantUpdate(req, res, id);
+        return;
+      }
+      if (req.method === 'DELETE') {
+        deleteMessageVariantGroup(id);
+        notifyMutation('messageVariants:changed');
+        respondJson(res, 200, { ok: true });
+        return;
+      }
+    }
+
     respondJson(res, 404, { error: 'not_found' });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -333,6 +392,62 @@ async function handlePairCreate(
   respondJson(res, 200, { pairingId, code });
 }
 
+async function handleVariantCreate(
+  req: http.IncomingMessage,
+  res: http.ServerResponse
+): Promise<void> {
+  const parsed = await readJsonBody<{ name?: string; variants?: string[] }>(req, res);
+  if (!parsed) return;
+  try {
+    const group = createMessageVariantGroup(
+      String(parsed.name ?? ''),
+      Array.isArray(parsed.variants) ? parsed.variants : []
+    );
+    notifyMutation('messageVariants:changed');
+    respondJson(res, 200, group);
+  } catch (err) {
+    respondJson(res, 400, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+async function handleVariantUpdate(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  id: string
+): Promise<void> {
+  const parsed = await readJsonBody<{ name?: string; variants?: string[] }>(req, res);
+  if (!parsed) return;
+  try {
+    const group = updateMessageVariantGroup(
+      id,
+      String(parsed.name ?? ''),
+      Array.isArray(parsed.variants) ? parsed.variants : []
+    );
+    notifyMutation('messageVariants:changed');
+    respondJson(res, 200, group);
+  } catch (err) {
+    respondJson(res, 400, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+async function readJsonBody<T>(
+  req: http.IncomingMessage,
+  res: http.ServerResponse
+): Promise<T | null> {
+  const body = await readBody(req);
+  if (!body) return {} as T;
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    respondJson(res, 400, { error: 'invalid_json' });
+    return null;
+  }
+}
+
 function handleCategoryLeads(res: http.ServerResponse, categoryId: string): void {
   // listLeads streams directly; the bridge consumer doesn't need the rich
   // LeadPublic shape, just a flat username list. We re-shape here so the
@@ -377,7 +492,7 @@ function applyCors(res: http.ServerResponse, origin?: string): void {
     res.setHeader('Access-Control-Allow-Origin', allowed);
     res.setHeader('Vary', 'Origin');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
   res.setHeader('Access-Control-Max-Age', '600');
 }

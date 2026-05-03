@@ -474,7 +474,7 @@ function migrate(db: Database): void {
 
   if (current < 18) {
     // Drop the inbox / AI responder / follow-up tables introduced in v17.
-    // The product was simplified down to scrape + warmup + cold DM, and
+    // The product was simplified down to scrape + cold DM, and
     // none of these surfaces survive. Existing rows are wiped along with
     // the tables; the schedulers, workers, and IPC handlers that wrote
     // them are gone.
@@ -499,7 +499,17 @@ function migrate(db: Database): void {
     `);
   }
 
-  db.pragma('user_version = 18');
+  if (current < 19) {
+    // Drop the warmup tables introduced in v9/v10. The warmup feature was
+    // removed from the product — the worker, IPC handlers, and UI are gone,
+    // so existing rows would just sit there orphaned.
+    db.exec(`
+      DROP TABLE IF EXISTS warmup_schedules;
+      DROP TABLE IF EXISTS warmup_results;
+    `);
+  }
+
+  db.pragma('user_version = 19');
 }
 
 // meta helpers — used by license.ts for ad-hoc key/value state.
