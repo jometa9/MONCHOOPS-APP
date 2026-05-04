@@ -213,7 +213,7 @@ export function NewCampaign() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
         title="New cold DM"
         description="Pick your audience, write your message, hit Start. The browser handles the rest."

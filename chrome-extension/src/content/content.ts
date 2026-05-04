@@ -1,56 +1,89 @@
-// Content script entry. Lives on every instagram.com / ig.me tab.
+// Content script — thin RPC layer.
 //
-// Lifecycle:
-//   1. The background SW picks the next pending lead for a campaign and
-//      sends `ig/sendDm` to the IG tab via chrome.tabs.sendMessage.
-//   2. We run pre-DM interactions (optional) → send the DM → verify.
-//   3. We reply with the result. The SW persists it and reschedules.
-//
-// Concurrency: the SW guarantees only one ig/sendDm is in flight at a
-// time. If a second one arrives while we're processing, we reject it so
-// the SW can retry later instead of corrupting state.
+// All orchestration (navigation, retries, sequencing) lives in the service
+// worker. This script just exposes atomic primitives the SW can call. Each
+// handler must return promptly so we never have a pending sendResponse when
+// the SW navigates the tab.
 
-import type { IgSendRequest, IgSendResult } from '@/shared/messages';
-import { sendDm, SendVerificationError, runInteractions } from './ig-actions';
+import type { CsRequest, CsResponse } from '@/shared/messages';
+import {
+  clickFollow,
+  clickLike,
+  detectFollowState,
+  detectLikeState,
+  dismissPrompts,
+  dwellOneStoryFrame,
+  findPostUrls,
+  getUrl,
+  isOnStories,
+  openNewDmDialog,
+  pickFirstSearchResult,
+  threadContains,
+  typeAndSendDm,
+  waitForComposer,
+  waitForUrlMatch,
+} from './ig-actions';
 import { startDismisser } from './ig-dom';
 
-let busy = false;
-
+console.log('[b2dm] content script loaded on', location.href);
 startDismisser();
 
-chrome.runtime.onMessage.addListener((req: IgSendRequest, _sender, sendResponse) => {
-  if (req?.type !== 'ig/sendDm') return false;
+chrome.runtime.onMessage.addListener((req: CsRequest, _sender, sendResponse) => {
+  if (!req || typeof req !== 'object' || !('type' in req)) return false;
+  if (!req.type.startsWith('b2dm/')) return false;
 
-  if (busy) {
-    sendResponse({ ok: false, error: 'busy' } satisfies IgSendResult);
-    return false;
-  }
-
-  busy = true;
   (async () => {
     try {
-      if (req.interactions) {
-        try {
-          await runInteractions(req.username, req.interactions);
-        } catch (err) {
-          // Interactions failing should not block the DM — log and keep going.
-          console.warn('[b2dm] interactions failed for', req.username, err);
-        }
-      }
-      const r = await sendDm(req.username, req.message);
-      sendResponse({ ok: true, verified: r.verified } satisfies IgSendResult);
+      const data = await dispatch(req);
+      sendResponse({ ok: true, data } satisfies CsResponse);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      const verification = err instanceof SendVerificationError;
-      sendResponse({
-        ok: false,
-        error: verification ? `verification_failed: ${error}` : error,
-      } satisfies IgSendResult);
-    } finally {
-      busy = false;
+      console.warn('[b2dm] primitive failed', req.type, error);
+      sendResponse({ ok: false, error } satisfies CsResponse);
     }
   })();
-
-  // Tell Chrome we'll reply asynchronously.
   return true;
 });
+
+async function dispatch(req: CsRequest): Promise<unknown> {
+  switch (req.type) {
+    case 'b2dm/ping':
+      return undefined;
+    case 'b2dm/url':
+      return { url: getUrl() };
+    case 'b2dm/dismissPrompts':
+      dismissPrompts();
+      return undefined;
+    case 'b2dm/checkOnStories':
+      return { value: isOnStories() };
+    case 'b2dm/dwellStory':
+      return await dwellOneStoryFrame(req.dwellMs);
+    case 'b2dm/detectFollowState':
+      return { state: detectFollowState() };
+    case 'b2dm/clickFollow':
+      return await clickFollow();
+    case 'b2dm/findPostUrls':
+      return { urls: findPostUrls(req.n) };
+    case 'b2dm/detectLikeState':
+      return { state: detectLikeState() };
+    case 'b2dm/clickLike':
+      return await clickLike();
+    case 'b2dm/waitForComposer':
+      return await waitForComposer(req.timeoutMs ?? 15_000);
+    case 'b2dm/openNewDmDialog':
+      return await openNewDmDialog();
+    case 'b2dm/pickFirstSearchResult':
+      return await pickFirstSearchResult(req.username);
+    case 'b2dm/typeAndSendDm':
+      return await typeAndSendDm(req.message);
+    case 'b2dm/threadContains':
+      return { value: threadContains(req.needle) };
+    case 'b2dm/waitForUrlMatch':
+      return await waitForUrlMatch(req.pattern, req.timeoutMs ?? 20_000);
+    default: {
+      const _exhaustive: never = req;
+      void _exhaustive;
+      throw new Error('unknown_primitive');
+    }
+  }
+}

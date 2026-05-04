@@ -15,7 +15,7 @@ export function Campaigns() {
   );
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
         title="Campaigns"
         description="Cold DM runs you've scheduled or completed."

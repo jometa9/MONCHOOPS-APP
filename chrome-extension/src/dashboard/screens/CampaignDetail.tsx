@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ArrowLeft, MonitorSmartphone, Pause, Play, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Clock, MonitorSmartphone, Pause, Play, RefreshCw } from 'lucide-react';
 import { db } from '@/shared/db';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { formatDateTime } from '@/shared/format';
@@ -51,7 +51,7 @@ export function CampaignDetail() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
         title={campaign.name}
         description={`Status: ${campaign.status} · Created ${formatDateTime(campaign.createdAt)}`}
@@ -95,6 +95,8 @@ export function CampaignDetail() {
         <Stat label="Failed" value={failed} accent="red" />
         <Stat label="Pending" value={pending + sending} />
       </div>
+
+      <NextSendTimer campaign={campaign} pending={pending + sending} />
 
       <div className="grid min-h-0 flex-1 grid-cols-3 gap-0">
         <aside className="col-span-1 overflow-auto border-r border-border bg-muted/10 p-4">
@@ -273,6 +275,48 @@ function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
       </div>
     </>
   );
+}
+
+function NextSendTimer({ campaign, pending }: { campaign: Campaign; pending: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (campaign.status === 'done' || pending === 0) return null;
+
+  const paused = campaign.status === 'paused';
+  const nextRunAt = campaign.nextRunAt;
+  const remainingMs = nextRunAt ? Math.max(0, nextRunAt - now) : null;
+
+  let text: string;
+  if (paused) {
+    text = 'Campaign paused';
+  } else if (remainingMs === null) {
+    text = 'Waiting to schedule next send…';
+  } else if (remainingMs === 0) {
+    text = 'Sending now…';
+  } else {
+    text = `Next send in ${formatDuration(remainingMs)}`;
+  }
+
+  return (
+    <div className="flex items-center gap-2 border-b border-border bg-background px-4 py-2 text-xs text-muted-foreground">
+      <Clock className="h-3.5 w-3.5" />
+      <span className="tabular-nums">{text}</span>
+    </div>
+  );
+}
+
+function formatDuration(ms: number) {
+  const totalSec = Math.ceil(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 function Stat({ label, value, accent }: { label: string; value: number; accent?: 'emerald' | 'red' }) {

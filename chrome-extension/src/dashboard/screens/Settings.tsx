@@ -60,7 +60,7 @@ export function Settings() {
   if (!session) return null;
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader title="Settings" description="License, Instagram session, data." />
 
       <div className="min-h-0 flex-1 overflow-auto">

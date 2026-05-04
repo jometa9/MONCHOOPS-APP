@@ -1,8 +1,9 @@
-import { History as HistoryIcon, LogOut, MessageSquare, MessageSquareText, Plus, Settings as SettingsIcon } from 'lucide-react';
+import { History as HistoryIcon, LogOut, MessageSquare, MessageSquareText, Monitor, Moon, Plus, Settings as SettingsIcon, Sun } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { logout } from '@/shared/license';
 import type { Session } from '@/shared/types';
 import { cn } from '@/shared/cn';
+import { useThemeMode, type ThemeMode } from '../theme';
 
 interface Props {
   session: Session;
@@ -28,9 +29,9 @@ export function Sidebar({ session, onLogout, locked }: Props) {
 
   return (
     <aside className="flex w-56 flex-none flex-col border-r border-border bg-muted/30">
-      <div className="border-b border-border px-4 py-4">
-        <div className="text-sm font-semibold tracking-tight">B2DM</div>
-        <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+      <div className="border-b border-border bg-background px-4 py-4">
+        <div className="text-base font-semibold tracking-tight">B2DM</div>
+        <div className="mt-0.5 truncate text-xs text-muted-foreground">
           {session.profile?.email ?? '—'}
         </div>
       </div>
@@ -78,7 +79,8 @@ export function Sidebar({ session, onLogout, locked }: Props) {
         ))}
       </nav>
 
-      <div className="mt-auto border-t border-border p-3">
+      <div className="mt-auto flex flex-col gap-2 border-t border-border p-3">
+        <ThemeToggle />
         <button
           type="button"
           onClick={handleLogout}
@@ -90,5 +92,32 @@ export function Sidebar({ session, onLogout, locked }: Props) {
         </button>
       </div>
     </aside>
+  );
+}
+
+const THEME_ORDER: ThemeMode[] = ['system', 'light', 'dark'];
+const THEME_META: Record<ThemeMode, { label: string; icon: typeof Sun }> = {
+  system: { label: 'System', icon: Monitor },
+  light: { label: 'Light', icon: Sun },
+  dark: { label: 'Dark', icon: Moon },
+};
+
+function ThemeToggle() {
+  const [mode, setMode] = useThemeMode();
+  const { label, icon: Icon } = THEME_META[mode];
+  const next = () => {
+    const i = THEME_ORDER.indexOf(mode);
+    setMode(THEME_ORDER[(i + 1) % THEME_ORDER.length]);
+  };
+  return (
+    <button
+      type="button"
+      onClick={next}
+      title={`Theme: ${label} (click to change)`}
+      className="inline-flex h-8 w-full items-center justify-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </button>
   );
 }

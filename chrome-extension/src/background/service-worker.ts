@@ -11,20 +11,30 @@
 // also locks its navigation while a campaign is running so the user can't
 // start another one in parallel.
 //
-// Tab strategy: we keep a dedicated background IG tab pinned (created on
-// demand, reused across ticks). It has to exist before we can talk to the
-// content script. The user can also leave their normal IG tab open — we
-// reuse the first eligible IG tab we find.
+// Why the SW orchestrates instead of the content script: every navigation
+// (location.href = X) destroys the content-script context, killing any
+// in-flight async work. The fix is to keep each content-script call
+// atomic (sub-second, never navigates) and drive navigation from the SW
+// via chrome.tabs.update + waitForTabReady + ping-after-load.
 
 import { db, nextPendingLead, countLeads } from '@/shared/db';
 import { jitter, pickVariant, uuid } from '@/shared/format';
-import type { Campaign, Lead } from '@/shared/types';
-import type { IgSendRequest, IgSendResult } from '@/shared/messages';
+import type { Campaign, Lead, InteractionsConfig } from '@/shared/types';
+import type {
+  CsBoolData,
+  CsDwellData,
+  CsFollowData,
+  CsLikeData,
+  CsPostsData,
+  CsRequest,
+  CsResponse,
+  IgSendResult,
+} from '@/shared/messages';
 
 // --- alarms --------------------------------------------------------------
 
 const TICK_ALARM = 'b2dm-tick';
-const TICK_PERIOD_MIN = 1; // chrome.alarms minimum granularity
+const TICK_PERIOD_MIN = 1;
 
 chrome.runtime.onInstalled.addListener(() => {
   void ensureTick();
@@ -52,10 +62,9 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onMessage.addListener((req, _sender, sendResponse) => {
   if (!req || typeof req !== 'object' || !('type' in req)) return false;
   const type = (req as { type: string }).type;
-
-  // ig/sendDm comes from a content script and is not directed at the SW —
-  // skip so the content-script handler in the IG tab claims it.
-  if (type === 'ig/sendDm') return false;
+  // b2dm/* primitives are addressed at content scripts via chrome.tabs.sendMessage
+  // and never reach here, but be defensive in case any code uses runtime.sendMessage.
+  if (type.startsWith('b2dm/')) return false;
 
   (async () => {
     try {
@@ -63,10 +72,12 @@ chrome.runtime.onMessage.addListener((req, _sender, sendResponse) => {
         case 'sw/ping':
           sendResponse({ ok: true });
           return;
-        case 'sw/openDashboard':
-          await openDashboard();
+        case 'sw/openDashboard': {
+          const path = (req as { path?: string }).path;
+          await openDashboard(path);
           sendResponse({ ok: true });
           return;
+        }
         case 'sw/igSessionCheck': {
           const c = await chrome.cookies.get({
             url: 'https://www.instagram.com',
@@ -82,8 +93,6 @@ chrome.runtime.onMessage.addListener((req, _sender, sendResponse) => {
             nextRunAt: Date.now(),
           });
           await ensureTick();
-          // Run a tick right away so a "Start" doesn't have to wait
-          // up to a minute for the next periodic fire.
           void tick();
           sendResponse({ ok: true });
           return;
@@ -111,31 +120,26 @@ chrome.runtime.onMessage.addListener((req, _sender, sendResponse) => {
   return true;
 });
 
-// --- click on the action icon → open the dashboard ----------------------
-
 chrome.action.onClicked.addListener(() => {
-  // Only fires if no popup is set in the manifest. We do declare a popup,
-  // so this is a no-op fallback for users who disable popups.
   void openDashboard();
 });
 
-async function openDashboard(): Promise<void> {
-  const url = chrome.runtime.getURL('src/dashboard/index.html');
-  const tabs = await chrome.tabs.query({ url });
+async function openDashboard(path?: string): Promise<void> {
+  const baseUrl = chrome.runtime.getURL('src/dashboard/index.html');
+  const hash = path ? `#${path.startsWith('/') ? path : `/${path}`}` : '';
+  const tabs = await chrome.tabs.query({ url: `${baseUrl}*` });
   if (tabs.length > 0 && tabs[0].id !== undefined) {
-    await chrome.tabs.update(tabs[0].id, { active: true });
+    await chrome.tabs.update(tabs[0].id, { active: true, url: baseUrl + hash });
     if (tabs[0].windowId !== undefined) {
       await chrome.windows.update(tabs[0].windowId, { focused: true });
     }
     return;
   }
-  await chrome.tabs.create({ url });
+  await chrome.tabs.create({ url: baseUrl + hash });
 }
 
 // --- the tick ------------------------------------------------------------
 
-// Mutex: ensures only one tick is processing at a time even if Chrome
-// double-fires the alarm or a manual "Run now" arrives mid-tick.
 let ticking = false;
 
 async function tick(): Promise<void> {
@@ -158,15 +162,11 @@ async function tick(): Promise<void> {
         });
         continue;
       }
-      // Process a single DM. processOne is awaited so we don't fire
-      // multiple sends in one tick — keeps things gentle and avoids
-      // racing the IG content script.
       try {
         await processOne(campaign, lead);
       } catch (err) {
-        console.error('[b2dm] processOne crashed', err);
+        console.error('[b2dm sw] processOne crashed', err);
       }
-      // Schedule the next attempt with jitter.
       await db.campaigns.update(campaign.id, {
         nextRunAt: Date.now() + jitter(campaign.intervalMs),
       });
@@ -178,13 +178,12 @@ async function tick(): Promise<void> {
 
 async function processOne(campaign: Campaign, lead: Lead): Promise<void> {
   if (lead.id === undefined) return;
+
   const sessionOk = await chrome.cookies.get({
     url: 'https://www.instagram.com',
     name: 'sessionid',
   });
   if (!sessionOk?.value) {
-    // No IG session → don't burn the lead. Park the campaign for an hour
-    // so we don't loop while the user logs in.
     await db.campaigns.update(campaign.id, {
       status: 'paused',
       nextRunAt: Date.now() + 60 * 60_000,
@@ -205,18 +204,19 @@ async function processOne(campaign: Campaign, lead: Lead): Promise<void> {
   await db.leads.update(lead.id, { status: 'sending' });
 
   const message = pickVariant(campaign.variants).replace(/\{\{username\}\}/g, lead.username);
-  const req: IgSendRequest = {
-    type: 'ig/sendDm',
-    username: lead.username,
-    message,
-    interactions: campaign.interactions,
-  };
 
+  console.log('[b2dm sw] processing lead', lead.username, 'in tab', tab.id);
   let result: IgSendResult;
   try {
-    result = await sendToTab<IgSendResult>(tab.id, req, 5 * 60_000);
+    if (campaign.interactions) {
+      await runInteractions(tab.id, lead.username, campaign.interactions);
+    }
+    const verified = await sendDm(tab.id, lead.username, message);
+    result = { ok: true, verified };
   } catch (err) {
-    result = { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const error = err instanceof Error ? err.message : String(err);
+    console.warn('[b2dm sw] processOne failed for', lead.username, error);
+    result = { ok: false, error };
   }
 
   const ts = Date.now();
@@ -260,7 +260,6 @@ async function processOne(campaign: Campaign, lead: Lead): Promise<void> {
     });
   }
 
-  // If everything is done, mark the campaign as such so the UI flips.
   const remaining = await countLeads(campaign.id, 'pending');
   if (remaining === 0) {
     await db.campaigns.update(campaign.id, {
@@ -270,61 +269,281 @@ async function processOne(campaign: Campaign, lead: Lead): Promise<void> {
   }
 }
 
+// --- interaction flows (orchestrated step-by-step) -----------------------
+
+async function runInteractions(
+  tabId: number,
+  username: string,
+  cfg: InteractionsConfig
+): Promise<void> {
+  if (cfg.watchStories) {
+    try {
+      await watchStoriesFlow(tabId, username, cfg.storyDwellSec);
+    } catch (err) {
+      console.warn('[b2dm sw] watchStories failed for', username, err);
+    }
+    await sleep(jitter(1200));
+  }
+  if (cfg.follow) {
+    try {
+      await followUserFlow(tabId, username);
+    } catch (err) {
+      console.warn('[b2dm sw] follow failed for', username, err);
+    }
+    await sleep(jitter(1500));
+  }
+  if (cfg.likeCount > 0) {
+    try {
+      await likeNPostsFlow(tabId, username, cfg.likeCount);
+    } catch (err) {
+      console.warn('[b2dm sw] likeNPosts failed for', username, err);
+    }
+    await sleep(jitter(1500));
+  }
+}
+
+async function watchStoriesFlow(tabId: number, username: string, dwellSec: number): Promise<void> {
+  await navigateTab(tabId, `https://www.instagram.com/stories/${encodeURIComponent(username)}/`);
+  // Quick check: if IG bounced us off /stories/, no story exists.
+  const onStories = await rpc<CsBoolData>(tabId, { type: 'b2dm/checkOnStories' });
+  if (!onStories.value) return;
+  const dwellMs = Math.max(1, dwellSec) * 1000;
+  for (let i = 0; i < 5; i++) {
+    const r = await rpc<CsDwellData>(tabId, { type: 'b2dm/dwellStory', dwellMs }).catch(() => null);
+    if (!r || !r.stillOnStories) break;
+  }
+}
+
+async function followUserFlow(tabId: number, username: string): Promise<void> {
+  await navigateTab(tabId, `https://www.instagram.com/${encodeURIComponent(username)}/`);
+  await sleep(jitter(1500));
+  const before = await rpc<CsFollowData>(tabId, { type: 'b2dm/detectFollowState' });
+  if (before.state === 'following' || before.state === 'requested' || before.state === 'unavailable') {
+    return;
+  }
+  await rpc(tabId, { type: 'b2dm/clickFollow' });
+  // Settle: re-poll a few times until state changes or timeout.
+  for (let i = 0; i < 6; i++) {
+    await sleep(700);
+    const after = await rpc<CsFollowData>(tabId, { type: 'b2dm/detectFollowState' }).catch(() => null);
+    if (!after) return;
+    if (after.state === 'following' || after.state === 'requested') return;
+  }
+}
+
+async function likeNPostsFlow(tabId: number, username: string, n: number): Promise<void> {
+  if (n <= 0) return;
+  await navigateTab(tabId, `https://www.instagram.com/${encodeURIComponent(username)}/`);
+  await sleep(jitter(1500));
+  const posts = await rpc<CsPostsData>(tabId, { type: 'b2dm/findPostUrls', n });
+  for (const url of posts.urls) {
+    await navigateTab(tabId, url);
+    await sleep(jitter(1500));
+    const state = await rpc<CsLikeData>(tabId, { type: 'b2dm/detectLikeState' }).catch(() => null);
+    if (!state || state.state !== 'not_liked') continue;
+    await rpc(tabId, { type: 'b2dm/clickLike' });
+    await sleep(jitter(1200));
+  }
+}
+
+// --- DM flow -------------------------------------------------------------
+
+async function sendDm(tabId: number, username: string, message: string): Promise<boolean> {
+  try {
+    return await sendDmViaShortlink(tabId, username, message);
+  } catch (err) {
+    console.warn('[b2dm sw] shortlink path failed, falling back to /direct/new/', err);
+    return sendDmViaDirectNew(tabId, username, message);
+  }
+}
+
+async function sendDmViaShortlink(
+  tabId: number,
+  username: string,
+  message: string
+): Promise<boolean> {
+  await navigateTab(tabId, `https://ig.me/m/${encodeURIComponent(username)}`);
+  // ig.me 3xx-redirects to instagram.com/direct/t/<thread_id>/. If IG can't
+  // resolve the username it lands on the inbox or a 404 — wait for either.
+  const matched = await rpc<{ matched: boolean }>(tabId, {
+    type: 'b2dm/waitForUrlMatch',
+    pattern: 'instagram\\.com/direct/(t|inbox)',
+    timeoutMs: 25_000,
+  });
+  if (!matched.matched) throw new Error('shortlink_did_not_redirect');
+
+  const composer = await rpc<{ found: boolean }>(tabId, {
+    type: 'b2dm/waitForComposer',
+    timeoutMs: 15_000,
+  });
+  if (!composer.found) throw new Error('composer_not_found');
+
+  await rpc(tabId, { type: 'b2dm/typeAndSendDm', message });
+  return verifyDelivery(tabId, message);
+}
+
+async function sendDmViaDirectNew(
+  tabId: number,
+  username: string,
+  message: string
+): Promise<boolean> {
+  await navigateTab(tabId, 'https://www.instagram.com/direct/new/');
+  await sleep(jitter(1200));
+
+  const opened = await rpc<{ ok: boolean }>(tabId, { type: 'b2dm/openNewDmDialog' });
+  if (!opened.ok) throw new Error('cannot_open_new_dm_dialog');
+
+  const picked = await rpc<{ ok: boolean }>(tabId, {
+    type: 'b2dm/pickFirstSearchResult',
+    username,
+  });
+  if (!picked.ok) throw new Error('cannot_pick_search_result');
+
+  const composer = await rpc<{ found: boolean }>(tabId, {
+    type: 'b2dm/waitForComposer',
+    timeoutMs: 15_000,
+  });
+  if (!composer.found) throw new Error('composer_not_found');
+
+  await rpc(tabId, { type: 'b2dm/typeAndSendDm', message });
+  return verifyDelivery(tabId, message);
+}
+
+// IG's optimistic UI lies on rejected sends — reload the thread to force a
+// server fetch, then check the rendered DOM for the message text.
+async function verifyDelivery(tabId: number, message: string): Promise<boolean> {
+  await sleep(jitter(2000));
+  await chrome.tabs.reload(tabId);
+  await waitForTabReady(tabId);
+  await ensureContentScript(tabId);
+  await sleep(2500);
+  const r = await rpc<CsBoolData>(tabId, { type: 'b2dm/threadContains', needle: message });
+  if (!r.value) throw new Error('verification_failed: message not found in thread after reload');
+  return true;
+}
+
 // --- IG tab management --------------------------------------------------
 
 async function ensureIgTab(): Promise<chrome.tabs.Tab> {
   const existing = await chrome.tabs.query({ url: ['https://www.instagram.com/*'] });
-  // Prefer a tab that already has our content script — i.e. one that's
-  // been idle on instagram.com long enough. Any IG tab works though.
   for (const t of existing) {
-    if (t.id !== undefined && t.url) return t;
+    if (t.id !== undefined && t.url) {
+      await ensureContentScript(t.id);
+      return t;
+    }
   }
-  // No IG tab — create one in the background so we don't steal focus.
   const created = await chrome.tabs.create({
     url: 'https://www.instagram.com/',
     active: false,
     pinned: true,
   });
-  // Wait for it to load enough that the content script is up.
   await waitForTabReady(created.id!);
+  await ensureContentScript(created.id!);
   return created;
+}
+
+async function navigateTab(tabId: number, url: string): Promise<void> {
+  console.log('[b2dm sw] navigate tab', tabId, 'to', url);
+  await chrome.tabs.update(tabId, { url });
+  await waitForTabReady(tabId, 30_000);
+  await ensureContentScript(tabId);
 }
 
 async function waitForTabReady(tabId: number, timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  // First wait for the tab to LEAVE 'complete' (i.e. start loading the new
+  // url) — chrome.tabs.update is async and 'complete' from a previous nav
+  // may still be reported on the very next read.
+  let sawLoading = false;
   while (Date.now() < deadline) {
     const t = await chrome.tabs.get(tabId).catch(() => null);
-    if (t && t.status === 'complete') return;
-    await sleep(500);
+    if (!t) return;
+    if (t.status === 'loading') {
+      sawLoading = true;
+    }
+    if (sawLoading && t.status === 'complete') return;
+    if (!sawLoading && t.status === 'complete') {
+      // Maybe the navigation hasn't been picked up yet — give it a beat.
+      await sleep(150);
+      const t2 = await chrome.tabs.get(tabId).catch(() => null);
+      if (!t2) return;
+      if (t2.status === 'complete') return;
+    }
+    await sleep(200);
   }
+}
+
+async function ensureContentScript(tabId: number): Promise<void> {
+  // Newly-loaded pages need a beat for the content script to attach its
+  // listener at document_idle.
+  for (let i = 0; i < 20; i++) {
+    if (await pingContentScript(tabId)) return;
+    await sleep(300);
+  }
+  // Last resort: reload the tab. Happens if the URL is one our manifest
+  // doesn't match (eg ig.me before redirect) or the script crashed.
+  try {
+    await chrome.tabs.reload(tabId);
+  } catch {
+    return;
+  }
+  await waitForTabReady(tabId);
+  for (let i = 0; i < 20; i++) {
+    if (await pingContentScript(tabId)) return;
+    await sleep(300);
+  }
+}
+
+function pingContentScript(tabId: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, { type: 'b2dm/ping' }, (resp) => {
+        const err = chrome.runtime.lastError;
+        resolve(!err && !!resp);
+      });
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 function sleep(ms: number) {
   return new Promise<void>((res) => setTimeout(res, ms));
 }
 
+// --- RPC primitive calls -------------------------------------------------
+
+async function rpc<T = unknown>(tabId: number, message: CsRequest, timeoutMs = 60_000): Promise<T> {
+  const resp = await sendToTab<CsResponse>(tabId, message, timeoutMs);
+  if (!resp.ok) throw new Error(`${message.type}: ${resp.error}`);
+  return (resp.data as T) ?? (undefined as T);
+}
+
 function sendToTab<T>(tabId: number, message: unknown, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
     let done = false;
-    const timer = setTimeout(() => {
-      if (done) return;
-      done = true;
-      reject(new Error('send_to_tab_timeout'));
-    }, timeoutMs);
-    try {
-      chrome.tabs.sendMessage(tabId, message, (response: T) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        const err = chrome.runtime.lastError;
-        if (err) reject(new Error(err.message));
-        else resolve(response);
-      });
-    } catch (err) {
+    const finish = (fn: () => void) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      reject(err);
+      chrome.tabs.onRemoved.removeListener(onRemoved);
+      fn();
+    };
+    const timer = setTimeout(() => {
+      finish(() => reject(new Error('send_to_tab_timeout')));
+    }, timeoutMs);
+    const onRemoved = (closedId: number) => {
+      if (closedId === tabId) finish(() => reject(new Error('ig_tab_closed')));
+    };
+    chrome.tabs.onRemoved.addListener(onRemoved);
+    try {
+      chrome.tabs.sendMessage(tabId, message, (response: T) => {
+        const err = chrome.runtime.lastError;
+        if (err) finish(() => reject(new Error(err.message)));
+        else finish(() => resolve(response));
+      });
+    } catch (err) {
+      finish(() => reject(err));
     }
   });
 }
@@ -339,7 +558,6 @@ function notify(title: string, body: string): void {
       title,
       message: body,
     });
-  } catch {
-    // notifications permission not granted — silent.
-  }
+  } catch {}
 }
+

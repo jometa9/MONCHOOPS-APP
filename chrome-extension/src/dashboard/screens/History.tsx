@@ -30,7 +30,7 @@ export function History() {
   const totalFailed = useMemo(() => rows?.filter((r) => r.status === 'failed').length ?? 0, [rows]);
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
         title="DM history"
         description={`${totalSent} sent · ${totalFailed} failed`}
