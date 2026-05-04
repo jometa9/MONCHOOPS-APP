@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { LicenseGate } from './components/LicenseGate';
+import { HomeBg } from '@/shared/HomeBg';
 import { NewCampaign } from './screens/NewCampaign';
 import { Campaigns } from './screens/Campaigns';
 import { CampaignDetail } from './screens/CampaignDetail';
@@ -38,7 +39,7 @@ export function App() {
   }
 
   return (
-    <div className="flex h-screen bg-background text-foreground">
+    <div className="flex h-screen text-foreground">
       <Routes>
         <Route
           path="*"
@@ -73,7 +74,8 @@ function Shell({
   return (
     <>
       <Sidebar session={session} onLogout={onLogout} locked={!!running} />
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="relative isolate flex min-w-0 flex-1 flex-col overflow-hidden">
+        <HomeBg offset="sidebar" />
         <Routes>
           <Route index element={<Navigate to="/campaigns" replace />} />
           <Route path="/campaigns" element={<Campaigns />} />

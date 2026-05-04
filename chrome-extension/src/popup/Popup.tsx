@@ -5,6 +5,7 @@ import { db } from '@/shared/db';
 import { getSession, logout, validateLicense } from '@/shared/license';
 import type { Campaign, Session } from '@/shared/types';
 import { EMPTY_SESSION } from '@/shared/types';
+import { HomeBg } from '@/shared/HomeBg';
 
 export function Popup() {
   const [session, setSession] = useState<Session>(EMPTY_SESSION);
@@ -66,7 +67,8 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
   }
 
   return (
-    <div className="flex h-[440px] flex-col bg-background">
+    <div className="relative isolate flex h-[440px] flex-col">
+      <HomeBg />
       <header className="border-b border-border bg-muted/30 px-4 py-3">
         <h1 className="text-sm font-semibold tracking-tight">Welcome to MonchoOps</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -153,7 +155,8 @@ function ConnectedPanel({
   };
 
   return (
-    <div className="flex min-h-[440px] flex-col bg-background">
+    <div className="relative isolate flex min-h-[440px] flex-col">
+      <HomeBg />
       <header className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold">{session.profile?.name || 'MonchoOps'}</h1>
