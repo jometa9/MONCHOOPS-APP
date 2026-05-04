@@ -3,22 +3,28 @@ import pkg from './package.json' with { type: 'json' };
 
 export default defineManifest({
   manifest_version: 3,
-  name: 'B2DM — Cold DM',
-  short_name: 'B2DM',
+  name: 'MonchoOps — Cold DM',
+  short_name: 'MonchoOps',
   description: 'Schedule cold DMs on the Instagram account already logged into your browser.',
   version: pkg.version,
   action: {
     default_popup: 'src/popup/index.html',
     default_icon: {
-      '16': 'icons/icon-128.png',
-      '48': 'icons/icon-128.png',
-      '128': 'icons/icon-128.png',
+      '16': 'icons/icon-black-16.png',
+      '32': 'icons/icon-black-32.png',
+      '48': 'icons/icon-black-48.png',
+      '128': 'icons/icon-black-128.png',
     },
+    theme_icons: [
+      { size: 16, light: 'icons/icon-black-16.png', dark: 'icons/icon-white-16.png' },
+      { size: 32, light: 'icons/icon-black-32.png', dark: 'icons/icon-white-32.png' },
+    ],
   },
   icons: {
-    '16': 'icons/icon-128.png',
-    '48': 'icons/icon-128.png',
-    '128': 'icons/icon-128.png',
+    '16': 'icons/icon-black-16.png',
+    '32': 'icons/icon-black-32.png',
+    '48': 'icons/icon-black-48.png',
+    '128': 'icons/icon-black-128.png',
   },
   background: {
     service_worker: 'src/background/service-worker.ts',

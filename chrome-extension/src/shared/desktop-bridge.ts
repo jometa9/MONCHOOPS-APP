@@ -93,7 +93,7 @@ export async function discoverDesktop(): Promise<{ port: number; ping: DesktopPi
   await storageRemove(STORAGE_KEY_PORT);
   throw new BridgeError(
     'no_desktop',
-    'Could not find the B2DM desktop app on localhost. Make sure it is running.'
+    'Could not find the MonchoOps desktop app on localhost. Make sure it is running.'
   );
 }
 

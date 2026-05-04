@@ -68,7 +68,7 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
   return (
     <div className="flex h-[440px] flex-col bg-background">
       <header className="border-b border-border bg-muted/30 px-4 py-3">
-        <h1 className="text-sm font-semibold tracking-tight">Welcome to B2DM</h1>
+        <h1 className="text-sm font-semibold tracking-tight">Welcome to MonchoOps</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
           Sign in with your license key to continue.
         </p>
@@ -156,7 +156,7 @@ function ConnectedPanel({
     <div className="flex min-h-[440px] flex-col bg-background">
       <header className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
         <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold">{session.profile?.name || 'B2DM'}</h1>
+          <h1 className="truncate text-sm font-semibold">{session.profile?.name || 'MonchoOps'}</h1>
           <p className="truncate text-[11px] text-muted-foreground">
             {session.profile?.email ?? ''} · {session.subscription?.plan ?? 'free'}
           </p>

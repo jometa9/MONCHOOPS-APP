@@ -67,7 +67,7 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
     setStep({ kind: 'pairing', code: null });
     try {
       await pairWithDesktop({
-        name: 'B2DM Chrome extension',
+        name: 'MonchoOps Chrome extension',
         onCode: (code) => setStep({ kind: 'pairing', code }),
       });
       await loadCategories();
@@ -191,7 +191,7 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
             <Centered
               icon={<MonitorSmartphone className="h-6 w-6 text-muted-foreground" />}
               title="Desktop app not running"
-              body="Open the B2DM desktop app on this computer and try again."
+              body="Open the MonchoOps desktop app on this computer and try again."
               action={
                 <button
                   type="button"

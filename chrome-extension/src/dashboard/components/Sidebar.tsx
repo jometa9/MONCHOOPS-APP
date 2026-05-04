@@ -30,7 +30,7 @@ export function Sidebar({ session, onLogout, locked }: Props) {
   return (
     <aside className="flex w-56 flex-none flex-col border-r border-border bg-muted/30">
       <div className="border-b border-border bg-background px-4 py-4">
-        <div className="text-base font-semibold tracking-tight">B2DM</div>
+        <div className="text-base font-semibold tracking-tight">MonchoOps</div>
         <div className="mt-0.5 truncate text-xs text-muted-foreground">
           {session.profile?.email ?? '—'}
         </div>

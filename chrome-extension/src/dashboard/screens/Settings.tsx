@@ -64,7 +64,7 @@ export function Settings() {
       <ScreenHeader title="Settings" description="License, Instagram session, data." />
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <div className="mx-auto max-w-2xl space-y-6 p-6">
+        <div className="grid gap-6 p-6 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
           <Section title="License">
             <Row label="Email" value={session.profile?.email ?? '—'} />
             <Row label="Name" value={session.profile?.name ?? '—'} />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ArrowLeft, Clock, MonitorSmartphone, Pause, Play, RefreshCw } from 'lucide-react';
@@ -21,6 +21,30 @@ export function CampaignDetail() {
     [id],
     [] as Lead[]
   );
+
+  // Index of the row to keep in view: prefer the lead currently sending,
+  // otherwise the last completed (sent/failed) so the next pending rows
+  // stay visible just below it.
+  let activeIndex = -1;
+  if (leads) {
+    const sendingIdx = leads.findIndex((l) => l.status === 'sending');
+    if (sendingIdx >= 0) {
+      activeIndex = sendingIdx;
+    } else {
+      for (let i = leads.length - 1; i >= 0; i--) {
+        if (leads[i].status === 'sent' || leads[i].status === 'failed') {
+          activeIndex = i;
+          break;
+        }
+      }
+    }
+  }
+  const activeLeadId = activeIndex >= 0 ? leads?.[activeIndex]?.id : undefined;
+  const activeStatus = activeIndex >= 0 ? leads?.[activeIndex]?.status : undefined;
+  const activeRowRef = useRef<HTMLTableRowElement | null>(null);
+  useEffect(() => {
+    activeRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [activeLeadId, activeStatus]);
 
   if (!id || campaign === undefined) {
     return (
@@ -149,8 +173,15 @@ export function CampaignDetail() {
               </tr>
             </thead>
             <tbody>
-              {leads?.map((l) => (
-                <tr key={l.id} className="border-b border-border last:border-b-0">
+              {leads?.map((l, i) => (
+                <tr
+                  key={l.id}
+                  ref={i === activeIndex ? activeRowRef : undefined}
+                  className={
+                    'border-b border-border last:border-b-0 ' +
+                    (i === activeIndex ? 'bg-muted/40' : '')
+                  }
+                >
                   <td className="px-4 py-1.5 font-medium">@{l.displayName}</td>
                   <td className="px-4 py-1.5">
                     <LeadPill status={l.status} />

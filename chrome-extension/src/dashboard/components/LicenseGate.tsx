@@ -30,7 +30,7 @@ export function LicenseGate({ onLogin }: Props) {
   return (
     <div className="flex h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome to B2DM</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Welcome to MonchoOps</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Sign in with your license key to continue.
         </p>

@@ -189,7 +189,7 @@ async function processOne(campaign: Campaign, lead: Lead): Promise<void> {
       nextRunAt: Date.now() + 60 * 60_000,
     });
     notify(
-      'B2DM — Cold DM paused',
+      'MonchoOps — Cold DM paused',
       `No Instagram session detected. Log into instagram.com and resume "${campaign.name}".`
     );
     return;
