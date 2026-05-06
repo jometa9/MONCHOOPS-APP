@@ -10,6 +10,7 @@ import {
   Search,
   Send,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { db } from '@/shared/db';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { formatDateTime } from '@/shared/format';
@@ -32,6 +33,7 @@ interface DisplayRow {
 export function HistoryDetail() {
   const { source = '', id = '' } = useParams<{ source: string; id: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -106,7 +108,9 @@ export function HistoryDetail() {
   const meta = useMemo(() => {
     if (isDesktop && dmJob) {
       return {
-        title: dmJob.accountUsername ? `@${dmJob.accountUsername}` : 'Desktop run',
+        title: dmJob.accountUsername
+          ? `@${dmJob.accountUsername}`
+          : t('screens.historyDetail.desktopRunFallback'),
         accountUsername: dmJob.accountUsername,
         completedAt: dmJob.completedAt,
         sentCount: dmJob.sentCount,
@@ -123,7 +127,7 @@ export function HistoryDetail() {
       };
     }
     return null;
-  }, [isDesktop, dmJob, campaign]);
+  }, [isDesktop, dmJob, campaign, t]);
 
   async function refresh() {
     setRefreshing(true);
@@ -141,12 +145,14 @@ export function HistoryDetail() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <ScreenHeader
-        title={meta?.title ?? 'Run'}
+        title={meta?.title ?? t('screens.historyDetail.fallbackTitle')}
         description={
           meta
-            ? `${meta.sentCount} sent · ${meta.failedCount} failed${
-                meta.completedAt ? ' · ' + formatDateTime(meta.completedAt) : ''
-              }`
+            ? t('screens.historyDetail.metaLine', {
+                sent: meta.sentCount,
+                failed: meta.failedCount,
+              }) +
+              (meta.completedAt ? ' · ' + formatDateTime(meta.completedAt) : '')
             : ' '
         }
         actions={
@@ -157,7 +163,7 @@ export function HistoryDetail() {
               className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Back
+              {t('screens.historyDetail.back')}
             </button>
             <button
               type="button"
@@ -168,7 +174,7 @@ export function HistoryDetail() {
               <RefreshCw
                 className={'h-3.5 w-3.5 ' + (refreshing ? 'animate-spin' : '')}
               />
-              Refresh
+              {t('common.refresh')}
             </button>
           </div>
         }
@@ -180,7 +186,7 @@ export function HistoryDetail() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search username or message…"
+            placeholder={t('screens.historyDetail.searchPlaceholder')}
             className="h-10 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -191,15 +197,15 @@ export function HistoryDetail() {
           {display.length === 0 ? (
             <div className="flex flex-col items-center gap-2 text-center">
               <Send className="h-10 w-10" />
-              <p className="text-sm font-medium">No per-recipient log</p>
+              <p className="text-sm font-medium">{t('screens.historyDetail.noLogTitle')}</p>
               <p className="text-xs text-muted-foreground">
                 {isDesktop
-                  ? "This desktop run hasn't been pulled yet, or it predates the detail log."
-                  : 'Send your first DM in this campaign to populate the log.'}
+                  ? t('screens.historyDetail.noLogHintDesktop')
+                  : t('screens.historyDetail.noLogHintCampaign')}
               </p>
             </div>
           ) : (
-            'No recipients match your search.'
+            t('screens.historyDetail.noMatches')
           )}
         </div>
       ) : (
@@ -207,10 +213,10 @@ export function HistoryDetail() {
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-1.5 text-left">Message</th>
-                <th className="px-3 py-1.5 text-left whitespace-nowrap">Username</th>
-                <th className="px-3 py-1.5 text-left">When</th>
-                <th className="px-2 py-1.5 text-right">Actions</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.historyDetail.thMessage')}</th>
+                <th className="px-3 py-1.5 text-left whitespace-nowrap">{t('screens.historyDetail.thUsername')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.historyDetail.thWhen')}</th>
+                <th className="px-2 py-1.5 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -244,7 +250,9 @@ export function HistoryDetail() {
                         </span>
                       ) : (
                         <span className="text-xs italic text-muted-foreground">
-                          {isFailed ? row.error ?? 'Not sent' : 'No message captured'}
+                          {isFailed
+                            ? row.error ?? t('screens.historyDetail.notSent')
+                            : t('screens.historyDetail.noMessageCaptured')}
                         </span>
                       )}
                     </td>
@@ -265,7 +273,7 @@ export function HistoryDetail() {
                           type="button"
                           onClick={openProfile}
                           className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                          aria-label={`Open @${row.username} on Instagram`}
+                          aria-label={t('screens.historyDetail.openProfileAria', { username: row.username })}
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </button>
@@ -273,7 +281,7 @@ export function HistoryDetail() {
                           type="button"
                           onClick={openChat}
                           className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                          aria-label={`Open DM thread with @${row.username}`}
+                          aria-label={t('screens.historyDetail.openDmAria', { username: row.username })}
                         >
                           <MessageCircle className="h-3.5 w-3.5" />
                         </button>

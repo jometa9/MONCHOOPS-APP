@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowRight,
   Database,
@@ -36,6 +37,7 @@ function formatKind(kind: string): string {
 }
 
 export function Data() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [rows, setRows] = useState<ScrapeResultPublic[] | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -81,7 +83,7 @@ export function Data() {
 
   async function retry(row: ScrapeResultPublic) {
     if (!row.accountId || !isScrapeKind(row.kind) || !row.params || typeof row.params !== 'object') {
-      setRetryError('Cannot retry this scrape — original account or parameters are missing.');
+      setRetryError(t('screens.data.cannotRetry'));
       return;
     }
     setRetrying(row.jobId);
@@ -94,7 +96,7 @@ export function Data() {
       });
       navigate('/queue');
     } catch (err) {
-      setRetryError(err instanceof Error ? err.message : 'Could not restart scrape');
+      setRetryError(err instanceof Error ? err.message : t('screens.data.couldNotRestart'));
     } finally {
       setRetrying(null);
     }
@@ -112,11 +114,11 @@ export function Data() {
     return (
       <EmptyState
         icon={<Database className="h-10 w-10" />}
-        title="No scraped data yet"
-        description="Scraped leads show up here, ready to export or reuse in a campaign."
+        title={t('screens.data.noDataTitle')}
+        description={t('screens.data.noDataDescription')}
         action={
           <EmptyStateLinkButton to="/scrape" icon={<ArrowRight className="h-3.5 w-3.5" />}>
-            Scrape data
+            {t('screens.data.scrapeData')}
           </EmptyStateLinkButton>
         }
       />
@@ -131,7 +133,7 @@ export function Data() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by summary, kind, category or status…"
+            placeholder={t('screens.data.searchPlaceholder')}
             className="h-9 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -145,8 +147,8 @@ export function Data() {
         <div className="flex min-h-0 flex-1 items-center justify-center border-t border-border">
           <EmptyState
             icon={<Search className="h-10 w-10" />}
-            title="No results"
-            description="No scrapes match your search."
+            title={t('common.noResults')}
+            description={t('screens.data.noMatchDescription')}
           />
         </div>
       ) : (
@@ -154,12 +156,12 @@ export function Data() {
         <table className="w-full whitespace-nowrap text-sm">
           <thead className="sticky top-0 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-3 py-1.5 text-left">Summary</th>
-              <th className="px-3 py-1.5 text-left">Status</th>
-              <th className="px-3 py-1.5 text-left">Category</th>
-              <th className="px-3 py-1.5 text-right">Leads</th>
-              <th className="px-3 py-1.5 text-left">Finished</th>
-              <th className="px-3 py-1.5 text-right">Actions</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.data.tableSummary')}</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.data.tableStatus')}</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.data.tableCategory')}</th>
+              <th className="px-3 py-1.5 text-right">{t('screens.data.tableLeads')}</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.data.tableFinished')}</th>
+              <th className="px-3 py-1.5 text-right">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -181,7 +183,8 @@ export function Data() {
                         {formatKind(row.kind)}
                         {row.accountUsername ? (
                           <>
-                            {' with '}
+                            {' '}
+                            {t('screens.data.withAccount')}{' '}
                             <button
                               type="button"
                               onClick={(e) => {
@@ -225,7 +228,7 @@ export function Data() {
                             onClick={() => void retry(row)}
                             disabled={retrying === row.jobId}
                             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-                            aria-label="Retry scrape"
+                            aria-label={t('screens.data.retryScrape')}
                           >
                             {retrying === row.jobId ? <Spinner /> : <RotateCw className="h-3.5 w-3.5" />}
                           </button>
@@ -235,7 +238,7 @@ export function Data() {
                           onClick={() => navigate(`/data/${row.jobId}`)}
                           disabled={!hasCsv}
                           className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground"
-                          aria-label="View usernames"
+                          aria-label={t('screens.data.viewUsernames')}
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </button>
@@ -247,7 +250,7 @@ export function Data() {
                             'inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40',
                             !hasCsv && 'disabled:hover:text-muted-foreground'
                           )}
-                          aria-label="Download CSV"
+                          aria-label={t('screens.data.downloadCsv')}
                         >
                           {downloading === row.jobId ? <Spinner /> : <Download className="h-3.5 w-3.5" />}
                         </button>
@@ -256,7 +259,7 @@ export function Data() {
                           onClick={() => void b2dm.scrapes.revealInFolder(row.jobId)}
                           disabled={!hasCsv}
                           className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground"
-                          aria-label="Reveal file in folder"
+                          aria-label={t('screens.data.revealFile')}
                         >
                           <FolderOpen className="h-3.5 w-3.5" />
                         </button>
@@ -274,7 +277,8 @@ export function Data() {
 }
 
 function StatusBadge({ status }: { status: ScrapeResultPublic['status'] }) {
-  if (status === 'completed') return <Badge variant="success">Completed</Badge>;
-  if (status === 'cancelled') return <Badge variant="muted">Cancelled</Badge>;
-  return <Badge variant="destructive">Failed</Badge>;
+  const { t } = useTranslation();
+  if (status === 'completed') return <Badge variant="success">{t('screens.data.statusCompleted')}</Badge>;
+  if (status === 'cancelled') return <Badge variant="muted">{t('screens.data.statusCancelled')}</Badge>;
+  return <Badge variant="destructive">{t('screens.data.statusFailed')}</Badge>;
 }

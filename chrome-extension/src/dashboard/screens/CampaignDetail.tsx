@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ArrowLeft, Clock, MonitorSmartphone, Pause, Play, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { db } from '@/shared/db';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { formatDateTime } from '@/shared/format';
@@ -14,6 +15,7 @@ import type { Campaign, Lead } from '@/shared/types';
 
 export function CampaignDetail() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const campaign = useLiveQuery(() => (id ? db.campaigns.get(id) : undefined), [id]);
   const leads = useLiveQuery(
@@ -49,7 +51,7 @@ export function CampaignDetail() {
   if (!id || campaign === undefined) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading…
+        {t('common.loading')}
       </div>
     );
   }
@@ -57,7 +59,7 @@ export function CampaignDetail() {
   if (campaign === null) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Not found.
+        {t('common.notFound')}
       </div>
     );
   }
@@ -66,6 +68,13 @@ export function CampaignDetail() {
   const failed = leads?.filter((l) => l.status === 'failed').length ?? 0;
   const pending = leads?.filter((l) => l.status === 'pending').length ?? 0;
   const sending = leads?.filter((l) => l.status === 'sending').length ?? 0;
+
+  const statusLabel =
+    campaign.status === 'running'
+      ? t('screens.campaigns.statusRunning')
+      : campaign.status === 'paused'
+      ? t('screens.campaigns.statusPaused')
+      : t('screens.campaigns.statusDone');
 
   async function pause() {
     await chrome.runtime.sendMessage({ type: 'sw/pauseCampaign', campaignId: id });
@@ -78,7 +87,10 @@ export function CampaignDetail() {
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
         title={campaign.name}
-        description={`Status: ${campaign.status} · Created ${formatDateTime(campaign.createdAt)}`}
+        description={t('screens.campaignDetail.statusLine', {
+          status: statusLabel,
+          when: formatDateTime(campaign.createdAt),
+        })}
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -87,7 +99,7 @@ export function CampaignDetail() {
               className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Back
+              {t('screens.campaignDetail.back')}
             </button>
             {campaign.status === 'paused' ? (
               <button
@@ -96,7 +108,7 @@ export function CampaignDetail() {
                 className="inline-flex h-8 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 <Play className="h-3.5 w-3.5" />
-                Resume
+                {t('screens.campaignDetail.resume')}
               </button>
             ) : null}
             {campaign.status === 'running' ? (
@@ -106,7 +118,7 @@ export function CampaignDetail() {
                 className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
               >
                 <Pause className="h-3.5 w-3.5" />
-                Pause
+                {t('screens.campaignDetail.pause')}
               </button>
             ) : null}
           </div>
@@ -114,10 +126,10 @@ export function CampaignDetail() {
       />
 
       <div className="grid grid-cols-4 gap-3 border-b border-border bg-muted/20 p-4">
-        <Stat label="Total" value={campaign.totalLeads} />
-        <Stat label="Sent" value={sent} accent="emerald" />
-        <Stat label="Failed" value={failed} accent="red" />
-        <Stat label="Pending" value={pending + sending} />
+        <Stat label={t('screens.campaignDetail.statTotal')} value={campaign.totalLeads} />
+        <Stat label={t('screens.campaignDetail.statSent')} value={sent} accent="emerald" />
+        <Stat label={t('screens.campaignDetail.statFailed')} value={failed} accent="red" />
+        <Stat label={t('screens.campaignDetail.statPending')} value={pending + sending} />
       </div>
 
       <NextSendTimer campaign={campaign} pending={pending + sending} />
@@ -125,7 +137,7 @@ export function CampaignDetail() {
       <div className="grid min-h-0 flex-1 grid-cols-3 gap-0">
         <aside className="col-span-1 overflow-auto border-r border-border bg-muted/10 p-4">
           <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Variants
+            {t('screens.campaignDetail.variantsHeading')}
           </h3>
           <ul className="space-y-2">
             {campaign.variants.map((v, i) => (
@@ -141,24 +153,38 @@ export function CampaignDetail() {
           {campaign.interactions ? (
             <>
               <h3 className="mt-4 mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Interactions
+                {t('screens.campaignDetail.interactionsHeading')}
               </h3>
               <ul className="space-y-1 text-xs text-muted-foreground">
-                {campaign.interactions.follow ? <li>Follow user</li> : null}
+                {campaign.interactions.follow ? (
+                  <li>{t('screens.campaignDetail.interactionFollow')}</li>
+                ) : null}
                 {campaign.interactions.watchStories ? (
-                  <li>Watch stories ({campaign.interactions.storyDwellSec}s each)</li>
+                  <li>
+                    {t('screens.campaignDetail.interactionWatchStories', {
+                      seconds: campaign.interactions.storyDwellSec,
+                    })}
+                  </li>
                 ) : null}
                 {campaign.interactions.likeCount > 0 ? (
-                  <li>Like {campaign.interactions.likeCount} posts</li>
+                  <li>
+                    {t('screens.campaignDetail.interactionLikePosts', {
+                      count: campaign.interactions.likeCount,
+                    })}
+                  </li>
                 ) : null}
               </ul>
             </>
           ) : null}
           <h3 className="mt-4 mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Send rate
+            {t('screens.campaignDetail.sendRateHeading')}
           </h3>
           <ul className="space-y-1 text-xs text-muted-foreground">
-            <li>Avg interval: {Math.round(campaign.intervalMs / 1000)}s</li>
+            <li>
+              {t('screens.campaignDetail.sendRateAvg', {
+                seconds: Math.round(campaign.intervalMs / 1000),
+              })}
+            </li>
           </ul>
         </aside>
 
@@ -166,10 +192,10 @@ export function CampaignDetail() {
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 border-b border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-2 text-left">Lead</th>
-                <th className="px-4 py-2 text-left">Status</th>
-                <th className="px-4 py-2 text-left">Sent at</th>
-                <th className="px-4 py-2 text-left">Notes</th>
+                <th className="px-4 py-2 text-left">{t('screens.campaignDetail.thLead')}</th>
+                <th className="px-4 py-2 text-left">{t('screens.campaignDetail.thStatus')}</th>
+                <th className="px-4 py-2 text-left">{t('screens.campaignDetail.thSentAt')}</th>
+                <th className="px-4 py-2 text-left">{t('screens.campaignDetail.thNotes')}</th>
               </tr>
             </thead>
             <tbody>
@@ -203,6 +229,7 @@ export function CampaignDetail() {
 }
 
 function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
   const src = campaign.source;
@@ -222,7 +249,7 @@ function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
       );
       const newOnes = fresh.filter((l) => !existing.has(l.username));
       if (newOnes.length === 0) {
-        setMessage({ kind: 'info', text: 'No new leads on the desktop.' });
+        setMessage({ kind: 'info', text: t('screens.campaignDetail.desktopNoNewLeads') });
         return;
       }
       await db.transaction('rw', db.campaigns, db.leads, async () => {
@@ -250,12 +277,15 @@ function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
           campaignId: campaign.id,
         });
       }
-      setMessage({ kind: 'info', text: `Pulled ${newOnes.length} new leads.` });
+      setMessage({
+        kind: 'info',
+        text: t('screens.campaignDetail.desktopPulledLeads', { count: newOnes.length }),
+      });
     } catch (err) {
       const text =
         err instanceof BridgeError
           ? err.code === 'no_desktop'
-            ? 'Desktop app is not running.'
+            ? t('screens.campaignDetail.desktopNotRunning')
             : err.message
           : err instanceof Error
           ? err.message
@@ -269,7 +299,7 @@ function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
   return (
     <>
       <h3 className="mt-4 mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        Desktop source
+        {t('screens.campaignDetail.desktopSourceHeading')}
       </h3>
       <div className="border border-border bg-background p-3 text-xs">
         <div className="flex items-start gap-2">
@@ -277,8 +307,7 @@ function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
           <div className="min-w-0">
             <div className="truncate font-medium">{src.label}</div>
             <p className="mt-0.5 text-muted-foreground">
-              Linked to the desktop app. Click sync to pull leads added there after this
-              campaign was created.
+              {t('screens.campaignDetail.desktopSourceLinked')}
             </p>
           </div>
         </div>
@@ -290,7 +319,9 @@ function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
             className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-[11px] font-medium transition-colors hover:bg-accent disabled:opacity-50"
           >
             <RefreshCw className={'h-3 w-3 ' + (busy ? 'animate-spin' : '')} />
-            {busy ? 'Syncing…' : 'Sync from desktop'}
+            {busy
+              ? t('screens.campaignDetail.desktopSyncing')
+              : t('screens.campaignDetail.desktopSyncFromDesktop')}
           </button>
         </div>
         {message ? (
@@ -309,6 +340,7 @@ function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
 }
 
 function NextSendTimer({ campaign, pending }: { campaign: Campaign; pending: number }) {
+  const { t } = useTranslation();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -323,13 +355,13 @@ function NextSendTimer({ campaign, pending }: { campaign: Campaign; pending: num
 
   let text: string;
   if (paused) {
-    text = 'Campaign paused';
+    text = t('screens.campaignDetail.campaignPaused');
   } else if (remainingMs === null) {
-    text = 'Waiting to schedule next send…';
+    text = t('screens.campaignDetail.waitingNext');
   } else if (remainingMs === 0) {
-    text = 'Sending now…';
+    text = t('screens.campaignDetail.sendingNow');
   } else {
-    text = `Next send in ${formatDuration(remainingMs)}`;
+    text = t('screens.campaignDetail.nextSendIn', { time: formatDuration(remainingMs) });
   }
 
   return (
@@ -368,12 +400,13 @@ function Stat({ label, value, accent }: { label: string; value: number; accent?:
 }
 
 function LeadPill({ status }: { status: Lead['status'] }) {
+  const { t } = useTranslation();
   const map: Record<Lead['status'], { label: string; className: string }> = {
-    pending: { label: 'Pending', className: 'bg-muted text-muted-foreground' },
-    sending: { label: 'Sending', className: 'bg-blue-100 text-blue-700' },
-    sent: { label: 'Sent', className: 'bg-emerald-100 text-emerald-700' },
-    failed: { label: 'Failed', className: 'bg-red-100 text-red-700' },
-    skipped: { label: 'Skipped', className: 'bg-amber-100 text-amber-700' },
+    pending: { label: t('screens.campaignDetail.leadStatusPending'), className: 'bg-muted text-muted-foreground' },
+    sending: { label: t('screens.campaignDetail.leadStatusSending'), className: 'bg-blue-100 text-blue-700' },
+    sent: { label: t('screens.campaignDetail.leadStatusSent'), className: 'bg-emerald-100 text-emerald-700' },
+    failed: { label: t('screens.campaignDetail.leadStatusFailed'), className: 'bg-red-100 text-red-700' },
+    skipped: { label: t('screens.campaignDetail.leadStatusSkipped'), className: 'bg-amber-100 text-amber-700' },
   };
   const { label, className } = map[status];
   return (

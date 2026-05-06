@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowDownCircle, Loader, RotateCw } from 'lucide-react';
 import { b2dm, type UpdateStatus } from '@/lib/b2dm';
 
@@ -11,6 +12,7 @@ import { b2dm, type UpdateStatus } from '@/lib/b2dm';
 const PREVIEW: UpdateStatus | null = null;
 
 export function UpdateBanner() {
+  const { t } = useTranslation();
   const [state, setState] = useState<UpdateStatus>(PREVIEW ?? { kind: 'idle' });
   const [isInstalling, setIsInstalling] = useState(false);
 
@@ -51,8 +53,8 @@ export function UpdateBanner() {
       <div className="flex min-w-0 items-center gap-3">
         <UpdaterIcon state={state} />
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{titleFor(state)}</div>
-          <div className="truncate text-xs text-muted-foreground">{subtitleFor(state)}</div>
+          <div className="truncate text-sm font-medium">{titleFor(state, t)}</div>
+          <div className="truncate text-xs text-muted-foreground">{subtitleFor(state, t)}</div>
         </div>
       </div>
 
@@ -68,7 +70,7 @@ export function UpdateBanner() {
           ) : (
             <RotateCw className="h-3.5 w-3.5" />
           )}
-          Restart & install
+          {t('components.updateBanner.restartInstall')}
         </button>
       ) : state.kind === 'downloading' ? (
         <div className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
@@ -90,29 +92,31 @@ function UpdaterIcon({ state }: { state: UpdateStatus }) {
   return <Loader className="h-4 w-4 animate-spin text-muted-foreground" />;
 }
 
-function titleFor(state: UpdateStatus): string {
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
+function titleFor(state: UpdateStatus, t: TFn): string {
   switch (state.kind) {
     case 'available':
-      return `Update available — v${state.version}`;
+      return t('components.updateBanner.available', { version: state.version });
     case 'downloading':
       return state.version
-        ? `Downloading update v${state.version}`
-        : 'Downloading update';
+        ? t('components.updateBanner.downloadingV', { version: state.version })
+        : t('components.updateBanner.downloading');
     case 'downloaded':
-      return `Update ready — v${state.version}`;
+      return t('components.updateBanner.ready', { version: state.version });
     default:
       return '';
   }
 }
 
-function subtitleFor(state: UpdateStatus): string {
+function subtitleFor(state: UpdateStatus, t: TFn): string {
   switch (state.kind) {
     case 'available':
-      return 'Download will start automatically.';
+      return t('components.updateBanner.availableHint');
     case 'downloading':
-      return 'Keep the app open — this only takes a moment.';
+      return t('components.updateBanner.downloadingHint');
     case 'downloaded':
-      return 'Restart to finish installing, or it will install next time you close B2DM.';
+      return t('components.updateBanner.readyHint');
     default:
       return '';
   }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, FileText, Folder, Loader2, MonitorSmartphone } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import {
   BridgeError,
   discoverDesktop,
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export function DesktopImportDialog({ onImport, onClose }: Props) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>({ kind: 'connecting' });
 
   useEffect(() => {
@@ -45,7 +47,7 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
       }
       setStep({
         kind: 'fatal',
-        message: err instanceof Error ? err.message : 'Could not connect to the desktop app',
+        message: err instanceof Error ? err.message : t('components.desktopImport.couldNotConnectError'),
       });
       return;
     }
@@ -101,7 +103,7 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
       onImport(leads, {
         kind: 'desktop_category',
         desktopId: c.id,
-        label: `Category — ${c.name}`,
+        label: t('components.desktopImport.categoryLabel', { name: c.name }),
       });
       onClose();
     } catch (err) {
@@ -120,7 +122,9 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
     setStep({ kind: 'loading_leads' });
     try {
       const leads = await listScrapeLeads(s.jobId);
-      const label = s.targetName ? `Scrape — ${s.targetName}` : `Scrape — ${s.summary}`;
+      const label = t('components.desktopImport.scrapeLabel', {
+        name: s.targetName ?? s.summary,
+      });
       onImport(leads, { kind: 'desktop_scrape', desktopJobId: s.jobId, label });
       onClose();
     } catch (err) {
@@ -147,47 +151,57 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
         <header className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
           <div className="flex items-center gap-2">
             <MonitorSmartphone className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">Import from desktop app</h2>
+            <h2 className="text-sm font-semibold">{t('components.desktopImport.title')}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="text-xs text-muted-foreground hover:text-foreground"
           >
-            Close
+            {t('components.desktopImport.close')}
           </button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto p-4">
-          {step.kind === 'connecting' ? <Centered icon={<Loader2 className="h-5 w-5 animate-spin" />} title="Connecting to the desktop app…" /> : null}
+          {step.kind === 'connecting' ? (
+            <Centered
+              icon={<Loader2 className="h-5 w-5 animate-spin" />}
+              title={t('components.desktopImport.connecting')}
+            />
+          ) : null}
 
           {step.kind === 'no_desktop' ? (
             <Centered
               icon={<MonitorSmartphone className="h-6 w-6 text-muted-foreground" />}
-              title="Could not connect"
-              body="Start the MonchoOps desktop app on this computer and try again."
+              title={t('components.desktopImport.couldNotConnectTitle')}
+              body={t('components.desktopImport.couldNotConnectBody')}
               action={
                 <button
                   type="button"
                   onClick={() => void boot()}
                   className="inline-flex h-9 items-center bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                 >
-                  Retry
+                  {t('components.desktopImport.retry')}
                 </button>
               }
             />
           ) : null}
 
-          {step.kind === 'loading_leads' ? <Centered icon={<Loader2 className="h-5 w-5 animate-spin" />} title="Loading leads…" /> : null}
+          {step.kind === 'loading_leads' ? (
+            <Centered
+              icon={<Loader2 className="h-5 w-5 animate-spin" />}
+              title={t('components.desktopImport.loadingLeads')}
+            />
+          ) : null}
 
           {step.kind === 'picker' ? (
-            <PickerView step={step} onSwitchTab={(t) => (t === 'scrapes' ? void loadScrapes() : void loadCategories())} onPickCategory={(c) => void pickCategory(c)} onPickScrape={(s) => void pickScrape(s)} />
+            <PickerView step={step} onSwitchTab={(tab) => (tab === 'scrapes' ? void loadScrapes() : void loadCategories())} onPickCategory={(c) => void pickCategory(c)} onPickScrape={(s) => void pickScrape(s)} />
           ) : null}
 
           {step.kind === 'fatal' ? (
             <Centered
               icon={<MonitorSmartphone className="h-6 w-6 text-destructive" />}
-              title="Something went wrong"
+              title={t('components.desktopImport.fatalTitle')}
               body={step.message}
               action={
                 <button
@@ -196,7 +210,7 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
                   className="inline-flex h-9 items-center border border-border bg-background px-3 text-xs font-medium hover:bg-accent"
                 >
                   <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-                  Retry
+                  {t('components.desktopImport.retry')}
                 </button>
               }
             />
@@ -239,6 +253,7 @@ function PickerView({
   onPickCategory: (c: DesktopCategory) => void;
   onPickScrape: (s: DesktopScrape) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <div className="mb-3 flex items-center justify-between">
@@ -246,13 +261,13 @@ function PickerView({
           <TabButton
             active={step.tab === 'categories'}
             onClick={() => onSwitchTab('categories')}
-            label="Categories"
+            label={t('components.desktopImport.tabCategories')}
             icon={<Folder className="h-3.5 w-3.5" />}
           />
           <TabButton
             active={step.tab === 'scrapes'}
             onClick={() => onSwitchTab('scrapes')}
-            label="Scrapes"
+            label={t('components.desktopImport.tabScrapes')}
             icon={<FileText className="h-3.5 w-3.5" />}
           />
         </div>
@@ -261,7 +276,7 @@ function PickerView({
       {step.loading ? (
         <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Loading…
+          {t('components.desktopImport.loading')}
         </div>
       ) : null}
 
@@ -284,16 +299,19 @@ function PickerView({
                 <div>
                   <div className="font-medium">{c.name}</div>
                   <div className="text-[11px] text-muted-foreground">
-                    {c.leadCount} leads · updated {formatDateTime(c.updatedAt)}
+                    {t('components.desktopImport.categoryMeta', {
+                      count: c.leadCount,
+                      when: formatDateTime(c.updatedAt),
+                    })}
                   </div>
                 </div>
-                <span className="text-xs text-muted-foreground">Import →</span>
+                <span className="text-xs text-muted-foreground">{t('components.desktopImport.import')}</span>
               </button>
             ))}
           </div>
         ) : (
           <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">
-            No categories on the desktop yet.
+            {t('components.desktopImport.noCategories')}
           </div>
         )
       ) : null}
@@ -311,16 +329,20 @@ function PickerView({
                 <div className="min-w-0">
                   <div className="truncate font-medium">{s.targetName ?? s.summary}</div>
                   <div className="text-[11px] text-muted-foreground">
-                    {s.usernameCount} leads · {s.kind} · {formatDateTime(s.completedAt)}
+                    {t('components.desktopImport.scrapeMeta', {
+                      count: s.usernameCount,
+                      kind: s.kind,
+                      when: formatDateTime(s.completedAt),
+                    })}
                   </div>
                 </div>
-                <span className="text-xs text-muted-foreground">Import →</span>
+                <span className="text-xs text-muted-foreground">{t('components.desktopImport.import')}</span>
               </button>
             ))}
           </div>
         ) : (
           <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">
-            No scrape results on the desktop yet.
+            {t('components.desktopImport.noScrapes')}
           </div>
         )
       ) : null}

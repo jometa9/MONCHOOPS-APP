@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Key } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { AuthLayout } from '@/components/layout/AuthLayout';
@@ -8,6 +9,7 @@ import { b2dm } from '@/lib/b2dm';
 const GOOGLE_LOGIN_URL = 'https://b2dm.app/login/google?callback=b2dm://auth';
 
 export function Login() {
+  const { t } = useTranslation();
   const { validateLicense } = useSession();
   const [licenseKey, setLicenseKey] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -21,7 +23,7 @@ export function Login() {
     try {
       await validateLicense(licenseKey);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not validate license');
+      setError(err instanceof Error ? err.message : t('login.couldNotValidate'));
     } finally {
       setSubmitting(false);
     }
@@ -30,10 +32,8 @@ export function Login() {
   return (
     <AuthLayout>
       <div className="w-full max-w-sm pb-30">
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome to MonchoOps</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Sign in with your license key or your Google account.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('login.welcome')}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t('login.subtitle')}</p>
 
         <div className="mt-8 grid grid-cols-1 border-l border-t border-border">
           <form
@@ -41,7 +41,7 @@ export function Login() {
             className="space-y-3 border-b border-r border-border bg-muted/30 p-5"
           >
             <label className="text-xs uppercase text-muted-foreground" htmlFor="license-key">
-              License key
+              {t('login.licenseKey')}
             </label>
             <div className="relative">
               <Key className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -49,7 +49,7 @@ export function Login() {
                 id="license-key"
                 value={licenseKey}
                 onChange={(e) => setLicenseKey(e.target.value)}
-                placeholder="Paste your license key"
+                placeholder={t('login.pasteLicense')}
                 className="pl-9"
                 autoFocus
                 disabled={submitting}
@@ -68,7 +68,7 @@ export function Login() {
               }}
               className="inline-flex h-9 w-full items-center justify-center border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
             >
-              Sign in with Google
+              {t('login.googleSignIn')}
             </button>
           </div>
         </div>
@@ -81,7 +81,7 @@ export function Login() {
             }}
             className="text-xs text-muted-foreground underline-offset-2 hover:underline"
           >
-            No account? Visit b2dm.app
+            {t('login.noAccount')}
           </button>
         </div>
       </div>
@@ -90,6 +90,7 @@ export function Login() {
 }
 
 function SubmitButton({ submitting, disabled }: { submitting: boolean; disabled: boolean }) {
+  const { t } = useTranslation();
   return (
     <button
       type="submit"
@@ -98,10 +99,11 @@ function SubmitButton({ submitting, disabled }: { submitting: boolean; disabled:
     >
       {submitting ? (
         <>
-          Logging in<LoadingDots />
+          {t('login.loggingIn')}
+          <LoadingDots />
         </>
       ) : (
-        'Continue'
+        t('login.continue')
       )}
     </button>
   );

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Clock } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -14,6 +15,7 @@ function pad(n: number): string {
 }
 
 export function TimePicker({ value, onChange, disabled, id }: Props) {
+  const { t } = useTranslation();
   const [rawH, rawM] = value.split(':');
   const hours = clamp(parseInt(rawH ?? '', 10), 0, 23);
   const minutes = clamp(parseInt(rawM ?? '', 10), 0, 59);
@@ -50,7 +52,7 @@ export function TimePicker({ value, onChange, disabled, id }: Props) {
         value={pad(hours)}
         onChange={(e) => handleHours(e.target.value)}
         disabled={disabled}
-        aria-label="Hours"
+        aria-label={t('components.timePicker.hours')}
         className="w-12 bg-transparent px-2 text-center text-sm tabular-nums outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
       />
       <span className="flex items-center text-sm text-muted-foreground">:</span>
@@ -62,7 +64,7 @@ export function TimePicker({ value, onChange, disabled, id }: Props) {
         value={pad(minutes)}
         onChange={(e) => handleMinutes(e.target.value)}
         disabled={disabled}
-        aria-label="Minutes"
+        aria-label={t('components.timePicker.minutes')}
         className="w-12 bg-transparent px-2 text-center text-sm tabular-nums outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
       />
     </div>

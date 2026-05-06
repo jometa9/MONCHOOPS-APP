@@ -9,6 +9,7 @@ import {
   Search,
   Users,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { db } from '@/shared/db';
 import { parseUsernamesText } from '@/shared/csv';
 import { formatDateTime } from '@/shared/format';
@@ -19,6 +20,7 @@ import type { SyncedCategoryLead } from '@/shared/types';
 export function CategoryDetail() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -65,12 +67,14 @@ export function CategoryDetail() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <ScreenHeader
-        title={category?.name ?? 'Category'}
+        title={category?.name ?? t('screens.categoryDetail.fallbackTitle')}
         description={
           category
-            ? `${category.leadCount} lead${category.leadCount === 1 ? '' : 's'} · ${category.scrapeCount} scrape${
-                category.scrapeCount === 1 ? '' : 's'
-              }`
+            ? t('screens.categoryDetail.summaryPlural', {
+                count: category.leadCount,
+                leadCount: category.leadCount,
+                scrapeCount: category.scrapeCount,
+              })
             : ' '
         }
         actions={
@@ -81,7 +85,7 @@ export function CategoryDetail() {
               className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Back
+              {t('screens.categoryDetail.back')}
             </button>
             <button
               type="button"
@@ -92,7 +96,7 @@ export function CategoryDetail() {
               <RefreshCw
                 className={'h-3.5 w-3.5 ' + (refreshing ? 'animate-spin' : '')}
               />
-              Refresh
+              {t('common.refresh')}
             </button>
             <button
               type="button"
@@ -100,7 +104,7 @@ export function CategoryDetail() {
               className="inline-flex h-8 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               <Plus className="h-3.5 w-3.5" />
-              Add leads
+              {t('screens.categoryDetail.addLeads')}
             </button>
           </div>
         }
@@ -112,7 +116,7 @@ export function CategoryDetail() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search username…"
+            placeholder={t('screens.categoryDetail.searchPlaceholder')}
             className="h-10 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -123,13 +127,13 @@ export function CategoryDetail() {
           {(leads ?? []).length === 0 ? (
             <div className="flex flex-col items-center gap-2 text-center">
               <Users className="h-10 w-10" />
-              <p className="text-sm font-medium">No leads in this category yet</p>
+              <p className="text-sm font-medium">{t('screens.categoryDetail.noLeadsTitle')}</p>
               <p className="text-xs text-muted-foreground">
-                Run a scrape tagged with this category on the desktop to populate it.
+                {t('screens.categoryDetail.noLeadsHint')}
               </p>
             </div>
           ) : (
-            'No results.'
+            t('common.noResults')
           )}
         </div>
       ) : (
@@ -137,10 +141,10 @@ export function CategoryDetail() {
           <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-1.5 text-left">Username</th>
-                <th className="px-3 py-1.5 text-left">Source</th>
-                <th className="px-3 py-1.5 text-left">Added</th>
-                <th className="px-3 py-1.5 text-right">Profile</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.categoryDetail.thUsername')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.categoryDetail.thSource')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.categoryDetail.thAdded')}</th>
+                <th className="px-3 py-1.5 text-right">{t('screens.categoryDetail.thProfile')}</th>
               </tr>
             </thead>
             <tbody>
@@ -166,7 +170,7 @@ export function CategoryDetail() {
                           openProfile(lead.username);
                         }}
                         className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                        aria-label={`Open @${lead.username} on Instagram`}
+                        aria-label={t('screens.categoryDetail.openProfileAria', { username: lead.username })}
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                       </button>
@@ -181,7 +185,7 @@ export function CategoryDetail() {
 
       {(leads ?? []).length >= 1000 ? (
         <div className="border-t border-border bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
-          Showing first 1000 rows — full list available on the desktop.
+          {t('screens.categoryDetail.showingFirst')}
         </div>
       ) : null}
 
@@ -205,6 +209,7 @@ function AddLeadsDialog({
   existing: Set<string>;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -254,7 +259,7 @@ function AddLeadsDialog({
       });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not add leads');
+      setError(err instanceof Error ? err.message : t('screens.categoryDetail.couldNotAdd'));
     } finally {
       setBusy(false);
     }
@@ -270,10 +275,9 @@ function AddLeadsDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Add leads</h2>
+          <h2 className="text-sm font-semibold">{t('screens.categoryDetail.addDialogTitle')}</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Paste usernames — one per line, or comma-separated. Pushed to the desktop on
-            the next sync.
+            {t('screens.categoryDetail.addDialogHint')}
           </p>
         </header>
 
@@ -283,13 +287,16 @@ function AddLeadsDialog({
             autoFocus
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="username_one&#10;@username_two, username_three"
+            placeholder={t('screens.categoryDetail.addingPlaceholder')}
             className="w-full resize-y border border-border bg-background p-2 text-sm outline-none focus:border-foreground"
           />
           <p className="text-[11px] text-muted-foreground">
             {parsed.length === 0
-              ? 'No usernames parsed yet.'
-              : `${parsed.length} parsed · ${fresh.length} new (others already in this category)`}
+              ? t('screens.categoryDetail.noUsernamesParsed')
+              : t('screens.categoryDetail.parsedSummary', {
+                  parsed: parsed.length,
+                  fresh: fresh.length,
+                })}
           </p>
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
         </div>
@@ -301,7 +308,7 @@ function AddLeadsDialog({
             disabled={busy}
             className="inline-flex h-9 items-center px-3 text-xs font-medium transition-colors hover:bg-accent"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -309,7 +316,9 @@ function AddLeadsDialog({
             disabled={busy || fresh.length === 0}
             className="inline-flex h-9 items-center bg-primary px-4 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            {busy ? 'Adding…' : `Add ${fresh.length || 0} lead${fresh.length === 1 ? '' : 's'}`}
+            {busy
+              ? t('screens.categoryDetail.adding')
+              : t('screens.categoryDetail.addLeadsCta', { count: fresh.length || 0 })}
           </button>
         </footer>
       </div>
@@ -327,6 +336,7 @@ function LeadSourceCell({
   sourceDetail: string | null;
   sourceKind: string;
 }) {
+  const { t } = useTranslation();
   const parts = (sourceDetail ?? '')
     .split(' | ')
     .map((s) => s.trim())
@@ -334,7 +344,7 @@ function LeadSourceCell({
   if (parts.length === 0) return <span>{sourceKind}</span>;
 
   const kind = parts[0] ?? sourceKind;
-  const [kindLabel, linkWord] = labelsFor(kind);
+  const [kindLabel, linkWord] = labelsFor(kind, t);
   const ref = parts.slice(1).find(Boolean) ?? null;
   const refUrl = refToUrl(ref);
 
@@ -357,20 +367,20 @@ function LeadSourceCell({
   );
 }
 
-function labelsFor(kind: string): [string, string] {
+function labelsFor(kind: string, t: (key: string) => string): [string, string] {
   switch (kind) {
     case 'post_comment':
-      return ['commented on', 'post'];
+      return [t('screens.categoryDetail.sourceCommentedOn'), t('screens.categoryDetail.refPost')];
     case 'post_like':
-      return ['liked', 'post'];
+      return [t('screens.categoryDetail.sourceLiked'), t('screens.categoryDetail.refPost')];
     case 'reel_comment':
-      return ['commented on', 'reel'];
+      return [t('screens.categoryDetail.sourceCommentedOn'), t('screens.categoryDetail.refReel')];
     case 'reel_like':
-      return ['liked', 'reel'];
+      return [t('screens.categoryDetail.sourceLiked'), t('screens.categoryDetail.refReel')];
     case 'followers':
-      return ['follows', 'profile'];
+      return [t('screens.categoryDetail.sourceFollows'), t('screens.categoryDetail.refProfile')];
     default:
-      return [kind.replace(/_/g, ' '), 'link'];
+      return [kind.replace(/_/g, ' '), t('screens.categoryDetail.refLink')];
   }
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, ExternalLink, Search, Users } from 'lucide-react';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
@@ -8,6 +9,7 @@ import { formatDateTime } from '@/lib/format';
 import type { LeadCategoryPublic, LeadPublic } from '@/types/domain';
 
 export function CategoryLeadsDetail() {
+  const { t } = useTranslation();
   const { categoryId = '' } = useParams<{ categoryId: string }>();
   const navigate = useNavigate();
   const [category, setCategory] = useState<LeadCategoryPublic | null>(null);
@@ -55,17 +57,17 @@ export function CategoryLeadsDetail() {
           type="button"
           onClick={goBack}
           className="inline-flex h-9 items-center gap-1.5 border-r border-border bg-transparent px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          aria-label="Back to categories"
+          aria-label={t('screens.categoryLeadsDetail.backAria')}
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back
+          {t('screens.categoryLeadsDetail.back')}
         </button>
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search username…"
+            placeholder={t('screens.categoryLeadsDetail.searchPlaceholder')}
             className="h-9 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -81,11 +83,11 @@ export function CategoryLeadsDetail() {
         <div className="flex min-h-0 flex-1 items-center justify-center border-t border-border">
           <EmptyState
             icon={leads.length === 0 ? <Users className="h-10 w-10" /> : <Search className="h-10 w-10" />}
-            title="No results"
+            title={t('screens.categoryLeadsDetail.noResultsTitle')}
             description={
               leads.length === 0
-                ? 'Run a scrape tagged with this category to populate it.'
-                : 'No leads match your search.'
+                ? t('screens.categoryLeadsDetail.noResultsEmpty')
+                : t('screens.categoryLeadsDetail.noResultsFiltered')
             }
           />
         </div>
@@ -94,10 +96,10 @@ export function CategoryLeadsDetail() {
         <table className="w-full whitespace-nowrap text-sm">
           <thead className="sticky top-0 z-10 border-t border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-3 py-1.5 text-left">Username</th>
-              <th className="px-3 py-1.5 text-left">Source</th>
-              <th className="px-3 py-1.5 text-left">Added</th>
-              <th className="px-3 py-1.5 text-right">Profile</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.categoryLeadsDetail.tableUsername')}</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.categoryLeadsDetail.tableSource')}</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.categoryLeadsDetail.tableAdded')}</th>
+              <th className="px-3 py-1.5 text-right">{t('screens.categoryLeadsDetail.tableProfile')}</th>
             </tr>
           </thead>
           <tbody>
@@ -128,7 +130,7 @@ export function CategoryLeadsDetail() {
                         type="button"
                         onClick={(e) => { e.stopPropagation(); openProfile(); }}
                         className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                        aria-label={`Open @${lead.username} on Instagram`}
+                        aria-label={t('screens.categoryLeadsDetail.openProfile', { username: lead.username })}
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                       </button>
@@ -144,7 +146,7 @@ export function CategoryLeadsDetail() {
 
       {leads.length >= 1000 ? (
         <div className="border-t border-border bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
-          Showing first 1000 rows — export the CSV for the full list.
+          {t('screens.categoryLeadsDetail.showingFirst')}
         </div>
       ) : null}
     </div>
@@ -161,11 +163,12 @@ function LeadSourceCell({
   sourceDetail: string | null;
   sourceKind: string;
 }) {
+  const { t } = useTranslation();
   const parts = (sourceDetail ?? '').split(' | ').map((s) => s.trim()).filter(Boolean);
   if (parts.length === 0) return <span>{sourceKind}</span>;
 
   const kind = parts[0] ?? sourceKind;
-  const [kindLabel, linkWord] = labelsFor(kind);
+  const [kindLabel, linkWord] = labelsFor(kind, t);
 
   // Find the first URL or @handle / #tag reference in the remaining parts.
   const ref = parts.slice(1).find(Boolean) ?? null;
@@ -190,14 +193,16 @@ function LeadSourceCell({
   );
 }
 
-function labelsFor(kind: string): [string, string] {
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
+function labelsFor(kind: string, t: TFn): [string, string] {
   switch (kind) {
-    case 'post_comment': return ['commented on', 'post'];
-    case 'post_like': return ['liked', 'post'];
-    case 'reel_comment': return ['commented on', 'reel'];
-    case 'reel_like': return ['liked', 'reel'];
-    case 'followers': return ['follows', 'profile'];
-    default: return [kind.replace(/_/g, ' '), 'link'];
+    case 'post_comment': return [t('screens.categoryLeadsDetail.sourcePostComment'), t('screens.categoryLeadsDetail.sourcePostLabel')];
+    case 'post_like': return [t('screens.categoryLeadsDetail.sourcePostLike'), t('screens.categoryLeadsDetail.sourcePostLabel')];
+    case 'reel_comment': return [t('screens.categoryLeadsDetail.sourceReelComment'), t('screens.categoryLeadsDetail.sourceReelLabel')];
+    case 'reel_like': return [t('screens.categoryLeadsDetail.sourceReelLike'), t('screens.categoryLeadsDetail.sourceReelLabel')];
+    case 'followers': return [t('screens.categoryLeadsDetail.sourceFollowers'), t('screens.categoryLeadsDetail.sourceProfileLabel')];
+    default: return [kind.replace(/_/g, ' '), t('screens.categoryLeadsDetail.sourceLink')];
   }
 }
 

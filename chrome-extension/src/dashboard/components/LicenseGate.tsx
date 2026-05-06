@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Key } from 'lucide-react';
 import { validateLicense } from '@/shared/license';
 import type { Session } from '@/shared/types';
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function LicenseGate({ onLogin }: Props) {
+  const { t } = useTranslation();
   const [key, setKey] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +24,7 @@ export function LicenseGate({ onLogin }: Props) {
       const s = await validateLicense(key);
       onLogin(s);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not validate license');
+      setError(err instanceof Error ? err.message : t('popup.couldNotValidate'));
     } finally {
       setSubmitting(false);
     }
@@ -32,14 +34,14 @@ export function LicenseGate({ onLogin }: Props) {
     <div className="relative isolate flex h-screen items-center justify-center p-4">
       <HomeBg />
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome to MonchoOps</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('popup.welcome')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Sign in with your license key to continue.
+          {t('popup.signInHint')}
         </p>
 
         <form onSubmit={submit} className="mt-8 space-y-3 border border-border bg-muted/30 p-5">
           <label className="text-xs uppercase tracking-wide text-muted-foreground" htmlFor="lk">
-            License key
+            {t('popup.licenseKey')}
           </label>
           <div className="relative">
             <Key className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -48,7 +50,7 @@ export function LicenseGate({ onLogin }: Props) {
               autoFocus
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              placeholder="Paste your license key"
+              placeholder={t('popup.pasteLicense')}
               disabled={submitting}
               className="h-9 w-full border border-border bg-background pl-9 pr-3 text-sm outline-none focus:border-foreground disabled:opacity-50"
             />
@@ -59,7 +61,7 @@ export function LicenseGate({ onLogin }: Props) {
             disabled={submitting || !key.trim()}
             className="inline-flex h-9 w-full items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
           >
-            {submitting ? 'Logging in…' : 'Continue'}
+            {submitting ? t('popup.loggingIn') : t('popup.continue')}
           </button>
           <button
             type="button"
@@ -67,14 +69,14 @@ export function LicenseGate({ onLogin }: Props) {
             disabled={submitting}
             className="inline-flex h-9 w-full items-center justify-center border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
           >
-            Use test license
+            {t('popup.useTestLicenseShort')}
           </button>
         </form>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          No account?{' '}
+          {t('popup.noAccountQuestion')}{' '}
           <a href="https://b2dm.app" target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">
-            Visit b2dm.app
+            {t('popup.visitSite')}
           </a>
         </p>
       </div>

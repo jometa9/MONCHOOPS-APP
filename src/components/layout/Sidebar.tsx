@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Database, FolderTree, History, Home, Instagram, ListTodo, LogOut, MessageSquareText, Send, Settings, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/context/SessionContext';
@@ -14,27 +15,28 @@ const SCRAPE_KINDS: JobKind[] = ['scrape_by_username', 'scrape_by_post', 'scrape
 
 interface Item {
   to: string;
-  label: string;
+  labelKey: string;
   icon: typeof Home;
 }
 
 const items: Item[] = [
-  { to: '/', label: 'Home', icon: Home },
-  { to: '/accounts', label: 'Accounts', icon: Instagram },
-  { to: '/scrape', label: 'Scrape Leads', icon: Users },
-  { to: '/cold-dm', label: 'Cold DM', icon: Send },
-  { to: '/queue', label: 'Queue', icon: ListTodo },
-  { to: '/data', label: 'Leads', icon: Database },
-  { to: '/categories', label: 'Categories', icon: FolderTree },
-  { to: '/message-variants', label: 'Message Variants', icon: MessageSquareText },
-  { to: '/dm-history', label: 'DM History', icon: History },
+  { to: '/', labelKey: 'components.sidebar.home', icon: Home },
+  { to: '/accounts', labelKey: 'components.sidebar.accounts', icon: Instagram },
+  { to: '/scrape', labelKey: 'components.sidebar.scrapeLeads', icon: Users },
+  { to: '/cold-dm', labelKey: 'components.sidebar.coldDm', icon: Send },
+  { to: '/queue', labelKey: 'components.sidebar.queue', icon: ListTodo },
+  { to: '/data', labelKey: 'components.sidebar.leads', icon: Database },
+  { to: '/categories', labelKey: 'components.sidebar.categories', icon: FolderTree },
+  { to: '/message-variants', labelKey: 'components.sidebar.messageVariants', icon: MessageSquareText },
+  { to: '/dm-history', labelKey: 'components.sidebar.dmHistory', icon: History },
 ];
 
 const bottomItems: Item[] = [
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/settings', labelKey: 'components.sidebar.settings', icon: Settings },
 ];
 
 export function Sidebar() {
+  const { t } = useTranslation();
   const { session, logout } = useSession();
   const { running, progressByJob } = useJobs();
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -65,22 +67,24 @@ export function Sidebar() {
     (sum, j) => sum + (progressByJob[j.id]?.done ?? j.progressDone ?? 0),
     0
   );
-  const statusLabel = isScraping ? 'Scraping' : 'Running';
+  const statusLabel = isScraping
+    ? t('components.sidebar.scraping')
+    : t('components.sidebar.running');
 
   return (
     <aside className="flex h-full w-56 flex-col border-r border-border bg-muted/30">
       <div className="px-4 pb-2 pt-2">
-        <div className="text-sm font-semibold">MonchoOps</div>
+        <div className="text-sm font-semibold">{t('components.sidebar.brand')}</div>
         {session.profile ? (
           <div className="mt-0.5 truncate text-xs text-muted-foreground">{session.profile.email}</div>
         ) : null}
       </div>
 
       <nav className="flex-1 py-1">
-        {items.map(({ to, label, icon: Icon }) => (
+        {items.map(({ to, labelKey, icon: Icon }) => (
           <NavLink key={to} to={to} end={to === '/'} className={navClass}>
             <Icon className="h-4 w-4" />
-            <span>{label}</span>
+            <span>{t(labelKey)}</span>
           </NavLink>
         ))}
       </nav>
@@ -103,10 +107,10 @@ export function Sidebar() {
             ) : null}
           </NavLink>
         ) : null}
-        {bottomItems.map(({ to, label, icon: Icon }) => (
+        {bottomItems.map(({ to, labelKey, icon: Icon }) => (
           <NavLink key={to} to={to} className={navClass}>
             <Icon className="h-4 w-4" />
-            <span>{label}</span>
+            <span>{t(labelKey)}</span>
           </NavLink>
         ))}
         <button
@@ -114,7 +118,7 @@ export function Sidebar() {
           className="flex w-full items-center gap-2.5 border-y border-transparent px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
         >
           <LogOut className="h-4 w-4" />
-          <span>Log out</span>
+          <span>{t('components.sidebar.logOut')}</span>
         </button>
       </div>
 
@@ -124,8 +128,8 @@ export function Sidebar() {
           onClose={() => {
             if (!loggingOut) setConfirmLogout(false);
           }}
-          title="Log out?"
-          description="Your Instagram accounts, scrapes, categories and history stay on this device. You'll see them again next time you log in with the same account."
+          title={t('components.sidebar.logoutDialogTitle')}
+          description={t('components.sidebar.logoutDialogDescription')}
           footer={
             <>
               <Button
@@ -133,11 +137,11 @@ export function Sidebar() {
                 onClick={() => setConfirmLogout(false)}
                 disabled={loggingOut}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button onClick={() => void handleConfirmLogout()} disabled={loggingOut}>
                 {loggingOut ? <Spinner /> : <LogOut className="h-3.5 w-3.5" />}
-                {loggingOut ? 'Logging out…' : 'Log out'}
+                {loggingOut ? t('components.sidebar.loggingOut') : t('components.sidebar.logOut')}
               </Button>
             </>
           }

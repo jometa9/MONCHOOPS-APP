@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Eye, Instagram, MessageSquare, RefreshCw, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { db } from '@/shared/db';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { formatDateTime, formatDuration } from '@/shared/format';
@@ -26,6 +27,7 @@ interface UnifiedRow {
 
 export function History() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -52,7 +54,7 @@ export function History() {
         source: 'campaign',
         id: c.id,
         title: c.name,
-        subtitle: 'Extension',
+        subtitle: t('screens.history.subtitleExtension'),
         sentCount: c.sentCount,
         failedCount: c.failedCount,
         totalCount: c.totalLeads,
@@ -65,8 +67,8 @@ export function History() {
     const fromDesktop: UnifiedRow[] = (dmJobs ?? []).map((j) => ({
       source: 'desktop',
       id: j.jobId,
-      title: j.accountUsername ? `@${j.accountUsername}` : 'Desktop run',
-      subtitle: 'Desktop',
+      title: j.accountUsername ? `@${j.accountUsername}` : t('screens.history.desktopRunFallback'),
+      subtitle: t('screens.history.subtitleDesktop'),
       sentCount: j.sentCount,
       failedCount: j.failedCount,
       totalCount: j.totalCount,
@@ -78,7 +80,7 @@ export function History() {
     return [...fromCampaigns, ...fromDesktop].sort(
       (a, b) => b.completedAt - a.completedAt
     );
-  }, [campaigns, dmJobs]);
+  }, [campaigns, dmJobs, t]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -113,8 +115,12 @@ export function History() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
-        title="DM history"
-        description={`${totals.sent} sent · ${totals.failed} failed across ${rows.length} run${rows.length === 1 ? '' : 's'}`}
+        title={t('screens.history.title')}
+        description={t('screens.history.description', {
+          count: rows.length,
+          sent: totals.sent,
+          failed: totals.failed,
+        })}
         actions={
           <button
             type="button"
@@ -123,7 +129,7 @@ export function History() {
             className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
           >
             <RefreshCw className={'h-3.5 w-3.5 ' + (refreshing ? 'animate-spin' : '')} />
-            Refresh
+            {t('common.refresh')}
           </button>
         }
       />
@@ -134,7 +140,7 @@ export function History() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, account or source…"
+            placeholder={t('screens.history.searchPlaceholder')}
             className="h-10 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -143,21 +149,21 @@ export function History() {
       {filtered.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
           {rows.length === 0
-            ? 'No DMs sent yet — your first run will show up here.'
-            : 'No results.'}
+            ? t('screens.history.noneYet')
+            : t('common.noResults')}
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-1.5 text-left">Run</th>
-                <th className="px-3 py-1.5 text-left">Source</th>
-                <th className="px-3 py-1.5 text-right">Sent</th>
-                <th className="px-3 py-1.5 text-right">Failed</th>
-                <th className="px-3 py-1.5 text-right">Duration</th>
-                <th className="px-3 py-1.5 text-left">Completed</th>
-                <th className="px-2 py-1.5 text-right">Actions</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.history.thRun')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.history.thSource')}</th>
+                <th className="px-3 py-1.5 text-right">{t('screens.history.thSent')}</th>
+                <th className="px-3 py-1.5 text-right">{t('screens.history.thFailed')}</th>
+                <th className="px-3 py-1.5 text-right">{t('screens.history.thDuration')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.history.thCompleted')}</th>
+                <th className="px-2 py-1.5 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -217,7 +223,7 @@ export function History() {
                           type="button"
                           onClick={() => navigate(detailPath)}
                           className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                          aria-label="View detail"
+                          aria-label={t('screens.history.ariaViewDetail')}
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </button>

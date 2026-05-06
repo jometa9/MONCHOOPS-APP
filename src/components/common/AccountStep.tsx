@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Check, Instagram, Search } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Badge } from '@/components/ui/badge';
@@ -8,9 +9,10 @@ import { useJobs } from '@/context/JobsContext';
 import type { AccountPublic } from '@/types/domain';
 
 function StatusBadge({ status }: { status: AccountPublic['status'] }) {
-  if (status === 'busy') return <Badge variant="warning">Running</Badge>;
-  if (status === 'error') return <Badge variant="destructive">Error</Badge>;
-  return <Badge variant="success">Idle</Badge>;
+  const { t } = useTranslation();
+  if (status === 'busy') return <Badge variant="warning">{t('components.accountStep.running')}</Badge>;
+  if (status === 'error') return <Badge variant="destructive">{t('components.accountStep.error')}</Badge>;
+  return <Badge variant="success">{t('components.accountStep.idle')}</Badge>;
 }
 
 interface Props {
@@ -20,6 +22,7 @@ interface Props {
 }
 
 export function AccountStep({ accounts, value, onChange }: Props) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const { active } = useJobs();
 
@@ -52,11 +55,15 @@ export function AccountStep({ accounts, value, onChange }: Props) {
     return (
       <EmptyPanel
         icon={<Instagram className="h-8 w-8" />}
-        title={hasErrorAccounts ? 'No working accounts' : 'No accounts yet'}
+        title={
+          hasErrorAccounts
+            ? t('components.accountStep.noWorkingTitle')
+            : t('components.accountStep.noAccountsTitle')
+        }
         description={
           hasErrorAccounts
-            ? 'All your linked accounts are in an error state. Retry or remove them from the Accounts screen.'
-            : 'Link an Instagram account from the Accounts screen first.'
+            ? t('components.accountStep.noWorkingDescription')
+            : t('components.accountStep.noAccountsDescription')
         }
       />
     );
@@ -70,7 +77,7 @@ export function AccountStep({ accounts, value, onChange }: Props) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search accounts by username…"
+            placeholder={t('components.accountStep.searchPlaceholder')}
             className="h-9 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -79,16 +86,16 @@ export function AccountStep({ accounts, value, onChange }: Props) {
         {filtered.length === 0 ? (
           <EmptyState
             icon={<Search className="h-10 w-10" />}
-            title="No results"
-            description="No accounts match your search."
+            title={t('common.noResults')}
+            description={t('components.accountStep.noMatchDescription')}
             className="py-0"
           />
         ) : (
           <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-1.5 text-left">Account</th>
-                <th className="px-3 py-1.5 text-left">Status</th>
+                <th className="px-3 py-1.5 text-left">{t('components.accountStep.tableAccount')}</th>
+                <th className="px-3 py-1.5 text-left">{t('components.accountStep.tableStatus')}</th>
                 <th className="w-8 px-2 py-1.5" />
               </tr>
             </thead>
@@ -128,7 +135,7 @@ export function AccountStep({ accounts, value, onChange }: Props) {
                       <div className="flex flex-wrap items-center gap-1">
                         <StatusBadge status={acc.status} />
                         {queued > 0 ? (
-                          <Badge variant="muted">+{queued} queued</Badge>
+                          <Badge variant="muted">{t('components.accountStep.queuedSuffix', { count: queued })}</Badge>
                         ) : null}
                       </div>
                     </td>

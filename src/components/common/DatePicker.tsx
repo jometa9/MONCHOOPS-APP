@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -15,24 +16,32 @@ interface Props {
   id?: string;
 }
 
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
+const MONTH_KEYS = [
+  'components.datePicker.monthJanuary',
+  'components.datePicker.monthFebruary',
+  'components.datePicker.monthMarch',
+  'components.datePicker.monthApril',
+  'components.datePicker.monthMay',
+  'components.datePicker.monthJune',
+  'components.datePicker.monthJuly',
+  'components.datePicker.monthAugust',
+  'components.datePicker.monthSeptember',
+  'components.datePicker.monthOctober',
+  'components.datePicker.monthNovember',
+  'components.datePicker.monthDecember',
 ];
 
 // Week starts Monday — matches most non-US locales and is consistent
 // across the app's target audience.
-const DAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+const DAY_LABEL_KEYS = [
+  'components.datePicker.dayMo',
+  'components.datePicker.dayTu',
+  'components.datePicker.dayWe',
+  'components.datePicker.dayTh',
+  'components.datePicker.dayFr',
+  'components.datePicker.daySa',
+  'components.datePicker.daySu',
+];
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
@@ -48,13 +57,16 @@ function parseYmd(s: string): { year: number; month: number; day: number } | nul
   return { year: Number(m[1]), month: Number(m[2]) - 1, day: Number(m[3]) };
 }
 
-function formatDisplay(s: string): string {
+function formatDisplay(s: string, monthName: (idx: number) => string): string {
   const p = parseYmd(s);
   if (!p) return s;
-  return `${MONTH_NAMES[p.month]!.slice(0, 3)} ${p.day}, ${p.year}`;
+  return `${monthName(p.month).slice(0, 3)} ${p.day}, ${p.year}`;
 }
 
-export function DatePicker({ value, onChange, disabled, min, max, placeholder = 'Pick a date', id }: Props) {
+export function DatePicker({ value, onChange, disabled, min, max, placeholder, id }: Props) {
+  const { t } = useTranslation();
+  const monthName = (idx: number) => t(MONTH_KEYS[idx]!);
+  const placeholderLabel = placeholder ?? t('components.datePicker.placeholder');
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -126,7 +138,7 @@ export function DatePicker({ value, onChange, disabled, min, max, placeholder = 
       >
         <Calendar className="h-4 w-4 flex-none text-muted-foreground" />
         <span className={cn('truncate text-left', !value && 'text-muted-foreground')}>
-          {value ? formatDisplay(value) : placeholder}
+          {value ? formatDisplay(value, monthName) : placeholderLabel}
         </span>
       </button>
 
@@ -137,26 +149,26 @@ export function DatePicker({ value, onChange, disabled, min, max, placeholder = 
               type="button"
               onClick={() => shiftMonth(-1)}
               className="inline-flex h-7 w-7 items-center justify-center border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              aria-label="Previous month"
+              aria-label={t('components.datePicker.previousMonth')}
             >
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
             <div className="text-xs font-medium">
-              {MONTH_NAMES[cursor.month]} {cursor.year}
+              {monthName(cursor.month)} {cursor.year}
             </div>
             <button
               type="button"
               onClick={() => shiftMonth(1)}
               className="inline-flex h-7 w-7 items-center justify-center border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              aria-label="Next month"
+              aria-label={t('components.datePicker.nextMonth')}
             >
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
           <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[10px] uppercase tracking-wide text-muted-foreground">
-            {DAY_LABELS.map((label) => (
-              <div key={label}>{label}</div>
+            {DAY_LABEL_KEYS.map((key) => (
+              <div key={key}>{t(key)}</div>
             ))}
           </div>
 

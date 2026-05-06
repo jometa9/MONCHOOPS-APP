@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Send, Users } from 'lucide-react';
 import { useSession } from '@/context/SessionContext';
 import { useAccounts } from '@/context/AccountsContext';
@@ -46,6 +47,7 @@ function formatTimeSaved(ms: number): string {
 }
 
 export function Home() {
+  const { t } = useTranslation();
   const { session } = useSession();
   const { usableAccounts } = useAccounts();
   const [stats, setStats] = useState<Stats>({
@@ -55,7 +57,10 @@ export function Home() {
     timeSavedMs: 0,
   });
 
-  const name = session.profile?.name?.trim() || session.profile?.email?.split('@')[0] || 'there';
+  const name =
+    session.profile?.name?.trim() ||
+    session.profile?.email?.split('@')[0] ||
+    t('screens.home.fallbackName');
 
   useEffect(() => {
     let cancelled = false;
@@ -77,31 +82,33 @@ export function Home() {
     <div className="relative flex min-h-full items-center justify-center overflow-hidden">
       <div className="relative z-10 mx-auto w-full max-w-4xl pb-40 p-16">
         <UpdateBanner />
-        <h1 className="text-2xl font-semibold tracking-tight pt-2">Welcome back, {name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">What do you want to do today?</p>
+        <h1 className="text-2xl font-semibold tracking-tight pt-2">
+          {t('screens.home.welcomeBack', { name })}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t('screens.home.prompt')}</p>
 
         <div className="mt-8 grid grid-cols-2 border-l border-t border-border">
           <ActionCard
             to="/scrape"
             icon={<Users className="h-5 w-5" />}
-            title="Scrape Leads"
-            description="Build a list of usernames from followers, hashtags, or posts."
-            cta="New scrape"
+            title={t('screens.home.scrapeTitle')}
+            description={t('screens.home.scrapeDescription')}
+            cta={t('screens.home.scrapeCta')}
           />
           <ActionCard
             to="/cold-dm"
             icon={<Send className="h-5 w-5" />}
-            title="Cold DM"
-            description="Launch a DM campaign to your lead list."
-            cta="New campaign"
+            title={t('screens.home.coldDmTitle')}
+            description={t('screens.home.coldDmDescription')}
+            cta={t('screens.home.coldDmCta')}
           />
         </div>
 
         <div className="grid grid-cols-4 border-l border-border">
-          <StatCard label="Accounts" value={formatCount(usableAccounts.length)} />
-          <StatCard label="Leads" value={formatCount(stats.totalLeads)} />
-          <StatCard label="Messages" value={formatCount(stats.totalMessages)} />
-          <StatCard label="Time saved" value={formatTimeSaved(stats.timeSavedMs * 5)} />
+          <StatCard label={t('screens.home.statAccounts')} value={formatCount(usableAccounts.length)} />
+          <StatCard label={t('screens.home.statLeads')} value={formatCount(stats.totalLeads)} />
+          <StatCard label={t('screens.home.statMessages')} value={formatCount(stats.totalMessages)} />
+          <StatCard label={t('screens.home.statTimeSaved')} value={formatTimeSaved(stats.timeSavedMs * 5)} />
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowRight, ListTodo, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { CategoryChip } from '@/components/common/CategoryChip';
@@ -26,11 +27,6 @@ function formatKind(kind: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-const NON_SCRAPE_TITLE: Record<Exclude<JobKind, ScrapeKind>, string> = {
-  login: 'Login',
-  mass_dm: 'Cold DM campaign',
-};
-
 function formatElapsed(startedAt: number): string {
   const ms = Date.now() - startedAt;
   const s = Math.floor(ms / 1000);
@@ -44,6 +40,7 @@ function formatElapsed(startedAt: number): string {
 }
 
 export function Queue() {
+  const { t } = useTranslation();
   const { active, progressByJob } = useJobs();
   const { accounts } = useAccounts();
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
@@ -102,11 +99,11 @@ export function Queue() {
     return (
       <EmptyState
         icon={<ListTodo className="h-10 w-10" />}
-        title="Nothing running"
-        description="Jobs in progress or waiting show up here."
+        title={t('screens.queue.nothingRunning')}
+        description={t('screens.queue.nothingDescription')}
         action={
           <EmptyStateLinkButton to="/scrape" icon={<ArrowRight className="h-3.5 w-3.5" />}>
-            Start scraping leads
+            {t('screens.queue.startScraping')}
           </EmptyStateLinkButton>
         }
       />
@@ -118,12 +115,12 @@ export function Queue() {
       <table className="w-full whitespace-nowrap text-sm">
         <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-3 py-1.5 text-left">Status</th>
-              <th className="px-3 py-1.5 text-left">Job</th>
-              <th className="px-3 py-1.5 text-left">Category</th>
-              <th className="px-3 py-1.5 text-left">Progress</th>
-              <th className="px-3 py-1.5 text-right">Elapsed</th>
-              <th className="px-3 py-1.5 text-right">Actions</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.queue.tableStatus')}</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.queue.tableJob')}</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.queue.tableCategory')}</th>
+              <th className="px-3 py-1.5 text-left">{t('screens.queue.tableProgress')}</th>
+              <th className="px-3 py-1.5 text-right">{t('screens.queue.tableElapsed')}</th>
+              <th className="px-3 py-1.5 text-right">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -161,6 +158,7 @@ function QueueRow({
   cancelling,
   onCancel,
 }: QueueRowProps) {
+  const { t } = useTranslation();
   const isQueued = job.status === 'queued';
   const done = progress?.done ?? job.progressDone;
   const total = progress?.total ?? job.progressTotal;
@@ -170,11 +168,11 @@ function QueueRow({
     <tr className="border-t border-border even:bg-muted/30 last:border-b">
       <td className="px-3 py-1.5">
         {isQueued ? (
-          <Badge variant="muted">Queued</Badge>
+          <Badge variant="muted">{t('screens.queue.queued')}</Badge>
         ) : (
           <Badge variant="warning">
             <Spinner className="h-2.5 w-2.5" />
-            Running
+            {t('screens.queue.running')}
           </Badge>
         )}
       </td>
@@ -184,7 +182,8 @@ function QueueRow({
           {formatKind(job.kind)}
           {accountUsername ? (
             <>
-              {' with '}
+              {' '}
+              {t('screens.queue.withAccount')}{' '}
               <button
                 type="button"
                 onClick={(e) => {
@@ -210,7 +209,7 @@ function QueueRow({
       </td>
       <td className="px-3 py-1.5">
         {isQueued ? (
-          <span className="text-[11px] text-muted-foreground">Waiting for account</span>
+          <span className="text-[11px] text-muted-foreground">{t('screens.queue.waitingForAccount')}</span>
         ) : (
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-3">
@@ -226,7 +225,7 @@ function QueueRow({
             </div>
             {progress?.lastItem ? (
               <div className="truncate text-[11px] text-muted-foreground">
-                Extracting @{progress.lastItem}
+                {t('screens.queue.extracting', { username: progress.lastItem })}
               </div>
             ) : null}
           </div>
@@ -242,7 +241,7 @@ function QueueRow({
             onClick={onCancel}
             disabled={cancelling}
             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-            aria-label="Cancel job"
+            aria-label={t('screens.queue.cancelJob')}
           >
             {cancelling ? <Spinner /> : <X className="h-3.5 w-3.5" />}
           </button>
@@ -253,6 +252,7 @@ function QueueRow({
 }
 
 function JobTitle({ job }: { job: JobPublic }) {
+  const { t } = useTranslation();
   if (isScrapeKind(job.kind)) {
     return (
       <ScrapeSummary
@@ -263,7 +263,8 @@ function JobTitle({ job }: { job: JobPublic }) {
       />
     );
   }
-  return <div className="text-sm font-medium">{NON_SCRAPE_TITLE[job.kind]}</div>;
+  const label = job.kind === 'login' ? t('screens.queue.loginJob') : t('screens.queue.massDmJob');
+  return <div className="text-sm font-medium">{label}</div>;
 }
 
 function resolveCategoryName(

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ArrowLeft, ExternalLink, RefreshCw, Search, Users } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { db } from '@/shared/db';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { formatDateTime } from '@/shared/format';
@@ -14,6 +15,7 @@ interface UsernameRow {
 export function ScrapeDetail() {
   const { jobId = '' } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [usernames, setUsernames] = useState<UsernameRow[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -49,10 +51,13 @@ export function ScrapeDetail() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <ScreenHeader
-        title={scrape?.targetName ?? scrape?.summary ?? 'Scrape'}
+        title={scrape?.targetName ?? scrape?.summary ?? t('screens.scrapeDetail.fallbackTitle')}
         description={
           scrape
-            ? `${scrape.usernameCount} leads · ${formatDateTime(scrape.completedAt)}`
+            ? t('screens.scrapeDetail.leadsLine', {
+                count: scrape.usernameCount,
+                when: formatDateTime(scrape.completedAt),
+              })
             : ' '
         }
         actions={
@@ -63,7 +68,7 @@ export function ScrapeDetail() {
               className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Back
+              {t('screens.scrapeDetail.back')}
             </button>
             <button
               type="button"
@@ -72,7 +77,7 @@ export function ScrapeDetail() {
               className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
             >
               <RefreshCw className={'h-3.5 w-3.5 ' + (loading ? 'animate-spin' : '')} />
-              Refresh
+              {t('common.refresh')}
             </button>
           </div>
         }
@@ -84,7 +89,7 @@ export function ScrapeDetail() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search username…"
+            placeholder={t('screens.scrapeDetail.searchPlaceholder')}
             className="h-10 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -99,15 +104,15 @@ export function ScrapeDetail() {
       {filtered.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
           {usernames === null ? (
-            'Loading leads…'
+            t('screens.scrapeDetail.loadingLeads')
           ) : usernames.length === 0 ? (
             <div className="flex flex-col items-center gap-2 text-center">
               <Users className="h-10 w-10" />
-              <p className="text-sm font-medium">No leads</p>
-              <p>This scrape returned no usernames.</p>
+              <p className="text-sm font-medium">{t('screens.scrapeDetail.noLeadsTitle')}</p>
+              <p>{t('screens.scrapeDetail.noLeadsHint')}</p>
             </div>
           ) : (
-            'No leads match your search.'
+            t('screens.scrapeDetail.noMatches')
           )}
         </div>
       ) : (
@@ -115,8 +120,8 @@ export function ScrapeDetail() {
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-1.5 text-left">Username</th>
-                <th className="px-2 py-1.5 text-right">Profile</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.scrapeDetail.thUsername')}</th>
+                <th className="px-2 py-1.5 text-right">{t('screens.scrapeDetail.thProfile')}</th>
               </tr>
             </thead>
             <tbody>
@@ -138,7 +143,7 @@ export function ScrapeDetail() {
                             window.open(url, '_blank');
                           }}
                           className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                          aria-label={`Open @${u.username} on Instagram`}
+                          aria-label={t('screens.scrapeDetail.openProfileAria', { username: u.username })}
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </button>

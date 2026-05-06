@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Eye, FolderTree, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { db } from '@/shared/db';
 import { uuid } from '@/shared/format';
 import { enqueuePush, runSync } from '@/shared/sync';
@@ -11,6 +12,7 @@ import type { SyncedCategory } from '@/shared/types';
 
 export function Categories() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SyncedCategory | null>(null);
@@ -45,8 +47,8 @@ export function Categories() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
-        title="Categories"
-        description="Lead categories — synced live with the desktop app."
+        title={t('screens.categories.title')}
+        description={t('screens.categories.description')}
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -58,7 +60,7 @@ export function Categories() {
               <RefreshCw
                 className={'h-3.5 w-3.5 ' + (refreshing ? 'animate-spin' : '')}
               />
-              Refresh
+              {t('common.refresh')}
             </button>
             <button
               type="button"
@@ -66,7 +68,7 @@ export function Categories() {
               className="inline-flex h-8 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               <Plus className="h-3.5 w-3.5" />
-              New category
+              {t('screens.categories.newCategory')}
             </button>
           </div>
         }
@@ -76,10 +78,9 @@ export function Categories() {
         <div className="flex flex-1 items-center justify-center">
           <div className="max-w-sm text-center">
             <FolderTree className="mx-auto h-10 w-10 text-muted-foreground" />
-            <p className="mt-3 text-sm font-medium">No categories yet</p>
+            <p className="mt-3 text-sm font-medium">{t('screens.categories.noneYet')}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Group scraped leads under a shared name. Create one here or run a scrape on
-              the desktop.
+              {t('screens.categories.noneHint')}
             </p>
             <button
               type="button"
@@ -87,7 +88,7 @@ export function Categories() {
               className="mt-4 inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               <Plus className="h-3.5 w-3.5" />
-              New category
+              {t('screens.categories.newCategory')}
             </button>
           </div>
         </div>
@@ -99,7 +100,7 @@ export function Categories() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by name…"
+                placeholder={t('screens.categories.searchPlaceholder')}
                 className="h-10 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
               />
             </div>
@@ -107,18 +108,18 @@ export function Categories() {
 
           {filtered.length === 0 ? (
             <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-              No categories match your search.
+              {t('screens.categories.noMatches')}
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full whitespace-nowrap text-sm">
                 <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="px-4 py-2 text-left">Name</th>
-                    <th className="px-4 py-2 text-right">Leads</th>
-                    <th className="px-4 py-2 text-right">Scrapes</th>
-                    <th className="px-4 py-2 text-left">Last activity</th>
-                    <th className="px-2 py-2 text-right">Actions</th>
+                    <th className="px-4 py-2 text-left">{t('screens.categories.thName')}</th>
+                    <th className="px-4 py-2 text-right">{t('screens.categories.thLeads')}</th>
+                    <th className="px-4 py-2 text-right">{t('screens.categories.thScrapes')}</th>
+                    <th className="px-4 py-2 text-left">{t('screens.categories.thLastActivity')}</th>
+                    <th className="px-2 py-2 text-right">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -133,7 +134,7 @@ export function Categories() {
                           <CategoryChip name={row.name} />
                           {row.pendingPush ? (
                             <span className="text-[10px] uppercase tracking-wide text-amber-600">
-                              pending sync
+                              {t('screens.categories.pendingSync')}
                             </span>
                           ) : null}
                         </div>
@@ -158,7 +159,7 @@ export function Categories() {
                             type="button"
                             onClick={() => navigate(`/categories/${row.id}`)}
                             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                            aria-label="View leads"
+                            aria-label={t('screens.categories.ariaViewLeads')}
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </button>
@@ -166,7 +167,7 @@ export function Categories() {
                             type="button"
                             onClick={() => setDeleteTarget(row)}
                             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-destructive"
-                            aria-label="Delete category"
+                            aria-label={t('screens.categories.ariaDeleteCategory')}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -193,6 +194,7 @@ export function Categories() {
 }
 
 function CreateCategoryDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -218,24 +220,23 @@ function CreateCategoryDialog({ onClose }: { onClose: () => void }) {
       await enqueuePush('category', 'create', id, { name: trimmed });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create category');
+      setError(err instanceof Error ? err.message : t('screens.categories.couldNotCreate'));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal title="New category" onClose={onClose}>
+    <Modal title={t('screens.categories.createDialogTitle')} onClose={onClose}>
       <div className="space-y-3 p-4">
         <p className="text-xs text-muted-foreground">
-          Pool scraped leads under a shared name. Created here, pushed to the desktop the
-          next time it's reachable.
+          {t('screens.categories.createDialogHint')}
         </p>
         <input
           autoFocus
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Fitness coaches"
+          placeholder={t('screens.categories.createPlaceholder')}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && name.trim() && !busy) void submit();
           }}
@@ -251,7 +252,7 @@ function CreateCategoryDialog({ onClose }: { onClose: () => void }) {
           disabled={busy}
           className="inline-flex h-9 items-center px-3 text-xs font-medium transition-colors hover:bg-accent"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           type="button"
@@ -259,7 +260,7 @@ function CreateCategoryDialog({ onClose }: { onClose: () => void }) {
           disabled={busy || !name.trim()}
           className="inline-flex h-9 items-center bg-primary px-4 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
         >
-          {busy ? 'Creating…' : 'Create category'}
+          {busy ? t('screens.categories.creating') : t('screens.categories.createCta')}
         </button>
       </ModalFooter>
     </Modal>
@@ -273,6 +274,7 @@ function DeleteCategoryDialog({
   category: SyncedCategory;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -292,18 +294,17 @@ function DeleteCategoryDialog({
       await enqueuePush('category', 'delete', category.id, {});
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not delete category');
+      setError(err instanceof Error ? err.message : t('screens.categories.couldNotDelete'));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal title={`Delete "${category.name}"?`} onClose={onClose}>
+    <Modal title={t('screens.categories.deleteDialogTitle', { name: category.name })} onClose={onClose}>
       <div className="space-y-2 p-4 text-xs text-muted-foreground">
         <p>
-          This removes the category and every lead pooled inside it. Linked scrapes stay
-          intact.
+          {t('screens.categories.deleteDialogBody')}
         </p>
         {error ? <p className="text-destructive">{error}</p> : null}
       </div>
@@ -314,7 +315,7 @@ function DeleteCategoryDialog({
           disabled={busy}
           className="inline-flex h-9 items-center px-3 text-xs font-medium transition-colors hover:bg-accent"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           type="button"
@@ -322,7 +323,7 @@ function DeleteCategoryDialog({
           disabled={busy}
           className="inline-flex h-9 items-center bg-destructive px-4 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 disabled:opacity-50"
         >
-          {busy ? 'Deleting…' : 'Delete category'}
+          {busy ? t('screens.categories.deleting') : t('screens.categories.deleteCta')}
         </button>
       </ModalFooter>
     </Modal>

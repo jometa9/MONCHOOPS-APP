@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   CheckCircle2,
   CloudOff,
@@ -31,19 +32,20 @@ interface Props {
   locked?: boolean;
 }
 
-const NAV = [
-  { to: '/home', label: 'Home', icon: HomeIcon },
-  { to: '/campaigns', label: 'Campaigns', icon: MessageSquare },
-  { to: '/queue', label: 'Queue', icon: ListTodo },
-  { to: '/categories', label: 'Categories', icon: FolderTree },
-  { to: '/scrapes', label: 'Scrapes', icon: Inbox },
-  { to: '/variants', label: 'Variants', icon: MessageSquareText },
-  { to: '/history', label: 'History', icon: HistoryIcon },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon },
+const NAV: { to: string; key: string; icon: typeof HomeIcon }[] = [
+  { to: '/home', key: 'nav.home', icon: HomeIcon },
+  { to: '/campaigns', key: 'nav.campaigns', icon: MessageSquare },
+  { to: '/queue', key: 'nav.queue', icon: ListTodo },
+  { to: '/categories', key: 'nav.categories', icon: FolderTree },
+  { to: '/scrapes', key: 'nav.scrapes', icon: Inbox },
+  { to: '/variants', key: 'nav.variants', icon: MessageSquareText },
+  { to: '/history', key: 'nav.history', icon: HistoryIcon },
+  { to: '/settings', key: 'nav.settings', icon: SettingsIcon },
 ];
 
 export function Sidebar({ session, onLogout, locked }: Props) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   async function handleLogout() {
     await logout();
@@ -66,17 +68,17 @@ export function Sidebar({ session, onLogout, locked }: Props) {
         className="m-3 inline-flex h-9 items-center justify-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
       >
         <Plus className="h-3.5 w-3.5" />
-        New cold DM
+        {t('nav.newColdDm')}
       </button>
 
       {locked ? (
         <div className="mx-3 mb-2 border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-800">
-          A campaign is in progress. Pause it from its detail screen to use the rest of the app.
+          {t('sidebar.campaignInProgress')}
         </div>
       ) : null}
 
       <nav className="flex flex-col">
-        {NAV.map(({ to, label, icon: Icon }) => (
+        {NAV.map(({ to, key, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -97,7 +99,7 @@ export function Sidebar({ session, onLogout, locked }: Props) {
             }
           >
             <Icon className="h-4 w-4" />
-            <span>{label}</span>
+            <span>{t(key)}</span>
           </NavLink>
         ))}
       </nav>
@@ -112,7 +114,7 @@ export function Sidebar({ session, onLogout, locked }: Props) {
           className="inline-flex h-8 w-full items-center justify-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
         >
           <LogOut className="h-3 w-3" />
-          Log out
+          {t('common.logOut')}
         </button>
       </div>
     </aside>
@@ -120,6 +122,7 @@ export function Sidebar({ session, onLogout, locked }: Props) {
 }
 
 function SyncIndicator() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<SyncStatus>({ kind: 'idle' });
   useEffect(() => onSyncStatusChange(setStatus), []);
 
@@ -129,33 +132,35 @@ function SyncIndicator() {
   switch (status.kind) {
     case 'syncing':
       icon = <Loader2 className="h-3 w-3 animate-spin" />;
-      label = 'Syncing…';
+      label = t('common.syncing');
       break;
     case 'connected':
       icon = <CheckCircle2 className="h-3 w-3 text-emerald-600" />;
-      label = 'Synced';
-      title = `Last synced ${new Date(status.lastSyncAt).toLocaleTimeString()}`;
+      label = t('common.synced');
+      title = t('sidebar.lastSyncedAt', {
+        time: new Date(status.lastSyncAt).toLocaleTimeString(),
+      });
       break;
     case 'offline':
       icon = <CloudOff className="h-3 w-3 text-muted-foreground" />;
-      label = 'Desktop offline';
-      title = 'MonchoOps desktop is not running. The extension keeps working locally.';
+      label = t('common.desktopOffline');
+      title = t('sidebar.desktopOfflineHint');
       break;
     case 'error':
       icon = <CloudOff className="h-3 w-3 text-amber-600" />;
-      label = 'Sync error';
+      label = t('common.syncError');
       title = status.message;
       break;
     default:
       icon = <CloudOff className="h-3 w-3 text-muted-foreground" />;
-      label = 'Idle';
+      label = t('common.idle');
   }
 
   return (
     <button
       type="button"
       onClick={() => void runSync()}
-      title={title || 'Click to sync now'}
+      title={title || t('sidebar.clickToSync')}
       className="inline-flex h-8 w-full items-center justify-center gap-1.5 border border-border bg-background px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
     >
       {icon}
@@ -165,15 +170,17 @@ function SyncIndicator() {
 }
 
 const THEME_ORDER: ThemeMode[] = ['system', 'light', 'dark'];
-const THEME_META: Record<ThemeMode, { label: string; icon: typeof Sun }> = {
-  system: { label: 'System', icon: Monitor },
-  light: { label: 'Light', icon: Sun },
-  dark: { label: 'Dark', icon: Moon },
+const THEME_META: Record<ThemeMode, { key: string; icon: typeof Sun }> = {
+  system: { key: 'common.system', icon: Monitor },
+  light: { key: 'common.light', icon: Sun },
+  dark: { key: 'common.dark', icon: Moon },
 };
 
 function ThemeToggle() {
+  const { t } = useTranslation();
   const [mode, setMode] = useThemeMode();
-  const { label, icon: Icon } = THEME_META[mode];
+  const { key, icon: Icon } = THEME_META[mode];
+  const label = t(key);
   const next = () => {
     const i = THEME_ORDER.indexOf(mode);
     setMode(THEME_ORDER[(i + 1) % THEME_ORDER.length]);
@@ -182,7 +189,7 @@ function ThemeToggle() {
     <button
       type="button"
       onClick={next}
-      title={`Theme: ${label} (click to change)`}
+      title={t('sidebar.themeTooltip', { label })}
       className="inline-flex h-8 w-full items-center justify-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
     >
       <Icon className="h-3 w-3" />

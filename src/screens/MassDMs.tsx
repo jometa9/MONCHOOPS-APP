@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   ArrowRight,
@@ -49,7 +50,6 @@ import type {
 
 const MAX_VARIANTS = 20;
 const MAX_LIKE_COUNT = 5;
-const STEP_LABELS = ['Account', 'Leads', 'Message', 'Interactions', 'Review'] as const;
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -100,6 +100,7 @@ function interactionsPayload(s: InteractionsState): MassDmInteractionsConfig | n
 }
 
 export function MassDMs() {
+  const { t } = useTranslation();
   const { accounts: allAccounts, usableAccounts: accounts } = useAccounts();
 
   const [step, setStep] = useState<Step>(1);
@@ -112,13 +113,17 @@ export function MassDMs() {
   const [error, setError] = useState<string | null>(null);
   const [startedJobId, setStartedJobId] = useState<string | null>(null);
   const [wasEnqueued, setWasEnqueued] = useState(false);
-  // Usernames in this source that have already been successfully DMed by the
-  // selected account in some previous job. Computed lazily on Review.
   const [alreadyDmed, setAlreadyDmed] = useState<string[]>([]);
   const [alreadyDmedLoading, setAlreadyDmedLoading] = useState(false);
-  // When true (default) the already-DMed set is excluded from the run. The
-  // exclusion is enforced on the worker side via excludeUsernames.
   const [skipAlreadyDmed, setSkipAlreadyDmed] = useState(true);
+
+  const STEP_LABELS = [
+    t('screens.massDms.stepAccount'),
+    t('screens.massDms.stepLeads'),
+    t('screens.massDms.stepMessage'),
+    t('screens.massDms.stepInteractions'),
+    t('screens.massDms.stepReview'),
+  ] as const;
 
   const nonEmptyVariants = useMemo(
     () => variants.map((v) => v.trim()).filter((v) => v.length > 0),
@@ -143,9 +148,6 @@ export function MassDMs() {
   }
   function next() {
     if (!canContinue[step]) return;
-    // Leaving Interactions with the section toggled on but no concrete action
-    // chosen is treated as "no interactions" — collapse the master toggle so
-    // the Review summary doesn't render an empty-interactions tip.
     if (step === 4 && interactions.enabled && !interactionsHaveEffect(interactions)) {
       setInteractions((prev) => ({ ...prev, enabled: false }));
     }
@@ -172,17 +174,12 @@ export function MassDMs() {
       setWasEnqueued(enqueued);
       setStartedJobId(jobId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start job');
+      setError(err instanceof Error ? err.message : t('screens.massDms.couldNotStartJob'));
     } finally {
       setSubmitting(false);
     }
   }
 
-  // Compute the intersection between the source CSV usernames and the set of
-  // usernames this account has already successfully DMed in prior jobs, so
-  // we can warn the user on Review and (by default) exclude them from the
-  // run. Re-runs whenever the user lands on Review with an account + source
-  // selected, or either of those changes.
   useEffect(() => {
     if (step !== 5 || !accountId || !source) {
       setAlreadyDmed([]);
@@ -229,11 +226,11 @@ export function MassDMs() {
     return (
       <EmptyState
         icon={<Send className="h-10 w-10" />}
-        title="Add an Instagram account first"
-        description="Cold DMs run from a signed-in account."
+        title={t('screens.massDms.noAccountTitle')}
+        description={t('screens.massDms.noAccountDescription')}
         action={
           <EmptyStateLinkButton to="/accounts" icon={<ArrowLeft className="h-3.5 w-3.5" />}>
-            Add accounts
+            {t('screens.massDms.addAccounts')}
           </EmptyStateLinkButton>
         }
       />
@@ -253,10 +250,8 @@ export function MassDMs() {
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-4 py-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Cold DM</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Five steps: pick the account, the leads, the message, any pre-DM interactions, then review and send.
-      </p>
+      <h1 className="text-2xl font-semibold tracking-tight">{t('screens.massDms.title')}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">{t('screens.massDms.subtitle')}</p>
       <Stepper
         labels={STEP_LABELS}
         current={step}
@@ -319,7 +314,7 @@ export function MassDMs() {
           className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back
+          {t('common.back')}
         </button>
         <div className="flex-1" />
         {step < 5 ? (
@@ -329,7 +324,7 @@ export function MassDMs() {
             disabled={!canContinue[step]}
             className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
           >
-            Continue
+            {t('common.continue')}
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
         ) : (
@@ -342,11 +337,11 @@ export function MassDMs() {
             {submitting ? <Spinner /> : <Play className="h-3.5 w-3.5" />}
             {submitting
               ? selectedAccount?.status === 'busy'
-                ? 'Enqueuing…'
-                : 'Starting…'
+                ? t('screens.massDms.enqueuing')
+                : t('common.starting')
               : selectedAccount?.status === 'busy'
-              ? 'Add to queue'
-              : 'Start Cold DM job'}
+              ? t('screens.massDms.addToQueue')
+              : t('screens.massDms.startJob')}
           </button>
         )}
       </div>
@@ -358,11 +353,17 @@ export function MassDMs() {
 
 type LeadsTab = 'file' | 'job' | 'category' | 'manual';
 
-const LEADS_TABS: { id: LeadsTab; label: string; icon: typeof FileUp }[] = [
-  { id: 'file', label: 'Upload file', icon: UploadCloud },
-  { id: 'job', label: 'From a scrape', icon: Inbox },
-  { id: 'category', label: 'From a category', icon: FolderTree },
-  { id: 'manual', label: 'Manual', icon: Keyboard },
+interface LeadsTabDef {
+  id: LeadsTab;
+  labelKey: string;
+  icon: typeof FileUp;
+}
+
+const LEADS_TABS: LeadsTabDef[] = [
+  { id: 'file', labelKey: 'screens.massDms.leadsTabFile', icon: UploadCloud },
+  { id: 'job', labelKey: 'screens.massDms.leadsTabJob', icon: Inbox },
+  { id: 'category', labelKey: 'screens.massDms.leadsTabCategory', icon: FolderTree },
+  { id: 'manual', labelKey: 'screens.massDms.leadsTabManual', icon: Keyboard },
 ];
 
 function LeadsStep({
@@ -372,6 +373,7 @@ function LeadsStep({
   value: Source | null;
   onChange: (s: Source | null) => void;
 }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<LeadsTab>(() =>
     value?.kind === 'job'
       ? 'job'
@@ -385,14 +387,14 @@ function LeadsStep({
   return (
     <div className="overflow-hidden border border-border bg-background">
       <div className="flex items-stretch border-b border-border">
-        {LEADS_TABS.map((t, idx) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
+        {LEADS_TABS.map((tabDef, idx) => {
+          const Icon = tabDef.icon;
+          const active = tab === tabDef.id;
           return (
             <button
-              key={t.id}
+              key={tabDef.id}
               type="button"
-              onClick={() => setTab(t.id)}
+              onClick={() => setTab(tabDef.id)}
               className={cn(
                 'inline-flex h-9 flex-1 items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
                 idx !== LEADS_TABS.length - 1 && 'border-r border-border',
@@ -402,7 +404,7 @@ function LeadsStep({
               )}
             >
               <Icon className="h-3.5 w-3.5" />
-              {t.label}
+              {t(tabDef.labelKey)}
             </button>
           );
         })}
@@ -425,6 +427,7 @@ function ManualPanel({
   value: Source | null;
   onChange: (s: Source | null) => void;
 }) {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<string[]>(() =>
     value?.kind === 'manual' && value.refIds && value.refIds.length > 0
       ? [...value.refIds]
@@ -460,7 +463,10 @@ function ManualPanel({
         try {
           const res = await b2dm.csv.persistFromUsernames(dedup);
           if (cancelled) return;
-          const label = dedup.length === 1 ? `@${dedup[0]}` : `${dedup.length} usernames`;
+          const label =
+            dedup.length === 1
+              ? t('screens.massDms.manualOneLabel', { username: dedup[0] })
+              : t('screens.massDms.manualManyLabel', { count: dedup.length });
           onChange({
             kind: 'manual',
             path: res.path,
@@ -470,7 +476,7 @@ function ManualPanel({
             labels: dedup.map((u) => `@${u}`),
           });
         } catch (e) {
-          if (!cancelled) setErr(e instanceof Error ? e.message : 'Could not save list');
+          if (!cancelled) setErr(e instanceof Error ? e.message : t('screens.massDms.couldNotSaveList'));
         } finally {
           if (!cancelled) setBusy(false);
         }
@@ -486,17 +492,23 @@ function ManualPanel({
   return (
     <div className="flex flex-col">
       <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        <span>Manual usernames</span>
+        <span>{t('screens.massDms.manualUsernames')}</span>
         <span className="normal-case font-normal">
-          {value?.kind === 'manual' ? `${value.count} unique` : '0 unique'}
-          {busy ? ' · saving…' : ''}
+          {value?.kind === 'manual'
+            ? t('screens.massDms.manualUniqueCount', { count: value.count })
+            : t('screens.massDms.manualEmpty')}
+          {busy ? t('screens.massDms.manualSaving') : ''}
         </span>
       </div>
       <div className="max-h-[42vh] space-y-2 overflow-auto p-3">
         {rows.map((row, i) => (
           <div key={i} className="flex items-center gap-2">
             <Input
-              placeholder={i === 0 ? 'username' : `Username ${i + 1}`}
+              placeholder={
+                i === 0
+                  ? t('screens.massDms.manualPlaceholderFirst')
+                  : t('screens.massDms.manualPlaceholderNth', { n: i + 1 })
+              }
               value={row}
               onChange={(e) => update(i, e.target.value)}
               autoComplete="off"
@@ -506,7 +518,7 @@ function ManualPanel({
               type="button"
               onClick={() => removeRow(i)}
               disabled={rows.length <= 1 && row.trim().length === 0}
-              aria-label={`Remove username ${i + 1}`}
+              aria-label={t('screens.massDms.manualRemove', { n: i + 1 })}
               className="inline-flex h-9 w-9 flex-none items-center justify-center bg-destructive/10 text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-40 disabled:hover:bg-destructive/10"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -521,7 +533,7 @@ function ManualPanel({
           className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add username
+          {t('screens.massDms.addUsername')}
         </button>
       </div>
       {err ? (
@@ -538,6 +550,7 @@ function FilePanel({
   value: Source | null;
   onChange: (s: Source | null) => void;
 }) {
+  const { t } = useTranslation();
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -552,7 +565,7 @@ function FilePanel({
       const label = fallbackName ?? srcPath.split(/[\\/]/).pop() ?? 'file';
       onChange({ kind: 'file', path: res.path, count: res.count, label });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not load file');
+      setErr(e instanceof Error ? e.message : t('screens.massDms.couldNotLoadFile'));
     } finally {
       setLoading(false);
     }
@@ -567,7 +580,7 @@ function FilePanel({
       const label = res.path.split(/[\\/]/).pop() ?? 'file';
       onChange({ kind: 'file', path: res.path, count: res.count, label });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not load file');
+      setErr(e instanceof Error ? e.message : t('screens.massDms.couldNotLoadFile'));
     } finally {
       setLoading(false);
     }
@@ -580,7 +593,7 @@ function FilePanel({
     if (!file) return;
     const anyFile = file as File & { path?: string };
     if (anyFile.path) void handleFile(anyFile.path, file.name);
-    else setErr('Drag-and-drop from this source is not supported — use "Browse" instead.');
+    else setErr(t('screens.massDms.fileDragNotSupported'));
   }
 
   return (
@@ -615,12 +628,12 @@ function FilePanel({
           <UploadCloud className="h-8 w-8 text-muted-foreground" />
         )}
         <div className="text-sm font-medium">
-          {active ? active.label : 'Drop a usernames file or click to browse'}
+          {active ? active.label : t('screens.massDms.fileEmpty')}
         </div>
         <div className="text-xs text-muted-foreground">
           {active
-            ? `${active.count} usernames`
-            : 'CSV, TXT, XLSX or XLS — first column is the username.'}
+            ? t('screens.massDms.fileUsernamesCount', { count: active.count })
+            : t('screens.massDms.fileFormatHint')}
         </div>
         {active ? (
           <button
@@ -632,7 +645,7 @@ function FilePanel({
             className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
             <X className="h-3 w-3" />
-            Clear
+            {t('screens.massDms.fileClear')}
           </button>
         ) : null}
       </div>
@@ -648,6 +661,7 @@ function JobsPanel({
   value: Source | null;
   onChange: (s: Source | null) => void;
 }) {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<ScrapeResultPublic[] | null>(null);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
@@ -704,7 +718,7 @@ function JobsPanel({
       const label =
         labels.length === 1
           ? labels[0]!
-          : `${labels.length} scrapes`;
+          : t('screens.massDms.scrapesManyLabel', { count: labels.length });
       onChange({
         kind: 'job',
         path: res.path,
@@ -714,7 +728,7 @@ function JobsPanel({
         labels,
       });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not load scrape');
+      setErr(e instanceof Error ? e.message : t('screens.massDms.couldNotLoadScrape'));
     } finally {
       setBusy(false);
     }
@@ -728,7 +742,7 @@ function JobsPanel({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search scrapes by summary, kind or category…"
+            placeholder={t('screens.massDms.scrapesSearchPlaceholder')}
             className="h-9 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -741,24 +755,24 @@ function JobsPanel({
         ) : rows.length === 0 ? (
           <EmptyPanel
             icon={<Inbox className="h-8 w-8" />}
-            title="No scrapes yet"
-            description="Run a scrape from Scrape Leads. Once it finishes, you can reuse its results here."
+            title={t('screens.massDms.noScrapesTitle')}
+            description={t('screens.massDms.noScrapesDescription')}
           />
         ) : filtered!.length === 0 ? (
           <EmptyState
             icon={<Search className="h-10 w-10" />}
-            title="No results"
-            description="No scrapes match your search."
+            title={t('common.noResults')}
+            description={t('screens.massDms.scrapesNoMatch')}
             className="py-0"
           />
         ) : (
           <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-1.5 text-left">Summary</th>
-                <th className="px-3 py-1.5 text-left">Category</th>
-                <th className="px-3 py-1.5 text-right">Leads</th>
-                <th className="px-3 py-1.5 text-left">Completed</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.massDms.tableSummary')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.massDms.tableCategory')}</th>
+                <th className="px-3 py-1.5 text-right">{t('screens.massDms.tableLeads')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.massDms.tableCompleted')}</th>
                 <th className="w-8 px-2 py-1.5" />
               </tr>
             </thead>
@@ -781,7 +795,8 @@ function JobsPanel({
                         {formatKind(row.kind)}
                         {row.accountUsername ? (
                           <>
-                            {' with '}
+                            {' '}
+                            {t('screens.queue.withAccount')}{' '}
                             <button
                               type="button"
                               onClick={(e) => {
@@ -833,6 +848,7 @@ function CategoryPanel({
   value: Source | null;
   onChange: (s: Source | null) => void;
 }) {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<LeadCategoryPublic[] | null>(null);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
@@ -886,7 +902,7 @@ function CategoryPanel({
       const label =
         labels.length === 1
           ? labels[0]!
-          : `${labels.length} categories`;
+          : t('screens.massDms.categoriesManyLabel', { count: labels.length });
       onChange({
         kind: 'category',
         path: res.path,
@@ -896,7 +912,7 @@ function CategoryPanel({
         labels,
       });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not load category');
+      setErr(e instanceof Error ? e.message : t('screens.massDms.couldNotLoadCategory'));
     } finally {
       setBusy(false);
     }
@@ -910,7 +926,7 @@ function CategoryPanel({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search categories by name…"
+            placeholder={t('screens.massDms.categoriesSearchPlaceholder')}
             className="h-9 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -923,23 +939,23 @@ function CategoryPanel({
         ) : rows.length === 0 ? (
           <EmptyPanel
             icon={<FolderTree className="h-8 w-8" />}
-            title="No categories yet"
-            description="Tag a scrape with a category to start pooling leads."
+            title={t('screens.massDms.noCategoriesTitle')}
+            description={t('screens.massDms.noCategoriesDescription')}
           />
         ) : filtered!.length === 0 ? (
           <EmptyState
             icon={<Search className="h-10 w-10" />}
-            title="No results"
-            description="No categories match your search."
+            title={t('common.noResults')}
+            description={t('screens.massDms.categoriesNoMatch')}
             className="py-0"
           />
         ) : (
           <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-1.5 text-left">Name</th>
-                <th className="px-3 py-1.5 text-right">Leads</th>
-                <th className="px-3 py-1.5 text-left">Last activity</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.massDms.tableName')}</th>
+                <th className="px-3 py-1.5 text-right">{t('screens.massDms.tableLeads')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.massDms.tableLastActivity')}</th>
                 <th className="w-8 px-2 py-1.5" />
               </tr>
             </thead>
@@ -987,9 +1003,15 @@ function CategoryPanel({
 
 type MessageTab = 'write' | 'saved';
 
-const MESSAGE_TABS: { id: MessageTab; label: string; icon: typeof Pencil }[] = [
-  { id: 'write', label: 'Write', icon: Pencil },
-  { id: 'saved', label: 'Saved', icon: MessageSquareText },
+interface MessageTabDef {
+  id: MessageTab;
+  labelKey: string;
+  icon: typeof Pencil;
+}
+
+const MESSAGE_TABS: MessageTabDef[] = [
+  { id: 'write', labelKey: 'screens.massDms.messageTabWrite', icon: Pencil },
+  { id: 'saved', labelKey: 'screens.massDms.messageTabSaved', icon: MessageSquareText },
 ];
 
 function MessageStep({
@@ -1003,20 +1025,21 @@ function MessageStep({
   intervalSec: number;
   onIntervalChange: (n: number) => void;
 }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<MessageTab>('write');
 
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-hidden border border-border bg-background">
         <div className="flex items-stretch border-b border-border">
-          {MESSAGE_TABS.map((t, idx) => {
-            const Icon = t.icon;
-            const active = tab === t.id;
+          {MESSAGE_TABS.map((tabDef, idx) => {
+            const Icon = tabDef.icon;
+            const active = tab === tabDef.id;
             return (
               <button
-                key={t.id}
+                key={tabDef.id}
                 type="button"
-                onClick={() => setTab(t.id)}
+                onClick={() => setTab(tabDef.id)}
                 className={cn(
                   'inline-flex h-9 flex-1 items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
                   idx !== MESSAGE_TABS.length - 1 && 'border-r border-border',
@@ -1026,7 +1049,7 @@ function MessageStep({
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
-                {t.label}
+                {t(tabDef.labelKey)}
               </button>
             );
           })}
@@ -1046,10 +1069,10 @@ function MessageStep({
 
       <div className="border border-border bg-background">
         <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Pace
+          {t('screens.massDms.pace')}
         </div>
         <div className="space-y-1 p-3">
-          <Label htmlFor="dm-interval">Interval between DMs (seconds)</Label>
+          <Label htmlFor="dm-interval">{t('screens.massDms.intervalLabel')}</Label>
           <Input
             id="dm-interval"
             type="number"
@@ -1061,7 +1084,7 @@ function MessageStep({
             }
           />
           <p className="text-[11px] text-muted-foreground">
-            Minimum 30s — lower paces trip IG's anti-spam. Jitter ±25% is applied automatically.
+            {t('screens.massDms.intervalHint')}
           </p>
         </div>
       </div>
@@ -1076,6 +1099,7 @@ function WriteVariantsPanel({
   variants: string[];
   onChange: (v: string[]) => void;
 }) {
+  const { t } = useTranslation();
   const nonEmpty = variants.filter((v) => v.trim().length > 0).length;
 
   function updateVariant(i: number, value: string) {
@@ -1093,9 +1117,9 @@ function WriteVariantsPanel({
   return (
     <div className="flex flex-col">
       <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        <span>Message variants</span>
+        <span>{t('screens.massDms.messageVariantsTitle')}</span>
         <span className="normal-case font-normal">
-          {nonEmpty}/{MAX_VARIANTS} · one picked at random per DM ·{' '}
+          {t('screens.massDms.variantsCount', { n: nonEmpty, max: MAX_VARIANTS })}
           <code className="rounded bg-background px-1 py-0.5 text-[10px]">{'{{username}}'}</code>
         </span>
       </div>
@@ -1104,7 +1128,11 @@ function WriteVariantsPanel({
           <div key={i} className="flex items-start gap-2">
             <Textarea
               rows={3}
-              placeholder={i === 0 ? 'Hey {{username}}, …' : `Variant ${i + 1}`}
+              placeholder={
+                i === 0
+                  ? t('screens.massDms.variantPlaceholderFirst')
+                  : t('screens.massDms.variantPlaceholderNth', { n: i + 1 })
+              }
               value={value}
               onChange={(e) => updateVariant(i, e.target.value)}
             />
@@ -1112,7 +1140,7 @@ function WriteVariantsPanel({
               type="button"
               onClick={() => removeVariant(i)}
               disabled={variants.length <= 1}
-              aria-label={`Remove variant ${i + 1}`}
+              aria-label={t('screens.massDms.removeVariant', { n: i + 1 })}
               className="inline-flex h-9 w-9 flex-none items-center justify-center bg-destructive/10 text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-40 disabled:hover:bg-destructive/10"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -1128,7 +1156,7 @@ function WriteVariantsPanel({
           className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add variant
+          {t('screens.massDms.addVariant')}
         </button>
       </div>
     </div>
@@ -1136,6 +1164,7 @@ function WriteVariantsPanel({
 }
 
 function SavedVariantsPanel({ onLoad }: { onLoad: (variants: string[]) => void }) {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<MessageVariantGroupPublic[] | null>(null);
   const [query, setQuery] = useState('');
 
@@ -1173,7 +1202,7 @@ function SavedVariantsPanel({ onLoad }: { onLoad: (variants: string[]) => void }
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search saved groups by name…"
+            placeholder={t('screens.massDms.savedSearchPlaceholder')}
             className="h-9 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -1186,23 +1215,23 @@ function SavedVariantsPanel({ onLoad }: { onLoad: (variants: string[]) => void }
         ) : rows.length === 0 ? (
           <EmptyPanel
             icon={<MessageSquareText className="h-8 w-8" />}
-            title="No saved groups yet"
-            description="Create a reusable set of DM variations from the Message Variants screen."
+            title={t('screens.massDms.noSavedTitle')}
+            description={t('screens.massDms.noSavedDescription')}
           />
         ) : filtered!.length === 0 ? (
           <EmptyState
             icon={<Search className="h-10 w-10" />}
-            title="No results"
-            description="No saved groups match your search."
+            title={t('common.noResults')}
+            description={t('screens.massDms.savedNoMatch')}
             className="py-0"
           />
         ) : (
           <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-1.5 text-left">Name</th>
-                <th className="px-3 py-1.5 text-right">Variants</th>
-                <th className="px-3 py-1.5 text-left">Last updated</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.massDms.tableName')}</th>
+                <th className="px-3 py-1.5 text-right">{t('screens.massDms.tableVariants')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.massDms.tableLastUpdated')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1238,6 +1267,7 @@ function InteractionsStep({
   value: InteractionsState;
   onChange: (s: InteractionsState) => void;
 }) {
+  const { t } = useTranslation();
   function update(patch: Partial<InteractionsState>) {
     onChange({ ...value, ...patch });
   }
@@ -1248,16 +1278,15 @@ function InteractionsStep({
         <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Sparkles className="h-3 w-3" />
-            Pre-DM interactions
+            {t('screens.massDms.interactionsTitle')}
           </span>
-          <span className="normal-case font-normal">Optional — off by default</span>
+          <span className="normal-case font-normal">{t('screens.massDms.interactionsOptional')}</span>
         </div>
         <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
           <div className="min-w-0">
-            <div className="font-medium">Warm the target before messaging</div>
+            <div className="font-medium">{t('screens.massDms.interactionsWarmTitle')}</div>
             <p className="text-[11px] text-muted-foreground">
-              Before each DM the account visits the target's profile, optionally follows them, and
-              can like a few of their recent posts. Already-followed targets are never unfollowed.
+              {t('screens.massDms.interactionsWarmDesc')}
             </p>
           </div>
           <Switch
@@ -1274,10 +1303,8 @@ function InteractionsStep({
               <div className="flex min-w-0 items-start gap-2">
                 <UserPlus className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
                 <div>
-                  <div className="font-medium">Follow the user</div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Sends a follow request. Skipped when already following / requested.
-                  </p>
+                  <div className="font-medium">{t('screens.massDms.followTitle')}</div>
+                  <p className="text-[11px] text-muted-foreground">{t('screens.massDms.followDesc')}</p>
                 </div>
               </div>
               <Switch
@@ -1292,11 +1319,8 @@ function InteractionsStep({
               <div className="flex min-w-0 items-start gap-2">
                 <Heart className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
                 <div>
-                  <div className="font-medium">Like recent posts</div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Likes this many of their most recent posts. Skipped if the profile has no posts
-                    or is private.
-                  </p>
+                  <div className="font-medium">{t('screens.massDms.likeTitle')}</div>
+                  <p className="text-[11px] text-muted-foreground">{t('screens.massDms.likeDesc')}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -1324,11 +1348,8 @@ function InteractionsStep({
               <div className="flex min-w-0 items-start gap-2">
                 <Sparkles className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
                 <div>
-                  <div className="font-medium">Watch their stories first</div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Silently views any active stories before the DM. Adds a few seconds per
-                    target; nudges reply rate up. Skipped when no story is available.
-                  </p>
+                  <div className="font-medium">{t('screens.massDms.watchTitle')}</div>
+                  <p className="text-[11px] text-muted-foreground">{t('screens.massDms.watchDesc')}</p>
                 </div>
               </div>
               <Switch
@@ -1338,7 +1359,7 @@ function InteractionsStep({
             </div>
             {value.watchStories ? (
               <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-xs">
-                <span className="text-muted-foreground">Dwell per story (s)</span>
+                <span className="text-muted-foreground">{t('screens.massDms.dwellLabel')}</span>
                 <input
                   type="number"
                   min={1}
@@ -1352,8 +1373,7 @@ function InteractionsStep({
           </div>
 
           <p className="text-[11px] text-muted-foreground">
-            Max {MAX_LIKE_COUNT} likes per target. A human-ish delay sits between the interactions
-            and the DM so the funnel reads as organic to Instagram's anti-spam checks.
+            {t('screens.massDms.interactionsFootnote', { max: MAX_LIKE_COUNT })}
           </p>
         </>
       ) : null}
@@ -1361,12 +1381,14 @@ function InteractionsStep({
   );
 }
 
-function summariseInteractions(s: InteractionsState): string {
-  if (!interactionsHaveEffect(s)) return 'No interactions';
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
+function summariseInteractions(s: InteractionsState, t: TFn): string {
+  if (!interactionsHaveEffect(s)) return t('screens.massDms.summaryNoInteractions');
   const parts: string[] = [];
-  if (s.follow) parts.push('Follow');
-  if (s.likeCount > 0) parts.push(`Like ${s.likeCount} post${s.likeCount === 1 ? '' : 's'}`);
-  if (s.watchStories) parts.push(`Watch stories ${s.storyDwellSec}s`);
+  if (s.follow) parts.push(t('screens.massDms.summaryFollow'));
+  if (s.likeCount > 0) parts.push(t('screens.massDms.summaryLike', { count: s.likeCount }));
+  if (s.watchStories) parts.push(t('screens.massDms.summaryWatch', { secs: s.storyDwellSec }));
   return parts.join(' · ');
 }
 
@@ -1405,28 +1427,29 @@ function ReviewStep({
   onEditMessage: () => void;
   onEditInteractions: () => void;
 }) {
+  const { t } = useTranslation();
   const sourceLabel =
     source?.kind === 'file'
-      ? 'File'
+      ? t('screens.massDms.summarySourceFile')
       : source?.kind === 'job'
-      ? 'Scrape'
+      ? t('screens.massDms.summarySourceJob')
       : source?.kind === 'category'
-      ? 'Category'
+      ? t('screens.massDms.summarySourceCategory')
       : source?.kind === 'manual'
-      ? 'Manual'
+      ? t('screens.massDms.summarySourceManual')
       : '—';
   const sourcePlural =
     source?.kind === 'category'
-      ? 'categories'
+      ? t('screens.massDms.sourcePluralCategory')
       : source?.kind === 'job'
-      ? 'scrapes'
+      ? t('screens.massDms.sourcePluralJob')
       : source?.kind === 'manual'
-      ? 'usernames'
-      : 'files';
+      ? t('screens.massDms.sourcePluralManual')
+      : t('screens.massDms.sourcePluralFile');
 
   return (
     <div className="flex flex-col gap-2">
-      <SummaryCard title="Account" onEdit={onEditAccount}>
+      <SummaryCard title={t('screens.massDms.summaryAccount')} onEdit={onEditAccount}>
         {account ? (
           <div className="flex items-center gap-2.5">
             {account.profilePicUrl ? (
@@ -1448,21 +1471,26 @@ function ReviewStep({
         )}
       </SummaryCard>
 
-      <SummaryCard title="Leads" onEdit={onEditLeads}>
+      <SummaryCard title={t('screens.massDms.summaryLeads')} onEdit={onEditLeads}>
         {source ? (
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate font-medium">
                   {source.labels && source.labels.length > 1
-                    ? `${source.labels.length} ${sourcePlural} selected`
+                    ? t('screens.massDms.summarySelectedCount', {
+                        count: source.labels.length,
+                        plural: sourcePlural,
+                      })
                     : source.label.length > 40
                     ? `${source.label.slice(0, 40)}…`
                     : source.label}
                 </div>
                 <div className="text-[11px] text-muted-foreground">{sourceLabel}</div>
               </div>
-              <span className="tabular-nums text-sm">{source.count} usernames</span>
+              <span className="tabular-nums text-sm">
+                {t('screens.massDms.summaryUsernamesCount', { count: source.count })}
+              </span>
             </div>
             {source.labels && source.labels.length > 1 ? (
               <div className="flex flex-wrap gap-1.5">
@@ -1488,12 +1516,12 @@ function ReviewStep({
       </SummaryCard>
 
       <SummaryCard
-        title={`Message · ${variants.length} variant${variants.length === 1 ? '' : 's'}`}
+        title={t('screens.massDms.summaryMessageWithVariants', { count: variants.length })}
         onEdit={onEditMessage}
       >
         <div className="space-y-1.5">
           {variants.length === 0 ? (
-            <span className="text-sm text-muted-foreground">No variants</span>
+            <span className="text-sm text-muted-foreground">{t('screens.massDms.summaryNoVariants')}</span>
           ) : (
             variants.map((v, i) => (
               <div
@@ -1507,20 +1535,22 @@ function ReviewStep({
         </div>
       </SummaryCard>
 
-      <SummaryCard title="Pace" onEdit={onEditMessage}>
+      <SummaryCard title={t('screens.massDms.summaryPace')} onEdit={onEditMessage}>
         <div className="text-sm">
-          1 DM every <span className="font-medium">{intervalSec}s</span>
-          <span className="ml-1 text-[11px] text-muted-foreground">(±25% jitter)</span>
+          {t('screens.massDms.summaryPaceText')} <span className="font-medium">{intervalSec}s</span>
+          <span className="ml-1 text-[11px] text-muted-foreground">
+            {t('screens.massDms.summaryPaceJitter')}
+          </span>
         </div>
       </SummaryCard>
 
-      <SummaryCard title="Interactions" onEdit={onEditInteractions}>
+      <SummaryCard title={t('screens.massDms.summaryInteractions')} onEdit={onEditInteractions}>
         <div className="flex items-center gap-2 text-sm">
           {interactionsHaveEffect(interactions) ? (
             <Sparkles className="h-3.5 w-3.5 text-primary" />
           ) : null}
           <span className={interactionsHaveEffect(interactions) ? 'font-medium' : 'text-muted-foreground'}>
-            {summariseInteractions(interactions)}
+            {summariseInteractions(interactions, t)}
           </span>
         </div>
       </SummaryCard>
@@ -1530,13 +1560,20 @@ function ReviewStep({
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="font-medium">
-                {alreadyDmed.length} of {source.count} recipients were already DMed by{' '}
-                {account ? `@${account.username}` : 'this account'}
+                {t('screens.massDms.alreadyDmedTitle', {
+                  count: alreadyDmed.length,
+                  total: source.count,
+                  account: account
+                    ? `@${account.username}`
+                    : t('screens.massDms.alreadyDmedThisAccount'),
+                })}
               </div>
               <div className="mt-0.5 text-muted-foreground">
                 {skipAlreadyDmed
-                  ? `Those targets will be skipped — this run will attempt ${source.count - alreadyDmed.length}.`
-                  : 'They will be DMed again.'}
+                  ? t('screens.massDms.alreadyDmedSkipping', {
+                      count: source.count - alreadyDmed.length,
+                    })
+                  : t('screens.massDms.alreadyDmedNotSkipping')}
               </div>
             </div>
             <label className="inline-flex flex-none items-center gap-2">
@@ -1544,17 +1581,16 @@ function ReviewStep({
                 checked={skipAlreadyDmed}
                 onCheckedChange={(v) => onToggleSkipAlreadyDmed(!!v)}
               />
-              <span className="text-[11px] font-medium">Skip</span>
+              <span className="text-[11px] font-medium">{t('screens.massDms.skip')}</span>
             </label>
           </div>
         </div>
       ) : alreadyDmedLoading ? (
-        <p className="text-[11px] text-muted-foreground">Checking for previously DMed recipients…</p>
+        <p className="text-[11px] text-muted-foreground">{t('screens.massDms.alreadyDmedLoading')}</p>
       ) : null}
       {willEnqueue ? (
         <p className="text-[11px] text-muted-foreground">
-          This account is busy. The Cold DM will be added to its queue and start once the
-          current jobs finish.
+          {t('screens.massDms.willEnqueue')}
         </p>
       ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

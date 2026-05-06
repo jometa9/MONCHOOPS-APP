@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { b2dm } from '@/lib/b2dm';
 import { cn } from '@/lib/cn';
 import type { JobKind, ScrapeResultPublic } from '@/types/domain';
@@ -13,6 +14,7 @@ interface Props {
 // (post, location, hashtag, profile) turned into a clickable link word
 // so the table stays narrow and readable.
 export function ScrapeSummary({ kind, params, targetName, className }: Props) {
+  const { t } = useTranslation();
   const p = (params && typeof params === 'object' ? params : {}) as Record<string, unknown>;
 
   switch (kind) {
@@ -20,7 +22,8 @@ export function ScrapeSummary({ kind, params, targetName, className }: Props) {
       const username = String(p.username ?? '').replace(/^@+/, '').trim() || null;
       return (
         <span className={cn('inline-flex items-center gap-1', className)}>
-          Followers of {username ? <ProfileLink username={username} /> : <Unknown label="profile" />}
+          {t('components.scrapeSummary.followersOf')}{' '}
+          {username ? <ProfileLink username={username} /> : <Unknown label={t('components.scrapeSummary.profile')} />}
         </span>
       );
     }
@@ -29,10 +32,18 @@ export function ScrapeSummary({ kind, params, targetName, className }: Props) {
       const isReel = url ? /\/reel\//.test(url) : false;
       return (
         <span className={cn('inline-flex items-center gap-1', className)}>
-          Engagers of {url ? <ExternalLinkWord url={url} label={isReel ? 'reel' : 'post'} /> : <Unknown label="post" />}
+          {t('components.scrapeSummary.engagersOf')}{' '}
+          {url ? (
+            <ExternalLinkWord
+              url={url}
+              label={isReel ? t('components.scrapeSummary.reel') : t('components.scrapeSummary.post')}
+            />
+          ) : (
+            <Unknown label={t('components.scrapeSummary.post')} />
+          )}
           {targetName ? (
             <>
-              <span>by</span>
+              <span>{t('components.scrapeSummary.by')}</span>
               <ProfileLink username={targetName.replace(/^@+/, '')} />
             </>
           ) : null}
@@ -43,8 +54,8 @@ export function ScrapeSummary({ kind, params, targetName, className }: Props) {
       const hashtag = String(p.hashtag ?? '').replace(/^#+/, '').trim() || null;
       return (
         <span className={cn('inline-flex items-center gap-1', className)}>
-          Engagers of{' '}
-          {hashtag ? <HashtagLink hashtag={hashtag} /> : <Unknown label="hashtag" />}
+          {t('components.scrapeSummary.engagersOf')}{' '}
+          {hashtag ? <HashtagLink hashtag={hashtag} /> : <Unknown label={t('components.scrapeSummary.hashtag')} />}
         </span>
       );
     }
@@ -52,17 +63,17 @@ export function ScrapeSummary({ kind, params, targetName, className }: Props) {
       const url = String(p.locationUrl ?? '').trim() || null;
       return (
         <span className={cn('inline-flex items-center gap-1', className)}>
-          Engagers at{' '}
+          {t('components.scrapeSummary.engagersAt')}{' '}
           {url ? (
-            <ExternalLinkWord url={url} label={targetName ?? 'location'} />
+            <ExternalLinkWord url={url} label={targetName ?? t('components.scrapeSummary.location')} />
           ) : (
-            <Unknown label={targetName ?? 'location'} />
+            <Unknown label={targetName ?? t('components.scrapeSummary.location')} />
           )}
         </span>
       );
     }
     default:
-      return <span className={className}>Scrape result</span>;
+      return <span className={className}>{t('components.scrapeSummary.scrapeResult')}</span>;
   }
 }
 

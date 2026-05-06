@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Eye, Inbox, RefreshCw, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { db } from '@/shared/db';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { formatDateTime } from '@/shared/format';
@@ -15,6 +16,7 @@ function formatKind(kind: string): string {
 
 export function Scrapes() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -53,8 +55,8 @@ export function Scrapes() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
-        title="Scrapes"
-        description="Lead scrapes that ran on the desktop. Read-only — start a scrape from the desktop app."
+        title={t('screens.scrapes.title')}
+        description={t('screens.scrapes.description')}
         actions={
           <button
             type="button"
@@ -65,7 +67,7 @@ export function Scrapes() {
             <RefreshCw
               className={'h-3.5 w-3.5 ' + (refreshing ? 'animate-spin' : '')}
             />
-            Refresh
+            {t('common.refresh')}
           </button>
         }
       />
@@ -74,8 +76,8 @@ export function Scrapes() {
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
             <Inbox className="h-10 w-10" />
-            <p className="text-sm font-medium text-foreground">No scrapes yet</p>
-            <p>Run one from the desktop app — it'll show up here once it finishes.</p>
+            <p className="text-sm font-medium text-foreground">{t('screens.scrapes.noneYet')}</p>
+            <p>{t('screens.scrapes.noneHint')}</p>
           </div>
         </div>
       ) : (
@@ -86,7 +88,7 @@ export function Scrapes() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by summary, target, kind or account…"
+                placeholder={t('screens.scrapes.searchPlaceholder')}
                 className="h-10 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
               />
             </div>
@@ -94,19 +96,19 @@ export function Scrapes() {
 
           {filtered.length === 0 ? (
             <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-              No scrapes match your search.
+              {t('screens.scrapes.noMatches')}
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full whitespace-nowrap text-sm">
                 <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-1.5 text-left">Summary</th>
-                    <th className="px-3 py-1.5 text-left">Kind</th>
-                    <th className="px-3 py-1.5 text-left">Account</th>
-                    <th className="px-3 py-1.5 text-right">Leads</th>
-                    <th className="px-3 py-1.5 text-left">Completed</th>
-                    <th className="px-2 py-1.5 text-right">Actions</th>
+                    <th className="px-3 py-1.5 text-left">{t('screens.scrapes.thSummary')}</th>
+                    <th className="px-3 py-1.5 text-left">{t('screens.scrapes.thKind')}</th>
+                    <th className="px-3 py-1.5 text-left">{t('screens.scrapes.thAccount')}</th>
+                    <th className="px-3 py-1.5 text-right">{t('screens.scrapes.thLeads')}</th>
+                    <th className="px-3 py-1.5 text-left">{t('screens.scrapes.thCompleted')}</th>
+                    <th className="px-2 py-1.5 text-right">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -147,7 +149,7 @@ export function Scrapes() {
                             type="button"
                             onClick={() => navigate(`/scrapes/${row.jobId}`)}
                             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                            aria-label="View leads"
+                            aria-label={t('screens.scrapes.ariaViewLeads')}
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </button>

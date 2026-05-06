@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Activity, ExternalLink, Instagram, Key, LogOut, Pause, Play } from 'lucide-react';
 import { db } from '@/shared/db';
@@ -8,6 +9,7 @@ import { EMPTY_SESSION } from '@/shared/types';
 import { HomeBg } from '@/shared/HomeBg';
 
 export function Popup() {
+  const { t } = useTranslation();
   const [session, setSession] = useState<Session>(EMPTY_SESSION);
   const [loading, setLoading] = useState(true);
   const [igLoggedIn, setIgLoggedIn] = useState<boolean | null>(null);
@@ -30,7 +32,7 @@ export function Popup() {
   if (loading) {
     return (
       <div className="flex h-[360px] items-center justify-center text-xs text-muted-foreground">
-        Loading…
+        {t('common.loading')}
       </div>
     );
   }
@@ -43,6 +45,7 @@ export function Popup() {
 }
 
 function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
+  const { t } = useTranslation();
   const [key, setKey] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +59,7 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
       const s = await validateLicense(key);
       onLogin(s);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not validate license');
+      setError(err instanceof Error ? err.message : t('popup.couldNotValidate'));
     } finally {
       setSubmitting(false);
     }
@@ -70,15 +73,15 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
     <div className="relative isolate flex h-[440px] flex-col">
       <HomeBg />
       <header className="border-b border-border bg-muted/30 px-4 py-3">
-        <h1 className="text-sm font-semibold tracking-tight">Welcome to MonchoOps</h1>
+        <h1 className="text-sm font-semibold tracking-tight">{t('popup.welcome')}</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Sign in with your license key to continue.
+          {t('popup.signInHint')}
         </p>
       </header>
 
       <form onSubmit={submit} className="flex-1 space-y-3 p-4">
         <label className="text-[10px] uppercase tracking-wide text-muted-foreground" htmlFor="lk">
-          License key
+          {t('popup.licenseKey')}
         </label>
         <div className="relative">
           <Key className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -86,7 +89,7 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
             id="lk"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder="Paste your license key"
+            placeholder={t('popup.pasteLicense')}
             autoFocus
             disabled={submitting}
             className="h-9 w-full border border-border bg-background pl-9 pr-3 text-xs outline-none focus:border-foreground disabled:opacity-50"
@@ -98,7 +101,7 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
           disabled={submitting || !key.trim()}
           className="inline-flex h-9 w-full items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
         >
-          {submitting ? 'Logging in…' : 'Continue'}
+          {submitting ? t('popup.loggingIn') : t('popup.continue')}
         </button>
         <button
           type="button"
@@ -106,7 +109,7 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
           disabled={submitting}
           className="inline-flex h-9 w-full items-center justify-center border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
         >
-          Use test license (offline)
+          {t('popup.useTestLicense')}
         </button>
       </form>
 
@@ -117,7 +120,7 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:underline"
         >
-          No account? Visit b2dm.app <ExternalLink className="h-3 w-3" />
+          {t('popup.noAccount')} <ExternalLink className="h-3 w-3" />
         </a>
       </footer>
     </div>
@@ -133,6 +136,7 @@ function ConnectedPanel({
   igLoggedIn: boolean | null;
   onLogout: () => void;
 }) {
+  const { t } = useTranslation();
   const activeCampaigns = useLiveQuery(
     () =>
       db.campaigns
@@ -167,7 +171,7 @@ function ConnectedPanel({
         <button
           type="button"
           onClick={onLogout}
-          aria-label="Log out"
+          aria-label={t('popup.logOut')}
           className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
         >
           <LogOut className="h-3.5 w-3.5" />
@@ -179,7 +183,7 @@ function ConnectedPanel({
           <header className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
             <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <Instagram className="h-3 w-3" />
-              Instagram session
+              {t('popup.instagramSession')}
             </span>
             <span
               className={
@@ -191,24 +195,27 @@ function ConnectedPanel({
                   : 'text-destructive')
               }
             >
-              {igLoggedIn === null ? 'Checking…' : igLoggedIn ? 'Active' : 'Not logged in'}
+              {igLoggedIn === null
+                ? t('popup.checking')
+                : igLoggedIn
+                ? t('popup.active')
+                : t('popup.notLoggedIn')}
             </span>
           </header>
           <div className="p-3 text-xs text-muted-foreground">
             {igLoggedIn ? (
-              <>The extension will operate on the IG account you're logged into in this browser.</>
+              <>{t('popup.operatesOnAccount')}</>
             ) : (
-              <>
-                Log into{' '}
-                <button
-                  type="button"
-                  onClick={openIg}
-                  className="text-foreground underline-offset-2 hover:underline"
-                >
-                  instagram.com
-                </button>{' '}
-                first, then come back here.
-              </>
+              <Trans
+                i18nKey="popup.logIntoIgFirst"
+                components={[
+                  <button
+                    type="button"
+                    onClick={openIg}
+                    className="text-foreground underline-offset-2 hover:underline"
+                  />,
+                ]}
+              />
             )}
           </div>
         </section>
@@ -226,7 +233,7 @@ function ConnectedPanel({
           onClick={() => openDashboard()}
           className="inline-flex h-9 w-full items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          Open dashboard
+          {t('popup.openDashboard')}
         </button>
       </footer>
     </div>
@@ -244,6 +251,7 @@ function ActiveProcessesSection({
   onOpen: (campaignId: string) => void;
   onOpenAll: () => void;
 }) {
+  const { t } = useTranslation();
   const visible = campaigns.slice(0, ACTIVE_LIMIT);
   const hidden = campaigns.length - visible.length;
 
@@ -252,7 +260,7 @@ function ActiveProcessesSection({
       <header className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
         <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           <Activity className="h-3 w-3" />
-          Active processes
+          {t('popup.activeProcesses')}
         </span>
         <span className="text-[11px] text-muted-foreground tabular-nums">
           {campaigns.length}
@@ -260,7 +268,7 @@ function ActiveProcessesSection({
       </header>
       {campaigns.length === 0 ? (
         <div className="p-3 text-xs text-muted-foreground">
-          No campaigns are running or paused.
+          {t('popup.noCampaignsRunning')}
         </div>
       ) : (
         <>
@@ -275,7 +283,7 @@ function ActiveProcessesSection({
               onClick={onOpenAll}
               className="flex w-full items-center justify-center border-t border-border px-3 py-2 text-[11px] text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
             >
-              +{hidden} more · view all
+              {t('popup.moreViewAll', { count: hidden })}
             </button>
           ) : null}
         </>
@@ -291,6 +299,7 @@ function ActiveCampaignRow({
   campaign: Campaign;
   onOpen: () => void;
 }) {
+  const { t } = useTranslation();
   const processed = campaign.sentCount + campaign.failedCount;
   const total = campaign.totalLeads || 0;
   const pct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
@@ -318,7 +327,7 @@ function ActiveCampaignRow({
               (isRunning ? 'text-emerald-600' : 'text-amber-600')
             }
           >
-            {isRunning ? 'Running' : 'Paused'}
+            {isRunning ? t('popup.running') : t('popup.paused')}
           </span>
         </div>
         <div className="h-1 w-full overflow-hidden bg-muted">
@@ -328,11 +337,11 @@ function ActiveCampaignRow({
           />
         </div>
         <div className="flex items-center justify-between text-[10px] text-muted-foreground tabular-nums">
-          <span>
-            {processed} / {total} processed
-          </span>
+          <span>{t('popup.processed', { processed, total })}</span>
           {campaign.failedCount > 0 ? (
-            <span className="text-destructive">{campaign.failedCount} failed</span>
+            <span className="text-destructive">
+              {t('popup.failed', { count: campaign.failedCount })}
+            </span>
           ) : null}
         </div>
       </button>

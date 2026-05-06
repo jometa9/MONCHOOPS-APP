@@ -1,18 +1,26 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink, Instagram, LogOut, MonitorSmartphone } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ExternalLink, Instagram, Languages, LogOut, MonitorSmartphone } from 'lucide-react';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { getSession, logout } from '@/shared/license';
 import { db } from '@/shared/db';
 import { discoverDesktop, type DesktopPing } from '@/shared/desktop-bridge';
 import type { Session } from '@/shared/types';
+import {
+  getLocalePreference,
+  setLocalePreference,
+  type LocalePreference,
+} from '@/shared/i18n';
 
 export function Settings() {
+  const { t } = useTranslation();
   const [session, setSession] = useState<Session | null>(null);
   const [igLoggedIn, setIgLoggedIn] = useState<boolean | null>(null);
   const [desktop, setDesktop] = useState<{
     state: 'unknown' | 'offline' | 'connected';
     ping?: DesktopPing;
   }>({ state: 'unknown' });
+  const [locale, setLocale] = useState<LocalePreference>('system');
 
   useEffect(() => {
     void getSession().then(setSession);
@@ -20,6 +28,7 @@ export function Settings() {
       if (resp?.ok) setIgLoggedIn(!!resp.data?.loggedIn);
     });
     void refreshDesktop();
+    void getLocalePreference().then(setLocale);
   }, []);
 
   async function refreshDesktop() {
@@ -37,28 +46,33 @@ export function Settings() {
   }
 
   async function clearAllData() {
-    if (!confirm('Delete all campaigns, leads, and history from this browser? Variant groups live on the desktop app and are not affected.')) return;
+    if (!confirm(t('settings.clearAllDataConfirm'))) return;
     await db.campaigns.clear();
     await db.leads.clear();
     await db.history.clear();
-    alert('All data cleared.');
+    alert(t('settings.allDataCleared'));
+  }
+
+  async function handleLocaleChange(next: LocalePreference) {
+    setLocale(next);
+    await setLocalePreference(next);
   }
 
   if (!session) return null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ScreenHeader title="Settings" description="License, Instagram session, data." />
+      <ScreenHeader title={t('settings.title')} description={t('settings.description')} />
 
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="grid gap-6 p-6 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-          <Section title="License">
-            <Row label="Email" value={session.profile?.email ?? '—'} />
-            <Row label="Name" value={session.profile?.name ?? '—'} />
-            <Row label="Plan" value={session.subscription?.plan ?? '—'} />
+          <Section title={t('settings.license')}>
+            <Row label={t('settings.email')} value={session.profile?.email ?? '—'} />
+            <Row label={t('settings.name')} value={session.profile?.name ?? '—'} />
+            <Row label={t('settings.plan')} value={session.subscription?.plan ?? '—'} />
             <Row
-              label="Active"
-              value={session.subscription?.active ? 'Yes' : 'No'}
+              label={t('settings.active')}
+              value={session.subscription?.active ? t('common.yes') : t('common.no')}
             />
             <div className="pt-3">
               <button
@@ -67,25 +81,46 @@ export function Settings() {
                 className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
               >
                 <LogOut className="h-3.5 w-3.5" />
-                Log out
+                {t('common.logOut')}
               </button>
             </div>
           </Section>
 
-          <Section title="Instagram session">
+          <Section title={t('settings.language')}>
+            <div className="flex items-start gap-3 text-sm">
+              <Languages className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">
+                  {t('settings.languageHint')}
+                </p>
+                <div className="mt-3">
+                  <select
+                    value={locale}
+                    onChange={(e) => void handleLocaleChange(e.target.value as LocalePreference)}
+                    className="h-9 w-full border border-border bg-background px-2 text-xs outline-none focus:border-foreground"
+                  >
+                    <option value="system">{t('settings.languageSystem')}</option>
+                    <option value="en">{t('settings.languageEnglish')}</option>
+                    <option value="es">{t('settings.languageSpanish')}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </Section>
+
+          <Section title={t('settings.instagramSession')}>
             <div className="flex items-start gap-3 text-sm">
               <Instagram className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
               <div className="flex-1">
                 <div className="font-medium">
                   {igLoggedIn === null
-                    ? 'Checking…'
+                    ? t('common.checking')
                     : igLoggedIn
-                    ? 'Logged in'
-                    : 'Not logged in'}
+                    ? t('common.loggedIn')
+                    : t('common.notLoggedIn')}
                 </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  The extension uses whichever Instagram account is logged into your browser.
-                  No account selector — log out of IG to switch.
+                  {t('settings.instagramHint')}
                 </p>
                 <a
                   href="https://www.instagram.com/"
@@ -93,26 +128,25 @@ export function Settings() {
                   rel="noreferrer"
                   className="mt-2 inline-flex items-center gap-1 text-xs underline-offset-2 hover:underline"
                 >
-                  Open Instagram <ExternalLink className="h-3 w-3" />
+                  {t('settings.openInstagram')} <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
             </div>
           </Section>
 
-          <Section title="Desktop app">
+          <Section title={t('settings.desktopApp')}>
             <div className="flex items-start gap-3 text-sm">
               <MonitorSmartphone className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
               <div className="flex-1">
                 <div className="font-medium">
-                  {desktop.state === 'unknown' ? 'Checking…' : null}
-                  {desktop.state === 'offline' ? 'Not connected' : null}
+                  {desktop.state === 'unknown' ? t('common.checking') : null}
+                  {desktop.state === 'offline' ? t('settings.desktopNotConnected') : null}
                   {desktop.state === 'connected'
-                    ? `Connected · v${desktop.ping?.version ?? '?'}`
+                    ? t('settings.desktopConnected', { version: desktop.ping?.version ?? '?' })
                     : null}
                 </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  When the desktop app is running, you can pull leads directly from your
-                  saved categories and scrape results — no CSV export step.
+                  {t('settings.desktopHint')}
                 </p>
                 <div className="mt-2 flex gap-2">
                   <button
@@ -120,17 +154,16 @@ export function Settings() {
                     onClick={() => void refreshDesktop()}
                     className="inline-flex h-8 items-center border border-border bg-background px-3 text-xs font-medium hover:bg-accent"
                   >
-                    Refresh
+                    {t('common.refresh')}
                   </button>
                 </div>
               </div>
             </div>
           </Section>
 
-          <Section title="Data">
+          <Section title={t('settings.data')}>
             <p className="text-xs text-muted-foreground">
-              Everything is stored locally in your browser (IndexedDB). Nothing leaves this device
-              except the DMs you send through Instagram and the license check against b2dm.app.
+              {t('settings.dataHint')}
             </p>
             <div className="mt-3">
               <button
@@ -138,7 +171,7 @@ export function Settings() {
                 onClick={clearAllData}
                 className="inline-flex h-9 items-center bg-destructive/10 px-3 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
               >
-                Clear all data
+                {t('settings.clearAllData')}
               </button>
             </div>
           </Section>

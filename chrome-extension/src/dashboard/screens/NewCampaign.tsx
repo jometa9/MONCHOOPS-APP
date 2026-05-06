@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -19,6 +19,8 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { DesktopImportDialog } from '../components/DesktopImportDialog';
 import { Stepper } from '../components/Stepper';
 import { SummaryCard } from '../components/SummaryCard';
@@ -38,7 +40,6 @@ import type {
 
 const DEFAULT_INTERVAL_SEC = 90;
 const MAX_VARIANTS = 20;
-const STEP_LABELS = ['Leads', 'Message', 'Interactions', 'Review'] as const;
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -72,32 +73,44 @@ function interactionsPayload(s: InteractionsState): InteractionsConfig | null {
   };
 }
 
-function summariseInteractions(s: InteractionsState): string {
-  if (!interactionsHaveEffect(s)) return 'No interactions';
+function summariseInteractions(s: InteractionsState, t: TFunction): string {
+  if (!interactionsHaveEffect(s)) return t('screens.newCampaign.summaryNoInteractions');
   const parts: string[] = [];
-  if (s.follow) parts.push('Follow');
-  if (s.likeCount > 0) parts.push(`Like ${s.likeCount} post${s.likeCount === 1 ? '' : 's'}`);
-  if (s.watchStories) parts.push(`Watch stories ${s.storyDwellSec}s`);
+  if (s.follow) parts.push(t('screens.newCampaign.summaryFollow'));
+  if (s.likeCount > 0) parts.push(t('screens.newCampaign.summaryLikePostsPlural', { count: s.likeCount }));
+  if (s.watchStories) parts.push(t('screens.newCampaign.summaryWatchStories', { seconds: s.storyDwellSec }));
   return parts.join(' · ');
 }
 
-function autoCampaignName(): string {
+function autoCampaignName(t: TFunction): string {
   const d = new Date();
-  const date = d.toLocaleDateString('en-US', {
+  const date = d.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
-  const time = d.toLocaleTimeString('en-US', {
+  const time = d.toLocaleTimeString(undefined, {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   });
-  return `Cold DM — ${date}, ${time}`;
+  return `${t('screens.newCampaign.autoNamePrefix')} — ${date}, ${time}`;
 }
 
 export function NewCampaign() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  const STEP_LABELS = useMemo(
+    () =>
+      [
+        t('screens.newCampaign.stepLeads'),
+        t('screens.newCampaign.stepMessage'),
+        t('screens.newCampaign.stepInteractions'),
+        t('screens.newCampaign.stepReview'),
+      ] as const,
+    [t]
+  );
 
   const [step, setStep] = useState<Step>(1);
   const [leads, setLeads] = useState<CsvLead[]>([]);
@@ -185,7 +198,7 @@ export function NewCampaign() {
       const id = uuid();
       const campaign: Campaign = {
         id,
-        name: autoCampaignName(),
+        name: autoCampaignName(t),
         createdAt: Date.now(),
         source,
         variants: cleanedVariants,
@@ -211,7 +224,7 @@ export function NewCampaign() {
       await chrome.runtime.sendMessage({ type: 'sw/runCampaignNow', campaignId: id });
       navigate(`/campaigns/${id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create campaign');
+      setError(err instanceof Error ? err.message : t('screens.newCampaign.couldNotCreate'));
     } finally {
       setSubmitting(false);
     }
@@ -220,8 +233,8 @@ export function NewCampaign() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
-        title="New cold DM"
-        description="Pick your audience, write your message, hit Start. The browser handles the rest."
+        title={t('screens.newCampaign.title')}
+        description={t('screens.newCampaign.description')}
         actions={
           <button
             type="button"
@@ -229,7 +242,7 @@ export function NewCampaign() {
             className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back
+            {t('common.back')}
           </button>
         }
       />
@@ -319,7 +332,7 @@ export function NewCampaign() {
               className="inline-flex h-9 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Back
+              {t('common.back')}
             </button>
             <div className="flex-1" />
             {step < 4 ? (
@@ -329,7 +342,7 @@ export function NewCampaign() {
                 disabled={!canContinue[step]}
                 className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
               >
-                Continue
+                {t('screens.newCampaign.continue')}
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
             ) : (
@@ -342,7 +355,9 @@ export function NewCampaign() {
                 className="inline-flex h-9 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
               >
                 <Play className="h-3.5 w-3.5" />
-                {submitting ? 'Starting…' : 'Start Cold DM'}
+                {submitting
+                  ? t('screens.newCampaign.starting')
+                  : t('screens.newCampaign.startColdDm')}
               </button>
             )}
           </div>
@@ -355,12 +370,6 @@ export function NewCampaign() {
 /* ---------------- Step 1: Leads ---------------- */
 
 type LeadsTab = 'manual' | 'file' | 'desktop';
-
-const LEADS_TABS: { id: LeadsTab; label: string; icon: typeof FileUp }[] = [
-  { id: 'manual', label: 'Manual', icon: Keyboard },
-  { id: 'file', label: 'Upload file', icon: UploadCloud },
-  { id: 'desktop', label: 'Desktop source', icon: MonitorSmartphone },
-];
 
 function LeadsStep({
   leads,
@@ -377,6 +386,15 @@ function LeadsStep({
   onMergeManual: (list: CsvLead[]) => void;
   onRemoveLead: (username: string) => void;
 }) {
+  const { t } = useTranslation();
+  const LEADS_TABS: { id: LeadsTab; label: string; icon: typeof FileUp }[] = useMemo(
+    () => [
+      { id: 'manual', label: t('screens.newCampaign.tabManual'), icon: Keyboard },
+      { id: 'file', label: t('screens.newCampaign.tabUploadFile'), icon: UploadCloud },
+      { id: 'desktop', label: t('screens.newCampaign.tabDesktop'), icon: MonitorSmartphone },
+    ],
+    [t]
+  );
   const [tab, setTab] = useState<LeadsTab>(() =>
     source.kind !== 'manual' ? 'desktop' : 'manual'
   );
@@ -385,14 +403,14 @@ function LeadsStep({
     <div className="flex flex-col gap-3">
       <div className="overflow-hidden border border-border bg-background">
         <div className="flex items-stretch border-b border-border">
-          {LEADS_TABS.map((t, idx) => {
-            const Icon = t.icon;
-            const active = tab === t.id;
+          {LEADS_TABS.map((tt, idx) => {
+            const Icon = tt.icon;
+            const active = tab === tt.id;
             return (
               <button
-                key={t.id}
+                key={tt.id}
                 type="button"
-                onClick={() => setTab(t.id)}
+                onClick={() => setTab(tt.id)}
                 className={cn(
                   'inline-flex h-9 flex-1 items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
                   idx !== LEADS_TABS.length - 1 && 'border-r border-border',
@@ -402,7 +420,7 @@ function LeadsStep({
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
-                {t.label}
+                {tt.label}
               </button>
             );
           })}
@@ -430,6 +448,7 @@ function LeadsStep({
 }
 
 function ManualPanel({ onAdd }: { onAdd: (list: CsvLead[]) => void }) {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
 
   function commit() {
@@ -442,7 +461,7 @@ function ManualPanel({ onAdd }: { onAdd: (list: CsvLead[]) => void }) {
   return (
     <div className="flex flex-col">
       <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        Type or paste usernames
+        {t('screens.newCampaign.manualHeader')}
       </div>
       <div className="space-y-2 p-3">
         <textarea
@@ -455,11 +474,11 @@ function ManualPanel({ onAdd }: { onAdd: (list: CsvLead[]) => void }) {
               commit();
             }
           }}
-          placeholder="One per line, or comma/space separated. @ prefix is optional."
+          placeholder={t('screens.newCampaign.manualPlaceholder')}
           className="w-full resize-y border border-border bg-background p-2 text-sm outline-none focus:border-foreground"
         />
         <div className="flex items-center justify-between">
-          <p className="text-[11px] text-muted-foreground">⌘/Ctrl + Enter to add</p>
+          <p className="text-[11px] text-muted-foreground">{t('screens.newCampaign.manualHelp')}</p>
           <button
             type="button"
             onClick={commit}
@@ -467,7 +486,7 @@ function ManualPanel({ onAdd }: { onAdd: (list: CsvLead[]) => void }) {
             className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
-            Add
+            {t('screens.newCampaign.add')}
           </button>
         </div>
       </div>
@@ -476,6 +495,7 @@ function ManualPanel({ onAdd }: { onAdd: (list: CsvLead[]) => void }) {
 }
 
 function FilePanel({ onAdd }: { onAdd: (list: CsvLead[]) => void }) {
+  const { t } = useTranslation();
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -487,12 +507,12 @@ function FilePanel({ onAdd }: { onAdd: (list: CsvLead[]) => void }) {
     try {
       const list = await parseUsernamesFile(file);
       if (list.length === 0) {
-        setErr('No usernames found in this file.');
+        setErr(t('screens.newCampaign.fileNoUsernames'));
       } else {
         onAdd(list);
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not parse file');
+      setErr(e instanceof Error ? e.message : t('screens.newCampaign.fileCouldNotParse'));
     } finally {
       setBusy(false);
     }
@@ -529,10 +549,10 @@ function FilePanel({ onAdd }: { onAdd: (list: CsvLead[]) => void }) {
       >
         <UploadCloud className="h-8 w-8 text-muted-foreground" />
         <div className="text-sm font-medium">
-          Drop a usernames file or click to browse
+          {t('screens.newCampaign.fileDropHint')}
         </div>
         <div className="text-xs text-muted-foreground">
-          CSV or TXT — first column is the username.
+          {t('screens.newCampaign.fileFormatHint')}
         </div>
         <input
           ref={fileInputRef}
@@ -562,6 +582,7 @@ function DesktopPanel({
   onApply: (leads: CsvLead[], source: CampaignSource) => void;
   onClear: () => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const linked = source.kind !== 'manual';
 
@@ -575,8 +596,7 @@ function DesktopPanel({
               <span className="truncate">{source.label}</span>
             </div>
             <p className="mt-0.5 text-muted-foreground">
-              {leadsCount} leads — pulled live from MonchoOps. Use Re-fetch to pick up
-              new leads added on the desktop after this campaign was started.
+              {t('screens.newCampaign.desktopLeadsLine', { count: leadsCount })}
             </p>
           </div>
           <div className="flex flex-none items-center gap-2">
@@ -585,14 +605,14 @@ function DesktopPanel({
               onClick={() => setOpen(true)}
               className="inline-flex h-8 items-center border border-border bg-background px-3 text-[11px] font-medium hover:bg-accent"
             >
-              Re-fetch
+              {t('screens.newCampaign.desktopRefetch')}
             </button>
             <button
               type="button"
               onClick={onClear}
               className="inline-flex h-8 items-center px-2 text-[11px] text-muted-foreground hover:text-foreground"
             >
-              Clear
+              {t('screens.newCampaign.desktopClear')}
             </button>
           </div>
         </div>
@@ -610,9 +630,9 @@ function DesktopPanel({
           className="flex min-h-[200px] cursor-pointer flex-col items-center justify-center gap-2 border-2 border-dashed border-border p-6 text-center transition-colors hover:bg-accent"
         >
           <MonitorSmartphone className="h-8 w-8 text-muted-foreground" />
-          <div className="text-sm font-medium">Pick a desktop category or scrape</div>
+          <div className="text-sm font-medium">{t('screens.newCampaign.desktopPickTitle')}</div>
           <div className="text-xs text-muted-foreground">
-            Pulls leads live from the MonchoOps desktop app.
+            {t('screens.newCampaign.desktopPickHint')}
           </div>
         </div>
       )}
@@ -635,19 +655,22 @@ function LeadsPreview({
   source: CampaignSource;
   onRemove: (username: string) => void;
 }) {
+  const { t } = useTranslation();
   if (leads.length === 0) {
     return (
       <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
         <Users className="h-3.5 w-3.5" />
-        No leads yet — pick a tab above to add some.
+        {t('screens.newCampaign.noLeadsHint')}
       </p>
     );
   }
   return (
     <div className="overflow-hidden border border-border bg-background">
       <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        <span>Loaded leads</span>
-        <span className="normal-case font-normal">{leads.length} loaded</span>
+        <span>{t('screens.newCampaign.loadedLeads')}</span>
+        <span className="normal-case font-normal">
+          {t('screens.newCampaign.leadsLoaded', { count: leads.length })}
+        </span>
       </div>
       <div className="max-h-56 overflow-auto">
         <table className="w-full text-sm">
@@ -661,7 +684,7 @@ function LeadsPreview({
                       type="button"
                       onClick={() => onRemove(l.username)}
                       className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground hover:text-destructive"
-                      aria-label={`Remove ${l.displayName}`}
+                      aria-label={t('screens.newCampaign.removeLeadAria', { name: l.displayName })}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -679,11 +702,6 @@ function LeadsPreview({
 /* ---------------- Step 2: Message ---------------- */
 
 type MessageTab = 'write' | 'saved';
-
-const MESSAGE_TABS: { id: MessageTab; label: string; icon: typeof Pencil }[] = [
-  { id: 'write', label: 'Write', icon: Pencil },
-  { id: 'saved', label: 'Saved', icon: MessageSquareText },
-];
 
 function MessageStep({
   variants,
@@ -710,20 +728,28 @@ function MessageStep({
   groupName: string;
   onGroupNameChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
+  const MESSAGE_TABS: { id: MessageTab; label: string; icon: typeof Pencil }[] = useMemo(
+    () => [
+      { id: 'write', label: t('screens.newCampaign.tabWrite'), icon: Pencil },
+      { id: 'saved', label: t('screens.newCampaign.tabSaved'), icon: MessageSquareText },
+    ],
+    [t]
+  );
   const [tab, setTab] = useState<MessageTab>('write');
 
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-hidden border border-border bg-background">
         <div className="flex items-stretch border-b border-border">
-          {MESSAGE_TABS.map((t, idx) => {
-            const Icon = t.icon;
-            const active = tab === t.id;
+          {MESSAGE_TABS.map((tt, idx) => {
+            const Icon = tt.icon;
+            const active = tab === tt.id;
             return (
               <button
-                key={t.id}
+                key={tt.id}
                 type="button"
-                onClick={() => setTab(t.id)}
+                onClick={() => setTab(tt.id)}
                 className={cn(
                   'inline-flex h-9 flex-1 items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
                   idx !== MESSAGE_TABS.length - 1 && 'border-r border-border',
@@ -733,7 +759,7 @@ function MessageStep({
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
-                {t.label}
+                {tt.label}
               </button>
             );
           })}
@@ -756,11 +782,11 @@ function MessageStep({
 
       <div className="border border-border bg-background">
         <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Pace
+          {t('screens.newCampaign.paceTitle')}
         </div>
         <div className="space-y-1 p-3">
           <label htmlFor="dm-interval" className="text-xs font-medium">
-            Interval between DMs (seconds)
+            {t('screens.newCampaign.intervalLabel')}
           </label>
           <input
             id="dm-interval"
@@ -776,15 +802,14 @@ function MessageStep({
             className="h-9 w-full border border-border bg-background px-3 text-sm outline-none focus:border-foreground"
           />
           <p className="text-[11px] text-muted-foreground">
-            Minimum 30s — lower paces trip Instagram's anti-spam. A small jitter is
-            applied per send so the cadence is not robotic.
+            {t('screens.newCampaign.intervalHint')}
           </p>
         </div>
       </div>
 
       <div className="border border-border bg-background">
         <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Save these variants
+          {t('screens.newCampaign.saveVariantsTitle')}
         </div>
         <div className="space-y-2 p-3">
           <label className="inline-flex cursor-pointer items-center gap-2 text-xs">
@@ -795,14 +820,14 @@ function MessageStep({
             />
             <span className="inline-flex items-center gap-1">
               <Save className="h-3 w-3" />
-              Save as a new group on the desktop
+              {t('screens.newCampaign.saveAsGroup')}
             </span>
           </label>
           {saveAsGroup ? (
             <input
               value={groupName}
               onChange={(e) => onGroupNameChange(e.target.value)}
-              placeholder="Group name"
+              placeholder={t('screens.newCampaign.groupNamePlaceholder')}
               className="h-9 w-full border border-border bg-background px-3 text-sm outline-none focus:border-foreground"
             />
           ) : null}
@@ -819,6 +844,7 @@ function WriteVariantsPanel({
   variants: string[];
   onChange: (v: string[]) => void;
 }) {
+  const { t } = useTranslation();
   const nonEmpty = variants.filter((v) => v.trim().length > 0).length;
 
   function update(i: number, value: string) {
@@ -836,9 +862,9 @@ function WriteVariantsPanel({
   return (
     <div className="flex flex-col">
       <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        <span>Message variants</span>
+        <span>{t('screens.newCampaign.messageVariants')}</span>
         <span className="normal-case font-normal">
-          {nonEmpty}/{MAX_VARIANTS} · one picked at random per DM ·{' '}
+          {t('screens.newCampaign.variantsCount', { count: nonEmpty, max: MAX_VARIANTS })}
           <code className="rounded bg-background px-1 py-0.5 text-[10px]">
             {'{{username}}'}
           </code>
@@ -849,7 +875,11 @@ function WriteVariantsPanel({
           <div key={i} className="flex items-start gap-2">
             <textarea
               rows={3}
-              placeholder={i === 0 ? 'Hey {{username}}, …' : `Variant ${i + 1}`}
+              placeholder={
+                i === 0
+                  ? t('screens.newCampaign.variantPlaceholderFirst')
+                  : t('screens.newCampaign.variantPlaceholder', { index: i + 1 })
+              }
               value={value}
               onChange={(e) => update(i, e.target.value)}
               className="w-full resize-y border border-border bg-background p-2 text-sm outline-none focus:border-foreground"
@@ -858,7 +888,7 @@ function WriteVariantsPanel({
               type="button"
               onClick={() => remove(i)}
               disabled={variants.length <= 1}
-              aria-label={`Remove variant ${i + 1}`}
+              aria-label={t('screens.newCampaign.removeVariantAria', { index: i + 1 })}
               className="inline-flex h-9 w-9 flex-none items-center justify-center bg-destructive/10 text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-40 disabled:hover:bg-destructive/10"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -874,7 +904,7 @@ function WriteVariantsPanel({
           className="inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add variant
+          {t('screens.newCampaign.addVariant')}
         </button>
       </div>
     </div>
@@ -892,10 +922,11 @@ function SavedVariantsPanel({
   onRefresh: () => void | Promise<void>;
   onPick: (variants: string[]) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col">
       <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        <span>Saved variant groups</span>
+        <span>{t('screens.newCampaign.savedVariantGroups')}</span>
         <button
           type="button"
           onClick={() => void onRefresh()}
@@ -903,13 +934,13 @@ function SavedVariantsPanel({
           className="inline-flex h-6 items-center gap-1 rounded px-1.5 text-[10px] font-medium normal-case text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
         >
           <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
-          Refresh
+          {t('common.refresh')}
         </button>
       </div>
       <div className="max-h-[45vh] overflow-auto">
         {groups.length === 0 ? (
           <div className="flex h-32 items-center justify-center px-4 text-center text-xs text-muted-foreground">
-            No saved groups yet — create one from the Variants screen.
+            {t('screens.newCampaign.noSavedGroups')}
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -922,7 +953,7 @@ function SavedVariantsPanel({
                 >
                   <td className="px-3 py-1.5 font-medium">{g.name}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                    {g.variants.length} variant{g.variants.length === 1 ? '' : 's'}
+                    {t('screens.newCampaign.variantsPlural', { count: g.variants.length })}
                   </td>
                 </tr>
               ))}
@@ -943,6 +974,7 @@ function InteractionsStep({
   value: InteractionsState;
   onChange: (s: InteractionsState) => void;
 }) {
+  const { t } = useTranslation();
   function update(patch: Partial<InteractionsState>) {
     onChange({ ...value, ...patch });
   }
@@ -953,17 +985,15 @@ function InteractionsStep({
         <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Sparkles className="h-3 w-3" />
-            Pre-DM interactions
+            {t('screens.newCampaign.interactionsHeader')}
           </span>
-          <span className="normal-case font-normal">Optional — off by default</span>
+          <span className="normal-case font-normal">{t('screens.newCampaign.interactionsOptional')}</span>
         </div>
         <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
           <div className="min-w-0">
-            <div className="font-medium">Warm the target before messaging</div>
+            <div className="font-medium">{t('screens.newCampaign.warmTargetTitle')}</div>
             <p className="text-[11px] text-muted-foreground">
-              Before each DM, visit the target's profile, optionally follow them, and
-              like a few of their recent posts. Already-followed targets are never
-              unfollowed.
+              {t('screens.newCampaign.warmTargetDescription')}
             </p>
           </div>
           <Switch
@@ -980,9 +1010,9 @@ function InteractionsStep({
               <div className="flex min-w-0 items-start gap-2">
                 <UserPlus className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
                 <div>
-                  <div className="font-medium">Follow the user</div>
+                  <div className="font-medium">{t('screens.newCampaign.followTitle')}</div>
                   <p className="text-[11px] text-muted-foreground">
-                    Sends a follow request. Skipped when already following / requested.
+                    {t('screens.newCampaign.followDescription')}
                   </p>
                 </div>
               </div>
@@ -998,10 +1028,9 @@ function InteractionsStep({
               <div className="flex min-w-0 items-start gap-2">
                 <Heart className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
                 <div>
-                  <div className="font-medium">Like recent posts</div>
+                  <div className="font-medium">{t('screens.newCampaign.likeTitle')}</div>
                   <p className="text-[11px] text-muted-foreground">
-                    Likes this many of their most recent posts. Skipped when the
-                    profile has no posts or is private.
+                    {t('screens.newCampaign.likeDescription')}
                   </p>
                 </div>
               </div>
@@ -1030,10 +1059,9 @@ function InteractionsStep({
               <div className="flex min-w-0 items-start gap-2">
                 <Sparkles className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
                 <div>
-                  <div className="font-medium">Watch their stories first</div>
+                  <div className="font-medium">{t('screens.newCampaign.watchStoriesTitle')}</div>
                   <p className="text-[11px] text-muted-foreground">
-                    Silently views any active stories before the DM. Skipped when no
-                    story is available.
+                    {t('screens.newCampaign.watchStoriesDescription')}
                   </p>
                 </div>
               </div>
@@ -1044,7 +1072,7 @@ function InteractionsStep({
             </div>
             {value.watchStories ? (
               <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-xs">
-                <span className="text-muted-foreground">Dwell per story (s)</span>
+                <span className="text-muted-foreground">{t('screens.newCampaign.dwellPerStory')}</span>
                 <input
                   type="number"
                   min={1}
@@ -1060,8 +1088,7 @@ function InteractionsStep({
           </div>
 
           <p className="text-[11px] text-muted-foreground">
-            A human-ish delay sits between the interactions and the DM so the funnel
-            reads as organic to Instagram's anti-spam checks.
+            {t('screens.newCampaign.interactionsFootnote')}
           </p>
         </>
       ) : null}
@@ -1126,25 +1153,30 @@ function ReviewStep({
   onEditMessage: () => void;
   onEditInteractions: () => void;
 }) {
+  const { t } = useTranslation();
   const sourceLabel =
     source.kind === 'manual'
-      ? 'Manual'
+      ? t('screens.newCampaign.summarySourceManual')
       : source.kind === 'desktop_category'
-      ? 'Desktop category'
-      : 'Desktop scrape';
+      ? t('screens.newCampaign.summarySourceCategory')
+      : t('screens.newCampaign.summarySourceScrape');
 
   return (
     <div className="flex flex-col gap-2">
-      <SummaryCard title="Leads" onEdit={onEditLeads}>
+      <SummaryCard title={t('screens.newCampaign.summaryLeads')} onEdit={onEditLeads}>
         {leads.length > 0 ? (
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="truncate font-medium">
-                {source.kind === 'manual' ? `${leads.length} usernames` : source.label}
+                {source.kind === 'manual'
+                  ? t('screens.newCampaign.summaryUsernamesPlural', { count: leads.length })
+                  : source.label}
               </div>
               <div className="text-[11px] text-muted-foreground">{sourceLabel}</div>
             </div>
-            <span className="tabular-nums text-sm">{leads.length} usernames</span>
+            <span className="tabular-nums text-sm">
+              {t('screens.newCampaign.summaryUsernamesPlural', { count: leads.length })}
+            </span>
           </div>
         ) : (
           <span className="text-sm text-muted-foreground">—</span>
@@ -1152,12 +1184,12 @@ function ReviewStep({
       </SummaryCard>
 
       <SummaryCard
-        title={`Message · ${variants.length} variant${variants.length === 1 ? '' : 's'}`}
+        title={t('screens.newCampaign.summaryMessageTitle', { count: variants.length })}
         onEdit={onEditMessage}
       >
         <div className="space-y-1.5">
           {variants.length === 0 ? (
-            <span className="text-sm text-muted-foreground">No variants</span>
+            <span className="text-sm text-muted-foreground">{t('screens.newCampaign.summaryNoVariants')}</span>
           ) : (
             variants.map((v, i) => (
               <div
@@ -1171,14 +1203,14 @@ function ReviewStep({
         </div>
       </SummaryCard>
 
-      <SummaryCard title="Pace" onEdit={onEditMessage}>
+      <SummaryCard title={t('screens.newCampaign.summaryPace')} onEdit={onEditMessage}>
         <div className="text-sm">
-          1 DM every <span className="font-medium">{intervalSec}s</span>
-          <span className="ml-1 text-[11px] text-muted-foreground">(small jitter)</span>
+          {t('screens.newCampaign.summaryPaceLine')} <span className="font-medium">{intervalSec}s</span>
+          <span className="ml-1 text-[11px] text-muted-foreground">{t('screens.newCampaign.summaryPaceJitter')}</span>
         </div>
       </SummaryCard>
 
-      <SummaryCard title="Interactions" onEdit={onEditInteractions}>
+      <SummaryCard title={t('screens.newCampaign.summaryInteractions')} onEdit={onEditInteractions}>
         <div className="flex items-center gap-2 text-sm">
           {interactionsHaveEffect(interactions) ? (
             <Sparkles className="h-3.5 w-3.5 text-primary" />
@@ -1190,7 +1222,7 @@ function ReviewStep({
                 : 'text-muted-foreground'
             }
           >
-            {summariseInteractions(interactions)}
+            {summariseInteractions(interactions, t)}
           </span>
         </div>
       </SummaryCard>
@@ -1203,4 +1235,3 @@ function ReviewStep({
     </div>
   );
 }
-

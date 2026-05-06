@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { LicenseGate } from './components/LicenseGate';
@@ -23,6 +24,7 @@ import { useRunningCampaign } from './useRunningCampaign';
 import { startSyncPolling, stopSyncPolling } from '@/shared/sync';
 
 export function App() {
+  const { t } = useTranslation();
   const [session, setSession] = useState<Session>(EMPTY_SESSION);
   const [loaded, setLoaded] = useState(false);
 
@@ -45,7 +47,7 @@ export function App() {
   if (!loaded) {
     return (
       <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">
-        Loading…
+        {t('common.loading')}
       </div>
     );
   }

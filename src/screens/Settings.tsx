@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader, RefreshCw, Trash2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useSession } from '@/context/SessionContext';
 import { useTheme } from '@/context/ThemeContext';
 import { usePreferences } from '@/context/PreferencesContext';
 import { b2dm } from '@/lib/b2dm';
+import {
+  getLocalePreference,
+  setLocalePreference,
+  type LocalePreference,
+} from '@/lib/i18n';
 
 function SectionHeader({ title }: { title: string }) {
   return (
@@ -43,6 +49,7 @@ function SwitchRow({
 }
 
 export function Settings() {
+  const { t } = useTranslation();
   const { session, refresh } = useSession();
   const { resolvedTheme, setTheme } = useTheme();
   const { prefs, setHeadless, setFullWindow, setSoundsEnabled } = usePreferences();
@@ -52,6 +59,7 @@ export function Settings() {
   const [isDeletingScrapes, setIsDeletingScrapes] = useState(false);
   const [isWipingAll, setIsWipingAll] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [locale, setLocale] = useState<LocalePreference>(() => getLocalePreference());
 
   useEffect(() => {
     let cancelled = false;
@@ -74,31 +82,27 @@ export function Settings() {
   }, [refresh]);
 
   const handleDeleteAccounts = useCallback(async () => {
-    if (!confirm('This will delete ALL Instagram accounts. Are you sure?')) return;
+    if (!confirm(t('settings.confirmDeleteAccounts'))) return;
     setIsDeletingAccounts(true);
     try {
       await b2dm.settings.deleteAllAccounts();
     } finally {
       setIsDeletingAccounts(false);
     }
-  }, []);
+  }, [t]);
 
   const handleDeleteScrapes = useCallback(async () => {
-    if (!confirm('This will delete ALL scraped data. Are you sure?')) return;
+    if (!confirm(t('settings.confirmDeleteScrapes'))) return;
     setIsDeletingScrapes(true);
     try {
       await b2dm.settings.deleteAllScrapes();
     } finally {
       setIsDeletingScrapes(false);
     }
-  }, []);
+  }, [t]);
 
   const handleWipeAllData = useCallback(async () => {
-    if (
-      !confirm(
-        'This will erase ALL your data: accounts, scrapes, categories, history, schedules and preferences. You will stay logged in. Are you sure?'
-      )
-    ) {
+    if (!confirm(t('settings.confirmWipeAll'))) {
       return;
     }
     setIsWipingAll(true);
@@ -113,25 +117,30 @@ export function Settings() {
     } finally {
       setIsWipingAll(false);
     }
+  }, [t]);
+
+  const handleLocaleChange = useCallback((next: LocalePreference) => {
+    setLocale(next);
+    setLocalePreference(next);
   }, []);
 
   const planLabel = session.subscription?.plan ?? '—';
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-4 pb-30">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('settings.title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage your account, preferences, and stored data.
+          {t('settings.description')}
         </p>
 
         <div className="mt-4 flex flex-col gap-2">
           {/* Account */}
           <div className="border border-border bg-background">
-            <SectionHeader title="Account" />
-            <InfoRow label="Name" value={session.profile?.name} />
-            <InfoRow label="Email" value={session.profile?.email} />
-            <InfoRow label="Plan" value={<span className="capitalize">{planLabel}</span>} />
-            <InfoRow label="App version" value={appVersion ? `V${appVersion}` : '—'} />
+            <SectionHeader title={t('settings.account')} />
+            <InfoRow label={t('settings.name')} value={session.profile?.name} />
+            <InfoRow label={t('settings.email')} value={session.profile?.email} />
+            <InfoRow label={t('settings.plan')} value={<span className="capitalize">{planLabel}</span>} />
+            <InfoRow label={t('settings.appVersion')} value={appVersion ? `V${appVersion}` : '—'} />
             <div className="flex items-stretch border-t border-border">
               <button
                 type="button"
@@ -144,33 +153,53 @@ export function Settings() {
                 ) : (
                   <RefreshCw className="h-3.5 w-3.5" />
                 )}
-                Refresh subscription
+                {t('settings.refreshSubscription')}
               </button>
             </div>
           </div>
 
+          {/* Language */}
+          <div className="border border-border bg-background">
+            <SectionHeader title={t('settings.languageSection')} />
+            <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              <span className="text-foreground">{t('settings.language')}</span>
+              <select
+                value={locale}
+                onChange={(e) => handleLocaleChange(e.target.value as LocalePreference)}
+                className="h-8 border border-border bg-background px-2 text-xs outline-none focus:border-foreground"
+              >
+                <option value="system">{t('settings.languageSystem')}</option>
+                <option value="en">{t('settings.languageEnglish')}</option>
+                <option value="es">{t('settings.languageSpanish')}</option>
+              </select>
+            </div>
+            <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+              {t('settings.languageHint')}
+            </p>
+          </div>
+
           {/* Preferences */}
           <div className="border border-border bg-background">
-            <SectionHeader title="Preferences" />
+            <SectionHeader title={t('settings.preferences')} />
             <SwitchRow
-              label="Headless mode"
+              label={t('settings.headless')}
               checked={prefs.headless}
               onCheckedChange={setHeadless}
             />
             {!prefs.headless && (
               <SwitchRow
-                label="Full window"
+                label={t('settings.fullWindow')}
                 checked={prefs.fullWindow}
                 onCheckedChange={setFullWindow}
               />
             )}
             <SwitchRow
-              label="Dark theme"
+              label={t('settings.darkTheme')}
               checked={resolvedTheme === 'dark'}
               onCheckedChange={(v) => setTheme(v ? 'dark' : 'light')}
             />
             <SwitchRow
-              label="Sounds on completion"
+              label={t('settings.soundsOnCompletion')}
               checked={prefs.soundsEnabled}
               onCheckedChange={setSoundsEnabled}
             />
@@ -178,7 +207,7 @@ export function Settings() {
 
           {/* Data */}
           <div className="border border-border bg-background">
-            <SectionHeader title="Data" />
+            <SectionHeader title={t('settings.data')} />
             <div className="flex items-stretch border-t border-border">
               <button
                 type="button"
@@ -191,7 +220,7 @@ export function Settings() {
                 ) : (
                   <Trash2 className="h-3.5 w-3.5" />
                 )}
-                Delete all IG accounts
+                {t('settings.deleteIgAccounts')}
               </button>
               <button
                 type="button"
@@ -204,7 +233,7 @@ export function Settings() {
                 ) : (
                   <Trash2 className="h-3.5 w-3.5" />
                 )}
-                Delete all scraped data
+                {t('settings.deleteAllScrapes')}
               </button>
               <button
                 type="button"
@@ -217,7 +246,7 @@ export function Settings() {
                 ) : (
                   <Trash2 className="h-3.5 w-3.5" />
                 )}
-                Delete all my data
+                {t('settings.deleteAllData')}
               </button>
             </div>
           </div>

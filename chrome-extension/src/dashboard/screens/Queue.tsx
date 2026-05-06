@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ListTodo, Loader2, MessageSquare, Pause, Play, RefreshCw, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { db } from '@/shared/db';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { cancelDesktopJob } from '@/shared/desktop-bridge';
@@ -19,13 +21,9 @@ interface QueueRow {
   startedAt: number;
 }
 
-const NON_SCRAPE_TITLE: Record<string, string> = {
-  login: 'Login',
-  mass_dm: 'Cold DM campaign',
-};
-
-function formatJobKind(kind: string): string {
-  if (NON_SCRAPE_TITLE[kind]) return NON_SCRAPE_TITLE[kind]!;
+function formatJobKind(kind: string, t: TFunction): string {
+  if (kind === 'login') return t('screens.queue.jobLogin');
+  if (kind === 'mass_dm') return t('screens.queue.jobMassDm');
   const spaced = kind.replace(/_/g, ' ');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
@@ -45,6 +43,7 @@ function formatElapsed(startedAt: number): string {
 
 export function Queue() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
 
@@ -70,7 +69,7 @@ export function Queue() {
       id: c.id,
       status: c.status === 'paused' ? 'paused' : 'running',
       title: c.name,
-      subtitle: 'Extension · Cold DM',
+      subtitle: t('screens.queue.subtitleExtension'),
       progressDone: c.sentCount + c.failedCount,
       progressTotal: c.totalLeads,
       startedAt: c.createdAt,
@@ -79,8 +78,8 @@ export function Queue() {
       source: 'desktop',
       id: j.id,
       status: j.status === 'queued' ? 'queued' : 'running',
-      title: formatJobKind(j.kind),
-      subtitle: 'Desktop',
+      title: formatJobKind(j.kind, t),
+      subtitle: t('screens.queue.subtitleDesktop'),
       progressDone: j.progressDone,
       progressTotal: j.progressTotal,
       startedAt: j.runningAt ?? j.startedAt,
@@ -91,7 +90,7 @@ export function Queue() {
     );
     const queued = fromDesktop.filter((r) => r.status === 'queued');
     return [...running, ...queued];
-  }, [campaigns, desktopJobs]);
+  }, [campaigns, desktopJobs, t]);
 
   async function refresh() {
     setRefreshing(true);
@@ -126,8 +125,8 @@ export function Queue() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
-        title="Queue"
-        description={`${rows.length} active job${rows.length === 1 ? '' : 's'} across extension and desktop`}
+        title={t('screens.queue.title')}
+        description={t('screens.queue.description', { count: rows.length })}
         actions={
           <button
             type="button"
@@ -138,7 +137,7 @@ export function Queue() {
             <RefreshCw
               className={'h-3.5 w-3.5 ' + (refreshing ? 'animate-spin' : '')}
             />
-            Refresh
+            {t('common.refresh')}
           </button>
         }
       />
@@ -147,8 +146,8 @@ export function Queue() {
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
             <ListTodo className="h-10 w-10" />
-            <p className="text-sm font-medium text-foreground">Nothing running</p>
-            <p>Active campaigns or desktop jobs show up here in real time.</p>
+            <p className="text-sm font-medium text-foreground">{t('screens.queue.nothingRunning')}</p>
+            <p>{t('screens.queue.nothingRunningHint')}</p>
           </div>
         </div>
       ) : (
@@ -156,12 +155,12 @@ export function Queue() {
           <table className="w-full whitespace-nowrap text-sm">
             <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-1.5 text-left">Status</th>
-                <th className="px-3 py-1.5 text-left">Job</th>
-                <th className="px-3 py-1.5 text-left">Source</th>
-                <th className="px-3 py-1.5 text-left">Progress</th>
-                <th className="px-3 py-1.5 text-right">Elapsed</th>
-                <th className="px-2 py-1.5 text-right">Actions</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.queue.thStatus')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.queue.thJob')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.queue.thSource')}</th>
+                <th className="px-3 py-1.5 text-left">{t('screens.queue.thProgress')}</th>
+                <th className="px-3 py-1.5 text-right">{t('screens.queue.thElapsed')}</th>
+                <th className="px-2 py-1.5 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -194,7 +193,7 @@ export function Queue() {
                     <td className="px-3 py-1.5">
                       {row.status === 'queued' ? (
                         <span className="text-[11px] text-muted-foreground">
-                          Waiting…
+                          {t('screens.queue.waiting')}
                         </span>
                       ) : (
                         <div className="flex items-center gap-3">
@@ -222,7 +221,7 @@ export function Queue() {
                             type="button"
                             onClick={() => navigate(`/campaigns/${row.id}`)}
                             className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                            aria-label="Open campaign"
+                            aria-label={t('screens.queue.openCampaignAria')}
                           >
                             {row.status === 'paused' ? (
                               <Play className="h-3.5 w-3.5" />
@@ -236,7 +235,7 @@ export function Queue() {
                           onClick={() => void cancelRow(row)}
                           disabled={cancelling}
                           className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-                          aria-label="Cancel"
+                          aria-label={t('screens.queue.cancelAria')}
                         >
                           {cancelling ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -258,24 +257,25 @@ export function Queue() {
 }
 
 function StatusBadge({ status }: { status: 'running' | 'queued' | 'paused' }) {
+  const { t } = useTranslation();
   if (status === 'queued') {
     return (
       <span className="inline-flex items-center gap-1.5 border border-border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        Queued
+        {t('screens.queue.statusQueued')}
       </span>
     );
   }
   if (status === 'paused') {
     return (
       <span className="inline-flex items-center gap-1.5 border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
-        Paused
+        {t('screens.queue.statusPaused')}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1.5 border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-800">
       <Loader2 className="h-2.5 w-2.5 animate-spin" />
-      Running
+      {t('screens.queue.statusRunning')}
     </span>
   );
 }

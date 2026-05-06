@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import { FolderTree, MessageSquare, MessageSquareText, Send } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useTranslation } from 'react-i18next';
 import { db } from '@/shared/db';
 
 export function Home() {
+  const { t } = useTranslation();
   // Aggregates pulled from the local mirror — they reflect everything the
   // extension knows: campaigns it ran itself plus categories / variants
   // synced from the desktop.
@@ -36,34 +38,34 @@ export function Home() {
     <div className="relative flex min-h-full items-center justify-center overflow-hidden">
       <div className="relative z-10 mx-auto w-full max-w-4xl pb-40 p-16">
         <h1 className="text-2xl font-semibold tracking-tight pt-2">
-          Welcome back
+          {t('screens.home.welcome')}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          What do you want to do today?
+          {t('screens.home.prompt')}
         </p>
 
         <div className="mt-8 grid grid-cols-2 border-l border-t border-border">
           <ActionCard
             to="/campaigns/new"
             icon={<Send className="h-5 w-5" />}
-            title="Cold DM"
-            description="Launch a DM campaign to your lead list."
-            cta="New campaign"
+            title={t('screens.home.coldDmTitle')}
+            description={t('screens.home.coldDmDescription')}
+            cta={t('screens.home.coldDmCta')}
           />
           <ActionCard
             to="/categories"
             icon={<FolderTree className="h-5 w-5" />}
-            title="Categories"
-            description="Browse and manage the lead categories synced from the desktop."
-            cta="Open categories"
+            title={t('screens.home.categoriesTitle')}
+            description={t('screens.home.categoriesDescription')}
+            cta={t('screens.home.categoriesCta')}
           />
         </div>
 
         <div className="grid grid-cols-4 border-l border-border">
-          <StatCard label="Categories" value={formatCount(totalCategories ?? 0)} />
-          <StatCard label="Leads" value={formatCount(totalLeadsInCategories ?? 0)} />
-          <StatCard label="Campaigns" value={formatCount(totalCampaigns ?? 0)} />
-          <StatCard label="Messages sent" value={formatCount(totalSent ?? 0)} />
+          <StatCard label={t('screens.home.statCategories')} value={formatCount(totalCategories ?? 0)} />
+          <StatCard label={t('screens.home.statLeads')} value={formatCount(totalLeadsInCategories ?? 0)} />
+          <StatCard label={t('screens.home.statCampaigns')} value={formatCount(totalCampaigns ?? 0)} />
+          <StatCard label={t('screens.home.statMessagesSent')} value={formatCount(totalSent ?? 0)} />
         </div>
 
         <div className="mt-8 grid grid-cols-2 border-l border-t border-border">
@@ -72,14 +74,14 @@ export function Home() {
             className="group flex items-center gap-3 border-b border-r border-border bg-background/40 p-4 transition-colors hover:bg-accent/40"
           >
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Active campaigns</span>
+            <span className="text-sm font-medium">{t('screens.home.linkActiveCampaigns')}</span>
           </Link>
           <Link
             to="/variants"
             className="group flex items-center gap-3 border-b border-r border-border bg-background/40 p-4 transition-colors hover:bg-accent/40"
           >
             <MessageSquareText className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Message variants</span>
+            <span className="text-sm font-medium">{t('screens.home.linkMessageVariants')}</span>
           </Link>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { useSession } from '@/context/SessionContext';
 import { b2dm } from '@/lib/b2dm';
@@ -5,16 +6,17 @@ import { b2dm } from '@/lib/b2dm';
 const BILLING_URL = 'https://b2dm.app/dashboard/billing';
 
 export function NoSubscription() {
+  const { t } = useTranslation();
   const { session, logout, refresh } = useSession();
 
   return (
     <AuthLayout>
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-semibold tracking-tight">No active subscription</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('screens.noSubscription.title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {session.profile?.email
-            ? `We couldn't find an active MonchoOps subscription on ${session.profile.email}. Visit the website to activate a plan.`
-            : 'Visit the website to activate a MonchoOps plan and start using the app.'}
+            ? t('screens.noSubscription.descriptionWithEmail', { email: session.profile.email })
+            : t('screens.noSubscription.descriptionNoEmail')}
         </p>
 
         <div className="mt-8 grid grid-cols-1 border-l border-t border-border">
@@ -26,7 +28,7 @@ export function NoSubscription() {
               }}
               className="inline-flex h-9 w-full items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              Go to billing
+              {t('screens.noSubscription.goToBilling')}
             </button>
             <button
               type="button"
@@ -35,7 +37,7 @@ export function NoSubscription() {
               }}
               className="inline-flex h-9 w-full items-center justify-center border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
             >
-              I just paid — refresh
+              {t('screens.noSubscription.justPaid')}
             </button>
             <button
               type="button"
@@ -44,7 +46,7 @@ export function NoSubscription() {
               }}
               className="inline-flex h-9 w-full items-center justify-center px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
-              Log out
+              {t('common.logOut')}
             </button>
           </div>
         </div>
