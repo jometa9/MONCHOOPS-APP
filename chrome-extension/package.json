@@ -7,9 +7,6 @@
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "vite build",
-    "predev": "node scripts/generate-icons.mjs",
-    "prebuild": "node scripts/generate-icons.mjs",
-    "icons": "node scripts/generate-icons.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

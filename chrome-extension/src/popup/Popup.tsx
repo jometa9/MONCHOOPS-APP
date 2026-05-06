@@ -175,7 +175,7 @@ function ConnectedPanel({
       </header>
 
       <div className="flex-1 space-y-4 p-4">
-        <section className="border border-border">
+        <section className="border border-border bg-background">
           <header className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
             <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <Instagram className="h-3 w-3" />
@@ -248,7 +248,7 @@ function ActiveProcessesSection({
   const hidden = campaigns.length - visible.length;
 
   return (
-    <section className="border border-border">
+    <section className="border border-border bg-background">
       <header className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
         <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           <Activity className="h-3 w-3" />

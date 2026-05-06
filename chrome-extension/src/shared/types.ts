@@ -107,3 +107,128 @@ export interface MetaRow {
   key: string;
   value: string;
 }
+
+/* ---------------- Synced mirror entities ---------------- */
+//
+// Each synced entity carries `updatedAt` (epoch ms, used for last-write-wins
+// merging) and an optional `deletedAt` tombstone that propagates deletes
+// across the bridge. `pendingPush` is set on rows mutated locally that the
+// desktop hasn't acknowledged yet; the sync engine drains them on each
+// connect.
+
+export interface SyncedCategory {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  /** Aggregate counts kept on the row for cheap rendering. Sourced from the
+   *  desktop on pull; recomputed locally for extension-only categories. */
+  leadCount: number;
+  scrapeCount: number;
+  lastActivityAt: number | null;
+  deletedAt?: number | null;
+  pendingPush?: boolean;
+}
+
+export interface SyncedCategoryLead {
+  /** auto-increment local id */
+  id?: number;
+  categoryId: string;
+  username: string;
+  sourceKind: string;
+  sourceJobId: string | null;
+  sourceDetail: string | null;
+  scrapedAt: number;
+  updatedAt: number;
+  deletedAt?: number | null;
+  pendingPush?: boolean;
+}
+
+export interface SyncedVariantGroup {
+  id: string;
+  name: string;
+  variants: string[];
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number | null;
+  pendingPush?: boolean;
+}
+
+export interface SyncedScrape {
+  jobId: string;
+  summary: string;
+  usernameCount: number;
+  completedAt: number;
+  targetName: string | null;
+  kind: string;
+  accountUsername: string | null;
+  updatedAt: number;
+  deletedAt?: number | null;
+}
+
+/** Mirror of a single completed mass-DM job from the desktop. */
+export interface SyncedDmJob {
+  jobId: string;
+  accountId: string | null;
+  accountUsername: string | null;
+  accountProfilePicUrl: string | null;
+  sentCount: number;
+  failedCount: number;
+  totalCount: number;
+  durationMs: number;
+  completedAt: number;
+  updatedAt: number;
+  deletedAt?: number | null;
+}
+
+/** Mirror of a per-recipient row inside a mass-DM job. Filled on demand
+ *  when the user opens the job's detail view. */
+export interface SyncedDmSend {
+  /** Composite key — jobId+username — used as Dexie's primary. */
+  key: string;
+  jobId: string;
+  username: string;
+  status: 'sent' | 'failed';
+  message: string | null;
+  error: string | null;
+  sentAt: number;
+  updatedAt: number;
+}
+
+/** Mirror of an active job (running or queued) on the desktop. We replace
+ *  this table wholesale on every sync — it changes too quickly to bother
+ *  with tombstones. */
+export interface SyncedActiveJob {
+  id: string;
+  kind: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  accountId: string | null;
+  startedAt: number;
+  runningAt: number | null;
+  finishedAt: number | null;
+  progressDone: number;
+  progressTotal: number | null;
+  error: string | null;
+  /** JSON-serialized params blob — kept stringified so Dexie indices are simple. */
+  paramsJson: string | null;
+  fetchedAt: number;
+}
+
+/** Queued local mutation that hasn't been pushed to the desktop yet. The
+ *  sync engine drains this queue on connect; failures stay queued for the
+ *  next attempt. */
+export interface PendingMutation {
+  id?: number;
+  /** Logical entity, e.g. 'category' | 'variants'. */
+  entity: string;
+  /** Operation: 'create' | 'update' | 'delete'. */
+  op: 'create' | 'update' | 'delete';
+  /** Entity primary key. */
+  refId: string;
+  /** JSON-serialised body sent to the bridge. */
+  payload: string;
+  createdAt: number;
+  /** Number of failed attempts so far. We retry forever but back off in UI. */
+  attempts: number;
+  lastError?: string | null;
+}

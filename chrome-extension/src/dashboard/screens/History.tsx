@@ -1,47 +1,140 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Search } from 'lucide-react';
+import { Eye, Instagram, MessageSquare, RefreshCw, Search } from 'lucide-react';
 import { db } from '@/shared/db';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { formatDateTime } from '@/shared/format';
-import type { DmHistoryRow } from '@/shared/types';
+import { formatDateTime, formatDuration } from '@/shared/format';
+import { runSync } from '@/shared/sync';
+import type { Campaign, SyncedDmJob } from '@/shared/types';
+
+interface UnifiedRow {
+  /** Source — drives the detail-route prefix. */
+  source: 'campaign' | 'desktop';
+  /** ID used to navigate to the detail. */
+  id: string;
+  title: string;
+  subtitle: string;
+  sentCount: number;
+  failedCount: number;
+  totalCount: number;
+  durationMs: number | null;
+  completedAt: number;
+  accountUsername: string | null;
+  accountProfilePicUrl: string | null;
+}
 
 export function History() {
-  const rows = useLiveQuery(
-    () => db.history.orderBy('timestamp').reverse().toArray(),
-    [],
-    [] as DmHistoryRow[]
-  );
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const campaigns = useLiveQuery(
+    () => db.campaigns.orderBy('createdAt').reverse().toArray(),
+    [],
+    [] as Campaign[]
+  );
+  const dmJobs = useLiveQuery(
+    async () => {
+      const all = await db.dmJobs.toArray();
+      return all
+        .filter((j) => !j.deletedAt)
+        .sort((a, b) => b.completedAt - a.completedAt);
+    },
+    [],
+    [] as SyncedDmJob[]
+  );
+
+  const rows = useMemo<UnifiedRow[]>(() => {
+    const fromCampaigns: UnifiedRow[] = (campaigns ?? [])
+      .filter((c) => c.status === 'done' || c.sentCount > 0 || c.failedCount > 0)
+      .map((c) => ({
+        source: 'campaign',
+        id: c.id,
+        title: c.name,
+        subtitle: 'Extension',
+        sentCount: c.sentCount,
+        failedCount: c.failedCount,
+        totalCount: c.totalLeads,
+        durationMs:
+          c.completedAt && c.createdAt ? c.completedAt - c.createdAt : null,
+        completedAt: c.completedAt ?? c.createdAt,
+        accountUsername: null,
+        accountProfilePicUrl: null,
+      }));
+    const fromDesktop: UnifiedRow[] = (dmJobs ?? []).map((j) => ({
+      source: 'desktop',
+      id: j.jobId,
+      title: j.accountUsername ? `@${j.accountUsername}` : 'Desktop run',
+      subtitle: 'Desktop',
+      sentCount: j.sentCount,
+      failedCount: j.failedCount,
+      totalCount: j.totalCount,
+      durationMs: j.durationMs,
+      completedAt: j.completedAt,
+      accountUsername: j.accountUsername,
+      accountProfilePicUrl: j.accountProfilePicUrl,
+    }));
+    return [...fromCampaigns, ...fromDesktop].sort(
+      (a, b) => b.completedAt - a.completedAt
+    );
+  }, [campaigns, dmJobs]);
 
   const filtered = useMemo(() => {
-    if (!rows) return [] as DmHistoryRow[];
     const q = query.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter(
       (r) =>
-        r.username.toLowerCase().includes(q) ||
-        r.campaignName.toLowerCase().includes(q) ||
-        r.message.toLowerCase().includes(q)
+        r.title.toLowerCase().includes(q) ||
+        r.subtitle.toLowerCase().includes(q) ||
+        (r.accountUsername ?? '').toLowerCase().includes(q)
     );
   }, [rows, query]);
 
-  const totalSent = useMemo(() => rows?.filter((r) => r.status === 'sent').length ?? 0, [rows]);
-  const totalFailed = useMemo(() => rows?.filter((r) => r.status === 'failed').length ?? 0, [rows]);
+  const totals = useMemo(() => {
+    let sent = 0;
+    let failed = 0;
+    for (const r of rows) {
+      sent += r.sentCount;
+      failed += r.failedCount;
+    }
+    return { sent, failed };
+  }, [rows]);
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await runSync();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
         title="DM history"
-        description={`${totalSent} sent · ${totalFailed} failed`}
+        description={`${totals.sent} sent · ${totals.failed} failed across ${rows.length} run${rows.length === 1 ? '' : 's'}`}
+        actions={
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={refreshing}
+            className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
+          >
+            <RefreshCw className={'h-3.5 w-3.5 ' + (refreshing ? 'animate-spin' : '')} />
+            Refresh
+          </button>
+        }
       />
+
       <div className="border-b border-border">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by username, campaign, or message…"
+            placeholder="Search by name, account or source…"
             className="h-10 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -49,45 +142,90 @@ export function History() {
 
       {filtered.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-          {rows && rows.length === 0
+          {rows.length === 0
             ? 'No DMs sent yet — your first run will show up here.'
             : 'No results.'}
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 border-b border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <table className="w-full whitespace-nowrap text-sm">
+            <thead className="sticky top-0 z-10 bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-2 text-left">When</th>
-                <th className="px-4 py-2 text-left">Lead</th>
-                <th className="px-4 py-2 text-left">Campaign</th>
-                <th className="px-4 py-2 text-left">Status</th>
-                <th className="px-4 py-2 text-left">Message</th>
+                <th className="px-3 py-1.5 text-left">Run</th>
+                <th className="px-3 py-1.5 text-left">Source</th>
+                <th className="px-3 py-1.5 text-right">Sent</th>
+                <th className="px-3 py-1.5 text-right">Failed</th>
+                <th className="px-3 py-1.5 text-right">Duration</th>
+                <th className="px-3 py-1.5 text-left">Completed</th>
+                <th className="px-2 py-1.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id} className="border-b border-border last:border-b-0">
-                  <td className="px-4 py-1.5 text-muted-foreground">{formatDateTime(r.timestamp)}</td>
-                  <td className="px-4 py-1.5 font-medium">@{r.username}</td>
-                  <td className="px-4 py-1.5 text-muted-foreground">{r.campaignName}</td>
-                  <td className="px-4 py-1.5">
-                    <span
-                      className={
-                        'inline-flex items-center px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ' +
-                        (r.status === 'sent'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-red-100 text-red-700')
-                      }
-                    >
-                      {r.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-1.5 text-xs text-muted-foreground">
-                    <div className="max-w-[40ch] truncate">{r.error ?? r.message}</div>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((row) => {
+                const detailPath =
+                  row.source === 'desktop'
+                    ? `/history/desktop/${row.id}`
+                    : `/history/campaign/${row.id}`;
+                return (
+                  <tr
+                    key={`${row.source}:${row.id}`}
+                    onClick={() => navigate(detailPath)}
+                    className="cursor-pointer border-t border-border transition-colors even:bg-muted/30 last:border-b hover:bg-accent/40"
+                  >
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center gap-2">
+                        {row.accountProfilePicUrl ? (
+                          <img
+                            src={row.accountProfilePicUrl}
+                            alt={row.accountUsername ?? ''}
+                            className="h-6 w-6 flex-none rounded-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-muted text-muted-foreground">
+                            {row.source === 'desktop' ? (
+                              <Instagram className="h-3 w-3" />
+                            ) : (
+                              <MessageSquare className="h-3 w-3" />
+                            )}
+                          </div>
+                        )}
+                        <span className="font-medium">{row.title}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-1.5 text-xs text-muted-foreground">
+                      {row.subtitle}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {row.sentCount}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                      {row.failedCount}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                      {row.durationMs != null ? formatDuration(row.durationMs) : '—'}
+                    </td>
+                    <td className="px-3 py-1.5 text-muted-foreground">
+                      {formatDateTime(row.completedAt)}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div
+                        className="flex items-center justify-end"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => navigate(detailPath)}
+                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                          aria-label="View detail"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

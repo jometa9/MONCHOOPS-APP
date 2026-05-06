@@ -5,7 +5,6 @@ import { JobsProvider } from '@/context/JobsContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { PreferencesProvider } from '@/context/PreferencesContext';
 import { AppShell } from '@/components/layout/AppShell';
-import { BridgePairingDialog } from '@/components/BridgePairingDialog';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Login, LoadingDots } from '@/screens/Login';
 import { NoSubscription } from '@/screens/NoSubscription';
@@ -55,7 +54,6 @@ function Gate() {
   return (
     <AccountsProvider>
       <JobsProvider>
-        <BridgePairingDialog />
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<Home />} />

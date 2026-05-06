@@ -183,21 +183,6 @@ const updaterApi = {
 const bridgeApi = {
   getStatus: () =>
     invoke<import('./backend/extensionBridge').BridgeStatus>('bridge:getStatus'),
-  listPaired: () =>
-    invoke<
-      Array<{ id: string; name: string; createdAt: number; lastSeenAt: number }>
-    >('bridge:listPaired'),
-  revoke: (id: string) => invoke<void>('bridge:revoke', id),
-  resolvePairing: (pairingId: string, accept: boolean) =>
-    invoke<{ ok: boolean }>('bridge:resolvePairing', { pairingId, accept }),
-  onPairRequest: (
-    cb: (req: import('./backend/extensionBridge').BridgePairRequest) => void
-  ) =>
-    listen<import('./backend/extensionBridge').BridgePairRequest>(
-      'bridge:pair-request',
-      cb
-    ),
-  onChange: (cb: () => void) => listen<void>('bridge:changed', () => cb()),
 };
 
 const settingsApi = {

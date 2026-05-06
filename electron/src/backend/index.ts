@@ -63,14 +63,9 @@ import {
 } from './updater';
 import {
   getStatus as getBridgeStatus,
-  listPairedClients,
-  resolvePairing as resolveBridgePairing,
-  revokePairedClient,
   setMutationHandler as setBridgeMutationHandler,
-  setPairRequestHandler,
   startBridgeServer,
   stopBridgeServer,
-  type BridgePairRequest,
 } from './extensionBridge';
 
 interface BackendOptions {
@@ -127,9 +122,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   // Local HTTP bridge for the Chrome extension. Starts in the background;
   // failures (port range exhausted, OS firewall) are logged but never block
   // the main app boot.
-  setPairRequestHandler((req: BridgePairRequest) => {
-    broadcast('bridge:pair-request', req);
-  });
   // The bridge can mutate variant groups; forward the change so the desktop
   // UI re-renders without a manual refresh.
   setBridgeMutationHandler((channel) => {
@@ -606,21 +598,9 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     broadcast('messageVariants:changed');
   });
 
-  // Bridge IPCs — drive the pairing modal and Settings status UI.
+  // Bridge IPC — Settings status UI reads this to show whether the local
+  // HTTP bridge is up.
   ipcMain.handle('bridge:getStatus', async () => getBridgeStatus());
-  ipcMain.handle('bridge:listPaired', async () => listPairedClients());
-  ipcMain.handle('bridge:revoke', async (_e, id: string) => {
-    revokePairedClient(id);
-    broadcast('bridge:changed');
-  });
-  ipcMain.handle(
-    'bridge:resolvePairing',
-    async (_e, payload: { pairingId: string; accept: boolean }) => {
-      const ok = resolveBridgePairing(payload.pairingId, payload.accept);
-      if (ok && payload.accept) broadcast('bridge:changed');
-      return { ok };
-    }
-  );
 
   let shutdownStarted = false;
   app.on('before-quit', (event) => {

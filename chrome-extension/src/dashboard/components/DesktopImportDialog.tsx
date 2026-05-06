@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Database, FileText, Folder, Loader2, MonitorSmartphone } from 'lucide-react';
+import { ArrowLeft, FileText, Folder, Loader2, MonitorSmartphone } from 'lucide-react';
 import {
   BridgeError,
-  clearToken,
   discoverDesktop,
-  getStoredToken,
   listCategoryLeads,
   listDesktopCategories,
   listDesktopScrapes,
   listScrapeLeads,
-  pairWithDesktop,
   type DesktopCategory,
   type DesktopLead,
   type DesktopScrape,
@@ -20,9 +17,6 @@ import type { CampaignSource } from '@/shared/types';
 type Step =
   | { kind: 'connecting' }
   | { kind: 'no_desktop' }
-  | { kind: 'needs_pair' }
-  | { kind: 'pairing'; code: string | null }
-  | { kind: 'pair_error'; message: string }
   | { kind: 'picker'; tab: 'categories' | 'scrapes'; categories?: DesktopCategory[]; scrapes?: DesktopScrape[]; loading: boolean; error?: string }
   | { kind: 'loading_leads' }
   | { kind: 'fatal'; message: string };
@@ -55,27 +49,7 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
       });
       return;
     }
-    const token = await getStoredToken();
-    if (!token) {
-      setStep({ kind: 'needs_pair' });
-      return;
-    }
     await loadCategories();
-  }
-
-  async function startPairing() {
-    setStep({ kind: 'pairing', code: null });
-    try {
-      await pairWithDesktop({
-        name: 'MonchoOps Chrome extension',
-        onCode: (code) => setStep({ kind: 'pairing', code }),
-      });
-      await loadCategories();
-    } catch (err) {
-      const msg =
-        err instanceof BridgeError ? err.message : err instanceof Error ? err.message : String(err);
-      setStep({ kind: 'pair_error', message: msg });
-    }
   }
 
   async function loadCategories() {
@@ -84,8 +58,8 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
       const categories = await listDesktopCategories();
       setStep({ kind: 'picker', tab: 'categories', categories, loading: false });
     } catch (err) {
-      if (err instanceof BridgeError && err.code === 'unauthorized') {
-        setStep({ kind: 'needs_pair' });
+      if (err instanceof BridgeError && err.code === 'no_desktop') {
+        setStep({ kind: 'no_desktop' });
         return;
       }
       setStep({
@@ -108,8 +82,8 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
         prev.kind === 'picker' ? { ...prev, tab: 'scrapes', scrapes, loading: false } : prev
       );
     } catch (err) {
-      if (err instanceof BridgeError && err.code === 'unauthorized') {
-        setStep({ kind: 'needs_pair' });
+      if (err instanceof BridgeError && err.code === 'no_desktop') {
+        setStep({ kind: 'no_desktop' });
         return;
       }
       setStep((prev) =>
@@ -131,8 +105,8 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
       });
       onClose();
     } catch (err) {
-      if (err instanceof BridgeError && err.code === 'unauthorized') {
-        setStep({ kind: 'needs_pair' });
+      if (err instanceof BridgeError && err.code === 'no_desktop') {
+        setStep({ kind: 'no_desktop' });
         return;
       }
       setStep({
@@ -150,8 +124,8 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
       onImport(leads, { kind: 'desktop_scrape', desktopJobId: s.jobId, label });
       onClose();
     } catch (err) {
-      if (err instanceof BridgeError && err.code === 'unauthorized') {
-        setStep({ kind: 'needs_pair' });
+      if (err instanceof BridgeError && err.code === 'no_desktop') {
+        setStep({ kind: 'no_desktop' });
         return;
       }
       setStep({
@@ -185,13 +159,13 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto p-4">
-          {step.kind === 'connecting' ? <Centered icon={<Loader2 className="h-5 w-5 animate-spin" />} title="Looking for the desktop app…" /> : null}
+          {step.kind === 'connecting' ? <Centered icon={<Loader2 className="h-5 w-5 animate-spin" />} title="Connecting to the desktop app…" /> : null}
 
           {step.kind === 'no_desktop' ? (
             <Centered
               icon={<MonitorSmartphone className="h-6 w-6 text-muted-foreground" />}
-              title="Desktop app not running"
-              body="Open the MonchoOps desktop app on this computer and try again."
+              title="Could not connect"
+              body="Start the MonchoOps desktop app on this computer and try again."
               action={
                 <button
                   type="button"
@@ -204,53 +178,10 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
             />
           ) : null}
 
-          {step.kind === 'needs_pair' ? (
-            <Centered
-              icon={<Database className="h-6 w-6 text-muted-foreground" />}
-              title="Connect to the desktop app"
-              body="The desktop app will show a confirmation dialog with a 4-digit code. Click Allow there once you confirm the codes match."
-              action={
-                <button
-                  type="button"
-                  onClick={() => void startPairing()}
-                  className="inline-flex h-9 items-center bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                  Connect
-                </button>
-              }
-            />
-          ) : null}
-
-          {step.kind === 'pairing' ? (
-            <Centered
-              icon={<Loader2 className="h-5 w-5 animate-spin" />}
-              title="Waiting for the desktop app…"
-              body="Approve the connection in the modal that just opened on the desktop app."
-              codeLine={step.code}
-            />
-          ) : null}
-
-          {step.kind === 'pair_error' ? (
-            <Centered
-              icon={<MonitorSmartphone className="h-6 w-6 text-destructive" />}
-              title="Could not pair"
-              body={step.message}
-              action={
-                <button
-                  type="button"
-                  onClick={() => void startPairing()}
-                  className="inline-flex h-9 items-center bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                  Try again
-                </button>
-              }
-            />
-          ) : null}
-
           {step.kind === 'loading_leads' ? <Centered icon={<Loader2 className="h-5 w-5 animate-spin" />} title="Loading leads…" /> : null}
 
           {step.kind === 'picker' ? (
-            <PickerView step={step} onSwitchTab={(t) => (t === 'scrapes' ? void loadScrapes() : void loadCategories())} onPickCategory={(c) => void pickCategory(c)} onPickScrape={(s) => void pickScrape(s)} onUnpair={async () => { await clearToken(); setStep({ kind: 'needs_pair' }); }} />
+            <PickerView step={step} onSwitchTab={(t) => (t === 'scrapes' ? void loadScrapes() : void loadCategories())} onPickCategory={(c) => void pickCategory(c)} onPickScrape={(s) => void pickScrape(s)} />
           ) : null}
 
           {step.kind === 'fatal' ? (
@@ -281,27 +212,17 @@ function Centered({
   title,
   body,
   action,
-  codeLine,
 }: {
   icon: React.ReactNode;
   title: string;
   body?: string;
   action?: React.ReactNode;
-  codeLine?: string | null;
 }) {
   return (
     <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 px-6 text-center">
       <div className="text-muted-foreground">{icon}</div>
       <div className="text-sm font-medium">{title}</div>
       {body ? <p className="max-w-sm text-xs text-muted-foreground">{body}</p> : null}
-      {codeLine ? (
-        <div className="mt-3 border border-border bg-muted/30 px-4 py-3">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Verification code
-          </div>
-          <div className="mt-1 font-mono text-3xl font-bold tracking-[0.5em]">{codeLine}</div>
-        </div>
-      ) : null}
       {action ? <div className="mt-2">{action}</div> : null}
     </div>
   );
@@ -312,13 +233,11 @@ function PickerView({
   onSwitchTab,
   onPickCategory,
   onPickScrape,
-  onUnpair,
 }: {
   step: Extract<Step, { kind: 'picker' }>;
   onSwitchTab: (t: 'categories' | 'scrapes') => void;
   onPickCategory: (c: DesktopCategory) => void;
   onPickScrape: (s: DesktopScrape) => void;
-  onUnpair: () => void;
 }) {
   return (
     <>
@@ -337,13 +256,6 @@ function PickerView({
             icon={<FileText className="h-3.5 w-3.5" />}
           />
         </div>
-        <button
-          type="button"
-          onClick={onUnpair}
-          className="text-[11px] text-muted-foreground hover:text-foreground"
-        >
-          Unpair
-        </button>
       </div>
 
       {step.loading ? (

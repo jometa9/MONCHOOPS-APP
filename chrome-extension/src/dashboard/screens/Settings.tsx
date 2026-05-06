@@ -3,21 +3,15 @@ import { ExternalLink, Instagram, LogOut, MonitorSmartphone } from 'lucide-react
 import { ScreenHeader } from '../components/ScreenHeader';
 import { getSession, logout } from '@/shared/license';
 import { db } from '@/shared/db';
-import {
-  clearToken,
-  discoverDesktop,
-  getStoredToken,
-  type DesktopPing,
-} from '@/shared/desktop-bridge';
+import { discoverDesktop, type DesktopPing } from '@/shared/desktop-bridge';
 import type { Session } from '@/shared/types';
 
 export function Settings() {
   const [session, setSession] = useState<Session | null>(null);
   const [igLoggedIn, setIgLoggedIn] = useState<boolean | null>(null);
   const [desktop, setDesktop] = useState<{
-    state: 'unknown' | 'offline' | 'connected' | 'paired';
+    state: 'unknown' | 'offline' | 'connected';
     ping?: DesktopPing;
-    port?: number;
   }>({ state: 'unknown' });
 
   useEffect(() => {
@@ -30,18 +24,11 @@ export function Settings() {
 
   async function refreshDesktop() {
     try {
-      const { ping, port } = await discoverDesktop();
-      const token = await getStoredToken();
-      setDesktop({ state: token ? 'paired' : 'connected', ping, port });
+      const { ping } = await discoverDesktop();
+      setDesktop({ state: 'connected', ping });
     } catch {
       setDesktop({ state: 'offline' });
     }
-  }
-
-  async function unpair() {
-    if (!confirm('Unpair from the desktop app? You can re-pair from the New Cold DM screen anytime.')) return;
-    await clearToken();
-    void refreshDesktop();
   }
 
   async function handleLogout() {
@@ -118,12 +105,9 @@ export function Settings() {
               <div className="flex-1">
                 <div className="font-medium">
                   {desktop.state === 'unknown' ? 'Checking…' : null}
-                  {desktop.state === 'offline' ? 'Not running' : null}
+                  {desktop.state === 'offline' ? 'Not connected' : null}
                   {desktop.state === 'connected'
-                    ? `Detected v${desktop.ping?.version ?? '?'} on port ${desktop.port}`
-                    : null}
-                  {desktop.state === 'paired'
-                    ? `Paired · v${desktop.ping?.version ?? '?'} on port ${desktop.port}`
+                    ? `Connected · v${desktop.ping?.version ?? '?'}`
                     : null}
                 </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -138,15 +122,6 @@ export function Settings() {
                   >
                     Refresh
                   </button>
-                  {desktop.state === 'paired' ? (
-                    <button
-                      type="button"
-                      onClick={unpair}
-                      className="inline-flex h-8 items-center bg-destructive/10 px-3 text-xs font-medium text-destructive hover:bg-destructive/20"
-                    >
-                      Unpair
-                    </button>
-                  ) : null}
                 </div>
               </div>
             </div>

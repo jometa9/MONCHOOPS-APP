@@ -1,8 +1,27 @@
-import { History as HistoryIcon, LogOut, MessageSquare, MessageSquareText, Monitor, Moon, Plus, Settings as SettingsIcon, Sun } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  CheckCircle2,
+  CloudOff,
+  FolderTree,
+  History as HistoryIcon,
+  Home as HomeIcon,
+  Inbox,
+  ListTodo,
+  Loader2,
+  LogOut,
+  MessageSquare,
+  MessageSquareText,
+  Monitor,
+  Moon,
+  Plus,
+  Settings as SettingsIcon,
+  Sun,
+} from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { logout } from '@/shared/license';
 import type { Session } from '@/shared/types';
 import { cn } from '@/shared/cn';
+import { onSyncStatusChange, runSync, type SyncStatus } from '@/shared/sync';
 import { useThemeMode, type ThemeMode } from '../theme';
 
 interface Props {
@@ -13,9 +32,13 @@ interface Props {
 }
 
 const NAV = [
+  { to: '/home', label: 'Home', icon: HomeIcon },
   { to: '/campaigns', label: 'Campaigns', icon: MessageSquare },
-  { to: '/history', label: 'History', icon: HistoryIcon },
+  { to: '/queue', label: 'Queue', icon: ListTodo },
+  { to: '/categories', label: 'Categories', icon: FolderTree },
+  { to: '/scrapes', label: 'Scrapes', icon: Inbox },
   { to: '/variants', label: 'Variants', icon: MessageSquareText },
+  { to: '/history', label: 'History', icon: HistoryIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -64,22 +87,23 @@ export function Sidebar({ session, onLogout, locked }: Props) {
             aria-disabled={locked}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-2 px-4 py-2 text-xs font-medium transition-colors',
+                'flex items-center gap-2.5 px-4 py-2 text-sm transition-colors',
                 locked
-                  ? 'pointer-events-none text-muted-foreground/50'
+                  ? 'pointer-events-none border-y border-transparent text-muted-foreground/50'
                   : isActive
-                  ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'
+                  ? 'border-y border-border bg-background font-medium text-foreground'
+                  : 'border-y border-transparent text-muted-foreground hover:bg-background hover:text-foreground'
               )
             }
           >
-            <Icon className="h-3.5 w-3.5" />
-            {label}
+            <Icon className="h-4 w-4" />
+            <span>{label}</span>
           </NavLink>
         ))}
       </nav>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-border p-3">
+        <SyncIndicator />
         <ThemeToggle />
         <button
           type="button"
@@ -92,6 +116,51 @@ export function Sidebar({ session, onLogout, locked }: Props) {
         </button>
       </div>
     </aside>
+  );
+}
+
+function SyncIndicator() {
+  const [status, setStatus] = useState<SyncStatus>({ kind: 'idle' });
+  useEffect(() => onSyncStatusChange(setStatus), []);
+
+  let icon: React.ReactNode;
+  let label: string;
+  let title = '';
+  switch (status.kind) {
+    case 'syncing':
+      icon = <Loader2 className="h-3 w-3 animate-spin" />;
+      label = 'Syncing…';
+      break;
+    case 'connected':
+      icon = <CheckCircle2 className="h-3 w-3 text-emerald-600" />;
+      label = 'Synced';
+      title = `Last synced ${new Date(status.lastSyncAt).toLocaleTimeString()}`;
+      break;
+    case 'offline':
+      icon = <CloudOff className="h-3 w-3 text-muted-foreground" />;
+      label = 'Desktop offline';
+      title = 'MonchoOps desktop is not running. The extension keeps working locally.';
+      break;
+    case 'error':
+      icon = <CloudOff className="h-3 w-3 text-amber-600" />;
+      label = 'Sync error';
+      title = status.message;
+      break;
+    default:
+      icon = <CloudOff className="h-3 w-3 text-muted-foreground" />;
+      label = 'Idle';
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void runSync()}
+      title={title || 'Click to sync now'}
+      className="inline-flex h-8 w-full items-center justify-center gap-1.5 border border-border bg-background px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
   );
 }
 

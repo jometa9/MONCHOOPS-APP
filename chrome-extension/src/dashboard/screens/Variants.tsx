@@ -1,50 +1,38 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { ScreenHeader } from '../components/ScreenHeader';
+import { db } from '@/shared/db';
+import { uuid } from '@/shared/format';
 import { formatDateTime } from '@/shared/format';
-import {
-  BridgeError,
-  createVariantGroup,
-  deleteVariantGroup,
-  listVariantGroups,
-  updateVariantGroup,
-  type DesktopVariantGroup,
-} from '@/shared/desktop-bridge';
+import { enqueuePush, runSync } from '@/shared/sync';
+import type { SyncedVariantGroup } from '@/shared/types';
 
 const MAX_VARIANTS = 20;
 
-type LoadState =
-  | { kind: 'loading' }
-  | { kind: 'ready'; groups: DesktopVariantGroup[] }
-  | { kind: 'error'; message: string; offline: boolean };
-
 export function Variants() {
-  const [state, setState] = useState<LoadState>({ kind: 'loading' });
-  const [editing, setEditing] = useState<DesktopVariantGroup | 'new' | null>(null);
+  const [editing, setEditing] = useState<SyncedVariantGroup | 'new' | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setState({ kind: 'loading' });
+  const groups = useLiveQuery(
+    async () => {
+      const all = await db.variantGroups.toArray();
+      return all
+        .filter((g) => !g.deletedAt)
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+    },
+    [],
+    [] as SyncedVariantGroup[]
+  );
+
+  async function refresh() {
+    setRefreshing(true);
     try {
-      const groups = await listVariantGroups();
-      setState({ kind: 'ready', groups });
-    } catch (err) {
-      const offline = err instanceof BridgeError && err.code === 'no_desktop';
-      setState({
-        kind: 'error',
-        message:
-          err instanceof BridgeError
-            ? err.message
-            : err instanceof Error
-            ? err.message
-            : String(err),
-        offline,
-      });
+      await runSync();
+    } finally {
+      setRefreshing(false);
     }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -56,16 +44,18 @@ export function Variants() {
             <button
               type="button"
               onClick={() => void refresh()}
-              className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
+              disabled={refreshing}
+              className="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
             >
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw
+                className={'h-3.5 w-3.5 ' + (refreshing ? 'animate-spin' : '')}
+              />
               Refresh
             </button>
             <button
               type="button"
               onClick={() => setEditing('new')}
-              disabled={state.kind !== 'ready'}
-              className="inline-flex h-8 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               <Plus className="h-3.5 w-3.5" />
               New group
@@ -74,39 +64,13 @@ export function Variants() {
         }
       />
 
-      {state.kind === 'loading' ? (
-        <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Loading variants from desktop…
-        </div>
-      ) : null}
-
-      {state.kind === 'error' ? (
-        <div className="flex flex-1 items-center justify-center">
-          <div className="max-w-sm text-center">
-            <p className="text-sm font-medium">
-              {state.offline ? 'Desktop app not running' : 'Could not load variants'}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">{state.message}</p>
-            <button
-              type="button"
-              onClick={() => void refresh()}
-              className="mt-4 inline-flex h-9 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Retry
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {state.kind === 'ready' && state.groups.length === 0 ? (
+      {(groups ?? []).length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="max-w-sm text-center">
             <p className="text-sm font-medium">No variants saved yet</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Save a named set of DM variations once on the desktop app or here, reuse it across
-              campaigns.
+              Save a named set of DM variations once, reuse it across campaigns. Variants
+              created here sync to the desktop app automatically.
             </p>
             <button
               type="button"
@@ -118,9 +82,7 @@ export function Variants() {
             </button>
           </div>
         </div>
-      ) : null}
-
-      {state.kind === 'ready' && state.groups.length > 0 ? (
+      ) : (
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 border-b border-border bg-muted text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -132,15 +94,24 @@ export function Variants() {
               </tr>
             </thead>
             <tbody>
-              {state.groups.map((g) => (
+              {(groups ?? []).map((g) => (
                 <tr
                   key={g.id}
-                  className="cursor-pointer border-b border-border transition-colors hover:bg-accent/40 last:border-b-0"
+                  className="cursor-pointer border-b border-border transition-colors hover:bg-accent/40"
                   onClick={() => setEditing(g)}
                 >
-                  <td className="px-4 py-2 font-medium">{g.name}</td>
+                  <td className="px-4 py-2 font-medium">
+                    {g.name}
+                    {g.pendingPush ? (
+                      <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-600">
+                        pending sync
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-2 text-right tabular-nums">{g.variants.length}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{formatDateTime(g.updatedAt)}</td>
+                  <td className="px-4 py-2 text-muted-foreground">
+                    {formatDateTime(g.updatedAt)}
+                  </td>
                   <td className="px-2 py-2">
                     <div
                       className="flex items-center justify-end gap-0.5"
@@ -158,12 +129,13 @@ export function Variants() {
                         type="button"
                         onClick={async () => {
                           if (!confirm(`Delete "${g.name}"?`)) return;
-                          try {
-                            await deleteVariantGroup(g.id);
-                            await refresh();
-                          } catch (err) {
-                            alert(err instanceof Error ? err.message : String(err));
-                          }
+                          const now = Date.now();
+                          await db.variantGroups.update(g.id, {
+                            deletedAt: now,
+                            updatedAt: now,
+                            pendingPush: true,
+                          });
+                          await enqueuePush('variants', 'delete', g.id, {});
                         }}
                         className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground hover:text-destructive"
                         aria-label="Delete"
@@ -177,16 +149,12 @@ export function Variants() {
             </tbody>
           </table>
         </div>
-      ) : null}
+      )}
 
       {editing ? (
         <EditDialog
           group={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null);
-            void refresh();
-          }}
         />
       ) : null}
     </div>
@@ -196,11 +164,9 @@ export function Variants() {
 function EditDialog({
   group,
   onClose,
-  onSaved,
 }: {
-  group: DesktopVariantGroup | null;
+  group: SyncedVariantGroup | null;
   onClose: () => void;
-  onSaved: () => void;
 }) {
   const [name, setName] = useState(group?.name ?? '');
   const [variants, setVariants] = useState<string[]>(
@@ -209,20 +175,41 @@ function EditDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const nonEmpty = variants.filter((v) => v.trim().length > 0).length;
+  const cleaned = useMemo(() => variants.map((v) => v.trim()).filter(Boolean), [variants]);
 
   async function save() {
-    if (!name.trim() || nonEmpty === 0) return;
+    if (!name.trim() || cleaned.length === 0) return;
     setBusy(true);
     setError(null);
     try {
-      const cleaned = variants.map((v) => v.trim()).filter(Boolean);
+      const now = Date.now();
       if (group) {
-        await updateVariantGroup(group.id, { name: name.trim(), variants: cleaned });
+        await db.variantGroups.update(group.id, {
+          name: name.trim(),
+          variants: cleaned,
+          updatedAt: now,
+          pendingPush: true,
+        });
+        await enqueuePush('variants', 'update', group.id, {
+          name: name.trim(),
+          variants: cleaned,
+        });
       } else {
-        await createVariantGroup({ name: name.trim(), variants: cleaned });
+        const id = uuid();
+        await db.variantGroups.put({
+          id,
+          name: name.trim(),
+          variants: cleaned,
+          createdAt: now,
+          updatedAt: now,
+          pendingPush: true,
+        });
+        await enqueuePush('variants', 'create', id, {
+          name: name.trim(),
+          variants: cleaned,
+        });
       }
-      onSaved();
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save');
     } finally {
@@ -244,8 +231,8 @@ function EditDialog({
             {group ? `Edit ${group.name}` : 'New variant group'}
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            One variant is picked at random per DM when this group is used in a campaign. Saved
-            groups sync with the desktop app.
+            One variant is picked at random per DM when this group is used in a campaign.
+            Saved groups sync with the desktop app.
           </p>
         </header>
 
@@ -267,7 +254,7 @@ function EditDialog({
             <header className="flex items-center justify-between border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <span>Variants</span>
               <span className="font-normal normal-case">
-                {nonEmpty}/{MAX_VARIANTS} ·{' '}
+                {cleaned.length}/{MAX_VARIANTS} ·{' '}
                 <code className="rounded bg-background px-1 py-0.5 text-[10px]">
                   {'{{username}}'}
                 </code>
@@ -280,7 +267,9 @@ function EditDialog({
                     rows={3}
                     value={v}
                     onChange={(e) =>
-                      setVariants((prev) => prev.map((x, idx) => (idx === i ? e.target.value : x)))
+                      setVariants((prev) =>
+                        prev.map((x, idx) => (idx === i ? e.target.value : x))
+                      )
                     }
                     placeholder={i === 0 ? 'Hey {{username}}, …' : `Variant ${i + 1}`}
                     className="w-full resize-y border border-border bg-background p-2 text-sm outline-none focus:border-foreground"
@@ -333,7 +322,7 @@ function EditDialog({
           <button
             type="button"
             onClick={save}
-            disabled={busy || !name.trim() || nonEmpty === 0}
+            disabled={busy || !name.trim() || cleaned.length === 0}
             className="inline-flex h-9 items-center bg-primary px-4 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
           >
             {busy ? 'Saving…' : group ? 'Save changes' : 'Create group'}

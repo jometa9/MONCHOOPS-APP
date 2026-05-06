@@ -1,30 +1,30 @@
 // Local HTTP server that lets the B2DM Chrome extension read leads from
 // this user's desktop install. Bound to 127.0.0.1 only — never exposed
-// over the network. Token-gated: each extension pairs once via an in-app
-// confirmation modal, after which it can call the leads endpoints with
-// `Authorization: Bearer <token>`.
+// over the network.
 //
 // CORS: allowed origins are chrome-extension:// (any) plus localhost dev.
-// Without the token, no payload is ever returned, so a malicious site that
-// finds the port still can't read anything.
-//
-// State:
-//   - pending pairings live in memory; cleared after 5 min or on resolve
-//   - tokens live in the meta table as `bridge_tokens` (sha256 hashed)
-//   - the renderer is notified of new pairing requests via the
-//     `onPairRequest` callback wired by main.ts
+// No pairing/token flow — if the desktop app is running, the extension
+// can talk to it; if not, the extension surfaces a "start the desktop
+// app" message.
 
 import http from 'node:http';
-import crypto from 'node:crypto';
-import { metaGetJson, metaSetJson } from './db';
+import { metaSetJson } from './db';
 import {
-  exportCategoryCsv,
+  createCategory,
+  deleteCategory,
+  getCategory,
+  ingestLeads,
   listCategories,
   listLeads,
-  type LeadCategoryPublic,
+  renameCategory,
 } from './leads';
 import {
+  cancelJob,
+  getMassDmResult,
   getScrapeResult,
+  listActiveJobs,
+  listMassDmResults,
+  listMassDmSends,
   listScrapeResults,
   readScrapeUsernames,
 } from './jobs';
@@ -39,55 +39,17 @@ import { BUILD_CONFIG } from '../buildConfig';
 
 const PORT_RANGE_START = 17775;
 const PORT_RANGE_END = 17780;
-const PAIRING_TTL_MS = 5 * 60_000;
-const PAIRING_CODE_DIGITS = 4;
 const TOKENS_META_KEY = 'bridge_tokens';
-
-interface PairedClient {
-  /** stable id we hand back to the extension */
-  id: string;
-  /** sha256 hex of the secret token */
-  tokenHash: string;
-  /** human-readable label the user sees in Settings */
-  name: string;
-  createdAt: number;
-  lastSeenAt: number;
-}
-
-interface PendingPairing {
-  pairingId: string;
-  code: string;
-  name: string;
-  createdAt: number;
-  status: 'pending' | 'accepted' | 'rejected';
-  /** populated when status === 'accepted' */
-  token?: string;
-  /** so the bridge can reject if the renderer never resolves it */
-  timer: NodeJS.Timeout;
-}
-
-export interface BridgePairRequest {
-  pairingId: string;
-  code: string;
-  name: string;
-}
 
 export interface BridgeStatus {
   running: boolean;
   port: number | null;
-  pairedCount: number;
 }
 
 let server: http.Server | null = null;
 let listeningPort: number | null = null;
-const pendingPairings = new Map<string, PendingPairing>();
 
-let onPairRequest: ((req: BridgePairRequest) => void) | null = null;
 let onMutation: ((channel: string) => void) | null = null;
-
-export function setPairRequestHandler(cb: (req: BridgePairRequest) => void): void {
-  onPairRequest = cb;
-}
 
 /** Fires when the bridge mutates renderer-visible state (e.g. the extension
  *  creates a variant group). Wire this to your renderer broadcast so the
@@ -110,51 +72,20 @@ export function getStatus(): BridgeStatus {
   return {
     running: !!server,
     port: listeningPort,
-    pairedCount: loadTokens().length,
   };
-}
-
-export function listPairedClients(): Array<Omit<PairedClient, 'tokenHash'>> {
-  return loadTokens().map(({ tokenHash: _hash, ...rest }) => rest);
-}
-
-export function revokePairedClient(id: string): void {
-  const tokens = loadTokens().filter((t) => t.id !== id);
-  metaSetJson(TOKENS_META_KEY, tokens);
-}
-
-export function resolvePairing(pairingId: string, accept: boolean): boolean {
-  const pending = pendingPairings.get(pairingId);
-  if (!pending) return false;
-  clearTimeout(pending.timer);
-  if (!accept) {
-    pending.status = 'rejected';
-    // Keep around briefly so the polling extension sees the rejection.
-    setTimeout(() => pendingPairings.delete(pairingId), 5_000);
-    return true;
-  }
-  const token = generateToken();
-  const id = crypto.randomUUID();
-  const now = Date.now();
-  const tokens = loadTokens();
-  tokens.push({
-    id,
-    tokenHash: hashToken(token),
-    name: pending.name,
-    createdAt: now,
-    lastSeenAt: now,
-  });
-  metaSetJson(TOKENS_META_KEY, tokens);
-  pending.status = 'accepted';
-  pending.token = token;
-  setTimeout(() => pendingPairings.delete(pairingId), 30_000);
-  return true;
 }
 
 // --- server lifecycle ----------------------------------------------------
 
 export async function startBridgeServer(): Promise<void> {
   if (server) return;
+  // Clear any stale paired-client tokens left over from the previous
+  // pairing-based bridge implementation.
+  try {
+    metaSetJson(TOKENS_META_KEY, []);
+  } catch {
+    // Non-fatal — the table just won't be cleared this run.
+  }
   for (let port = PORT_RANGE_START; port <= PORT_RANGE_END; port++) {
     try {
       await tryListen(port);
@@ -206,8 +137,6 @@ export function stopBridgeServer(): Promise<void> {
     const s = server;
     server = null;
     listeningPort = null;
-    for (const p of pendingPairings.values()) clearTimeout(p.timer);
-    pendingPairings.clear();
     s.close(() => resolve());
   });
 }
@@ -237,38 +166,38 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
       return;
     }
 
-    if (req.method === 'POST' && path === '/pair') {
-      void handlePairCreate(req, res);
-      return;
-    }
-
-    const pairStatusMatch = path.match(/^\/pair\/([\w-]+)\/status$/);
-    if (req.method === 'GET' && pairStatusMatch) {
-      handlePairStatus(res, pairStatusMatch[1]!);
-      return;
-    }
-
-    // Everything else needs auth.
-    const authedClient = authenticate(req);
-    if (!authedClient) {
-      respondJson(res, 401, { error: 'unauthorized' });
-      return;
-    }
-    touchClient(authedClient.id);
-
-    if (req.method === 'GET' && path === '/me') {
-      respondJson(res, 200, { id: authedClient.id, name: authedClient.name });
-      return;
-    }
-
     if (req.method === 'GET' && path === '/leads/categories') {
       respondJson(res, 200, listCategories());
       return;
     }
 
+    if (req.method === 'POST' && path === '/leads/categories') {
+      void handleCategoryCreate(req, res);
+      return;
+    }
+
     const catMatch = path.match(/^\/leads\/categories\/([\w-]+)$/);
-    if (req.method === 'GET' && catMatch) {
-      handleCategoryLeads(res, catMatch[1]!);
+    if (catMatch) {
+      const id = catMatch[1]!;
+      if (req.method === 'GET') {
+        handleCategoryLeads(res, id);
+        return;
+      }
+      if (req.method === 'PUT') {
+        void handleCategoryRename(req, res, id);
+        return;
+      }
+      if (req.method === 'DELETE') {
+        deleteCategory(id);
+        notifyMutation('categories:changed');
+        respondJson(res, 200, { ok: true });
+        return;
+      }
+    }
+
+    const catLeadsMatch = path.match(/^\/leads\/categories\/([\w-]+)\/leads$/);
+    if (req.method === 'POST' && catLeadsMatch) {
+      void handleCategoryLeadsAdd(req, res, catLeadsMatch[1]!);
       return;
     }
 
@@ -295,6 +224,47 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
 
     if (req.method === 'POST' && path === '/variants') {
       void handleVariantCreate(req, res);
+      return;
+    }
+
+    if (req.method === 'GET' && path === '/dm/results') {
+      respondJson(res, 200, listMassDmResults());
+      return;
+    }
+
+    const dmJobMatch = path.match(/^\/dm\/results\/([\w-]+)$/);
+    if (req.method === 'GET' && dmJobMatch) {
+      const result = getMassDmResult(dmJobMatch[1]!);
+      if (!result) {
+        respondJson(res, 404, { error: 'not_found' });
+        return;
+      }
+      respondJson(res, 200, result);
+      return;
+    }
+
+    const dmSendsMatch = path.match(/^\/dm\/results\/([\w-]+)\/sends$/);
+    if (req.method === 'GET' && dmSendsMatch) {
+      respondJson(res, 200, listMassDmSends(dmSendsMatch[1]!));
+      return;
+    }
+
+    if (req.method === 'GET' && path === '/jobs/active') {
+      respondJson(res, 200, listActiveJobs());
+      return;
+    }
+
+    const cancelMatch = path.match(/^\/jobs\/([\w-]+)\/cancel$/);
+    if (req.method === 'POST' && cancelMatch) {
+      try {
+        cancelJob(cancelMatch[1]!);
+        notifyMutation('jobs:changed');
+        respondJson(res, 200, { ok: true });
+      } catch (err) {
+        respondJson(res, 400, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
       return;
     }
 
@@ -329,67 +299,6 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     console.warn('[bridge] handler error', err);
     respondJson(res, 500, { error: msg });
   }
-}
-
-function handlePairStatus(res: http.ServerResponse, pairingId: string): void {
-  const pending = pendingPairings.get(pairingId);
-  if (!pending) {
-    respondJson(res, 410, { status: 'expired' });
-    return;
-  }
-  if (pending.status === 'pending') {
-    respondJson(res, 200, { status: 'pending' });
-    return;
-  }
-  if (pending.status === 'rejected') {
-    respondJson(res, 200, { status: 'rejected' });
-    return;
-  }
-  respondJson(res, 200, { status: 'accepted', token: pending.token });
-}
-
-async function handlePairCreate(
-  req: http.IncomingMessage,
-  res: http.ServerResponse
-): Promise<void> {
-  const body = await readBody(req);
-  let parsed: { name?: string } = {};
-  try {
-    parsed = body ? (JSON.parse(body) as { name?: string }) : {};
-  } catch {
-    respondJson(res, 400, { error: 'invalid_json' });
-    return;
-  }
-  const name = (parsed.name ?? '').toString().slice(0, 80) || 'Chrome extension';
-  const pairingId = crypto.randomUUID();
-  const code = generatePairingCode();
-  const timer = setTimeout(() => {
-    const p = pendingPairings.get(pairingId);
-    if (p && p.status === 'pending') {
-      p.status = 'rejected';
-      setTimeout(() => pendingPairings.delete(pairingId), 5_000);
-    }
-  }, PAIRING_TTL_MS);
-  const pending: PendingPairing = {
-    pairingId,
-    code,
-    name,
-    createdAt: Date.now(),
-    status: 'pending',
-    timer,
-  };
-  pendingPairings.set(pairingId, pending);
-
-  if (onPairRequest) {
-    try {
-      onPairRequest({ pairingId, code, name });
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn('[bridge] pair request handler threw', err);
-    }
-  }
-
-  respondJson(res, 200, { pairingId, code });
 }
 
 async function handleVariantCreate(
@@ -449,16 +358,88 @@ async function readJsonBody<T>(
 }
 
 function handleCategoryLeads(res: http.ServerResponse, categoryId: string): void {
-  // listLeads streams directly; the bridge consumer doesn't need the rich
-  // LeadPublic shape, just a flat username list. We re-shape here so the
-  // wire payload is small and the extension doesn't have to know about
-  // source_kind / source_detail.
+  // Returns the full LeadPublic shape — the extension mirrors source
+  // metadata to render the same CategoryLeadsDetail UI as the desktop.
   const rows = listLeads({ categoryId, limit: 5000, offset: 0 });
-  respondJson(
-    res,
-    200,
-    rows.map((r) => ({ username: r.username, displayName: r.username }))
-  );
+  respondJson(res, 200, rows);
+}
+
+async function handleCategoryCreate(
+  req: http.IncomingMessage,
+  res: http.ServerResponse
+): Promise<void> {
+  const parsed = await readJsonBody<{ name?: string }>(req, res);
+  if (!parsed) return;
+  try {
+    const cat = createCategory(String(parsed.name ?? ''));
+    notifyMutation('categories:changed');
+    respondJson(res, 200, cat);
+  } catch (err) {
+    respondJson(res, 400, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+async function handleCategoryLeadsAdd(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  categoryId: string
+): Promise<void> {
+  const parsed = await readJsonBody<{
+    usernames?: string[];
+    sourceKind?: string;
+    sourceDetail?: string;
+  }>(req, res);
+  if (!parsed) return;
+  if (!getCategory(categoryId)) {
+    respondJson(res, 404, { error: 'not_found' });
+    return;
+  }
+  const usernames = Array.isArray(parsed.usernames) ? parsed.usernames : [];
+  if (usernames.length === 0) {
+    respondJson(res, 400, { error: 'no_usernames' });
+    return;
+  }
+  try {
+    const added = ingestLeads(
+      categoryId,
+      String(parsed.sourceKind ?? 'manual'),
+      null,
+      usernames.map((u) => ({
+        username: u,
+        sourceDetail: parsed.sourceDetail ?? 'manual',
+      }))
+    );
+    notifyMutation('categories:changed');
+    respondJson(res, 200, { added });
+  } catch (err) {
+    respondJson(res, 400, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+async function handleCategoryRename(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  id: string
+): Promise<void> {
+  const parsed = await readJsonBody<{ name?: string }>(req, res);
+  if (!parsed) return;
+  if (!getCategory(id)) {
+    respondJson(res, 404, { error: 'not_found' });
+    return;
+  }
+  try {
+    const cat = renameCategory(id, String(parsed.name ?? ''));
+    notifyMutation('categories:changed');
+    respondJson(res, 200, cat);
+  } catch (err) {
+    respondJson(res, 400, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 function handleScrapeUsernames(res: http.ServerResponse, jobId: string): void {
@@ -478,9 +459,9 @@ function handleScrapeUsernames(res: http.ServerResponse, jobId: string): void {
 // --- helpers -------------------------------------------------------------
 
 function applyCors(res: http.ServerResponse, origin?: string): void {
-  // Allow chrome-extension://* and localhost dev. We *could* echo any
-  // origin since auth is token-based and we bind to 127.0.0.1, but
-  // narrowing the allowlist gives one more layer of defence-in-depth.
+  // Allow chrome-extension://* and localhost dev. We bind to 127.0.0.1, so
+  // network attackers can't reach us; CORS narrows browser-side access to
+  // the extension and dev origins.
   let allowed = '';
   if (origin) {
     if (origin.startsWith('chrome-extension://')) allowed = origin;
@@ -493,7 +474,7 @@ function applyCors(res: http.ServerResponse, origin?: string): void {
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Max-Age', '600');
 }
 
@@ -519,47 +500,6 @@ function readBody(req: http.IncomingMessage): Promise<string> {
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
-}
-
-function authenticate(req: http.IncomingMessage): PairedClient | null {
-  const header = req.headers.authorization ?? '';
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) return null;
-  const token = match[1]!.trim();
-  if (!token) return null;
-  const hash = hashToken(token);
-  const tokens = loadTokens();
-  const found = tokens.find((t) => t.tokenHash === hash);
-  return found ?? null;
-}
-
-function loadTokens(): PairedClient[] {
-  const raw = metaGetJson<PairedClient[]>(TOKENS_META_KEY);
-  return Array.isArray(raw) ? raw : [];
-}
-
-function touchClient(id: string): void {
-  const tokens = loadTokens();
-  const idx = tokens.findIndex((t) => t.id === id);
-  if (idx === -1) return;
-  tokens[idx]!.lastSeenAt = Date.now();
-  metaSetJson(TOKENS_META_KEY, tokens);
-}
-
-function generateToken(): string {
-  return crypto.randomBytes(32).toString('hex');
-}
-
-function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
-
-function generatePairingCode(): string {
-  let code = '';
-  for (let i = 0; i < PAIRING_CODE_DIGITS; i++) {
-    code += String(Math.floor(Math.random() * 10));
-  }
-  return code;
 }
 
 function isAddressInUseError(err: unknown): boolean {
