@@ -15,7 +15,7 @@ function detectFromBrowser(): Locale {
     const base = (tag || '').toLowerCase().split('-')[0];
     if (SUPPORTED.includes(base as Locale)) return base as Locale;
   }
-  return 'en';
+  return 'es';
 }
 
 function readPreference(): LocalePreference {
@@ -41,7 +41,7 @@ export function initI18n(): void {
       es: { translation: es },
     },
     lng: locale,
-    fallbackLng: 'en',
+    fallbackLng: 'es',
     supportedLngs: SUPPORTED,
     interpolation: { escapeValue: false },
     returnNull: false,

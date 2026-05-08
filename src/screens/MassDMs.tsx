@@ -1383,7 +1383,7 @@ function summariseInteractions(s: InteractionsState, t: TFn): string {
   if (s.follow) parts.push(t('screens.massDms.summaryFollow'));
   if (s.likeCount > 0) parts.push(t('screens.massDms.summaryLike', { count: s.likeCount }));
   if (s.watchStories) parts.push(t('screens.massDms.summaryWatch', { secs: s.storyDwellSec }));
-  return parts.join(' · ');
+  return parts.join(' - ');
 }
 
 function ReviewStep({

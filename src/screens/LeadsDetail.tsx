@@ -74,7 +74,7 @@ export function LeadsDetail() {
         {result ? (
           <div className="flex items-center gap-2 border-l border-border px-3 text-xs text-muted-foreground">
             <ScrapeSummaryOf row={result} className="truncate text-xs text-muted-foreground" />
-            <span className="tabular-nums">· {result.usernameCount}</span>
+            <span className="tabular-nums">- {result.usernameCount}</span>
           </div>
         ) : null}
       </div>

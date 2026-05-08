@@ -87,7 +87,7 @@ function AccountRow({
                   !account.proxyEnabled && 'line-through'
                 )}
               >
-                · {account.proxyUsername}
+                - {account.proxyUsername}
               </span>
             ) : null}
             {!account.proxyEnabled ? (

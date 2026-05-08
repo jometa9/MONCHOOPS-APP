@@ -87,7 +87,7 @@ export async function readLocationName(page: Page): Promise<string | null> {
       const txt = h1?.textContent?.trim() || '';
       if (txt) return txt;
       const title = document.title || '';
-      const m = title.match(/^([^|·(]+)/);
+      const m = title.match(/^([^|-(]+)/);
       return m ? m[1].trim() : null;
     })) as string | null;
   } catch {

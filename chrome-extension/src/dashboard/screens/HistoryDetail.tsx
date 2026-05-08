@@ -150,7 +150,7 @@ export function HistoryDetail() {
                 sent: meta.sentCount,
                 failed: meta.failedCount,
               }) +
-              (meta.completedAt ? ' · ' + formatDateTime(meta.completedAt) : '')
+              (meta.completedAt ? ' - ' + formatDateTime(meta.completedAt) : '')
             : ' '
         }
         actions={

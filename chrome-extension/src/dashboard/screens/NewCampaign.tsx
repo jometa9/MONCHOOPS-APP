@@ -80,7 +80,7 @@ function summariseInteractions(s: InteractionsState, t: TFunction): string {
   if (s.follow) parts.push(t('screens.newCampaign.summaryFollow'));
   if (s.likeCount > 0) parts.push(t('screens.newCampaign.summaryLikePostsPlural', { count: s.likeCount }));
   if (s.watchStories) parts.push(t('screens.newCampaign.summaryWatchStories', { seconds: s.storyDwellSec }));
-  return parts.join(' · ');
+  return parts.join(' - ');
 }
 
 function autoCampaignName(t: TFunction): string {

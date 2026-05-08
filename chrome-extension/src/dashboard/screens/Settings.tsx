@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ExternalLink, Instagram, Languages, LogOut, MonitorSmartphone } from 'lucide-react';
 import { ScreenHeader } from '../components/ScreenHeader';
+import { Select } from '../components/Select';
 import { getSession, logout } from '@/shared/license';
 import { db } from '@/shared/db';
 import { discoverDesktop, type DesktopPing } from '@/shared/desktop-bridge';
@@ -94,15 +95,17 @@ export function Settings() {
                   {t('settings.languageHint')}
                 </p>
                 <div className="mt-3">
-                  <select
+                  <Select<LocalePreference>
                     value={locale}
-                    onChange={(e) => void handleLocaleChange(e.target.value as LocalePreference)}
-                    className="h-9 w-full border border-border bg-background px-2 text-xs outline-none focus:border-foreground"
-                  >
-                    <option value="system">{t('settings.languageSystem')}</option>
-                    <option value="en">{t('settings.languageEnglish')}</option>
-                    <option value="es">{t('settings.languageSpanish')}</option>
-                  </select>
+                    onChange={(v) => void handleLocaleChange(v)}
+                    ariaLabel={t('settings.language')}
+                    fullWidth
+                    options={[
+                      { value: 'system', label: t('settings.languageSystem') },
+                      { value: 'en', label: t('settings.languageEnglish') },
+                      { value: 'es', label: t('settings.languageSpanish') },
+                    ]}
+                  />
                 </div>
               </div>
             </div>

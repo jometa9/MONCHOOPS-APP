@@ -74,7 +74,7 @@ export function CategoryLeadsDetail() {
         {category ? (
           <div className="flex items-center gap-2 border-l border-border px-3 text-xs text-muted-foreground">
             <span className="truncate">{category.name}</span>
-            <span className="tabular-nums">· {leads.length}</span>
+            <span className="tabular-nums">- {leads.length}</span>
           </div>
         ) : null}
       </div>

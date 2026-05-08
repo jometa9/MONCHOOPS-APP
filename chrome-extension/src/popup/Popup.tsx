@@ -153,7 +153,7 @@ function ConnectedPanel({
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold">{session.profile?.name || 'MonchoOps'}</h1>
           <p className="truncate text-[11px] text-muted-foreground">
-            {session.profile?.email ?? ''} · {session.subscription?.plan ?? 'free'}
+            {session.profile?.email ?? ''} - {session.subscription?.plan ?? 'free'}
           </p>
         </div>
         <button

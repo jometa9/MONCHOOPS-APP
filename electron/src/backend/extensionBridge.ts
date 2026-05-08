@@ -1,6 +1,7 @@
 
 
 import http from 'node:http';
+import { app } from 'electron';
 import { metaSetJson } from './db';
 import {
   createCategory,
@@ -144,7 +145,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
       respondJson(res, 200, {
         ok: true,
         productName: BUILD_CONFIG.PRODUCT_NAME,
-        version: BUILD_CONFIG.APP_VERSION,
+        version: app.getVersion(),
       });
       return;
     }

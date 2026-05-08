@@ -85,12 +85,12 @@ export function ColdDmHistoryDetail() {
               </span>
             ) : null}
             <span className="tabular-nums">
-              {`· ${result.sentCount} ${t('screens.coldDmHistoryDetail.sentSuffix')}`}
+              {`- ${result.sentCount} ${t('screens.coldDmHistoryDetail.sentSuffix')}`}
               {result.failedCount > 0
-                ? ` · ${result.failedCount} ${t('screens.coldDmHistoryDetail.failedSuffix')}`
+                ? ` - ${result.failedCount} ${t('screens.coldDmHistoryDetail.failedSuffix')}`
                 : ''}
             </span>
-            <span className="tabular-nums">· {formatDateTime(result.completedAt)}</span>
+            <span className="tabular-nums">- {formatDateTime(result.completedAt)}</span>
           </div>
         ) : null}
       </div>

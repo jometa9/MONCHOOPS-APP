@@ -802,6 +802,9 @@ function spawnScrapeWorker(
 }
 
 function hasPendingJobForAccount(accountId: string): boolean {
+  for (const meta of runningMeta.values()) {
+    if (meta.accountId === accountId) return true;
+  }
   const row = getDb()
     .prepare<[string], { c: number }>(
       `SELECT COUNT(*) AS c FROM jobs
@@ -870,6 +873,9 @@ export function cancelJob(jobId: string): void {
   }
   if (cancellingJobs.has(jobId)) return;
   cancellingJobs.add(jobId);
+
+  finaliseJob(jobId, 'cancelled');
+  emit({ type: 'jobs:changed' });
 
   try { child.send({ type: 'cancel' } as any); } catch {}
 

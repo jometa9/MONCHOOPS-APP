@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader, RefreshCw, Trash2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { Select } from '@/components/ui/select';
 import { useSession } from '@/context/SessionContext';
 import { useTheme } from '@/context/ThemeContext';
 import { usePreferences } from '@/context/PreferencesContext';
@@ -162,15 +163,16 @@ export function Settings() {
             <SectionHeader title={t('settings.languageSection')} />
             <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
               <span className="text-foreground">{t('settings.language')}</span>
-              <select
+              <Select<LocalePreference>
                 value={locale}
-                onChange={(e) => handleLocaleChange(e.target.value as LocalePreference)}
-                className="h-8 border border-border bg-background px-2 text-xs outline-none focus:border-foreground"
-              >
-                <option value="system">{t('settings.languageSystem')}</option>
-                <option value="en">{t('settings.languageEnglish')}</option>
-                <option value="es">{t('settings.languageSpanish')}</option>
-              </select>
+                onChange={handleLocaleChange}
+                ariaLabel={t('settings.language')}
+                options={[
+                  { value: 'system', label: t('settings.languageSystem') },
+                  { value: 'en', label: t('settings.languageEnglish') },
+                  { value: 'es', label: t('settings.languageSpanish') },
+                ]}
+              />
             </div>
             <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
               {t('settings.languageHint')}
