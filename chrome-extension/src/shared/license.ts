@@ -8,8 +8,6 @@ const STORAGE_KEY_LICENSE = 'b2dm_license_key';
 const STORAGE_KEY_PROFILE = 'b2dm_profile';
 const STORAGE_KEY_SUB = 'b2dm_subscription';
 
-const MOCK_LICENSE_KEY = '123';
-
 interface ExternalLicenseResponse {
   email?: string;
   name?: string;
@@ -54,15 +52,6 @@ export async function getSession(): Promise<Session> {
 export async function validateLicense(licenseKey: string): Promise<Session> {
   const trimmed = licenseKey.trim();
   if (!trimmed) throw new Error('License key is required');
-
-  if (trimmed === MOCK_LICENSE_KEY) {
-    const profile: Profile = { email: 'mock@b2dm.app', name: 'Mock User' };
-    const subscription: Subscription = { plan: 'pro', active: true, version: '0.0.0-mock' };
-    await storageSet(STORAGE_KEY_LICENSE, trimmed);
-    await storageSet(STORAGE_KEY_PROFILE, profile);
-    await storageSet(STORAGE_KEY_SUB, subscription);
-    return { hasLicense: true, licenseKey: trimmed, profile, subscription };
-  }
 
   const url = new URL('/api/validate-subscription', LICENSE_API_BASE);
   url.searchParams.set('apiKey', trimmed);

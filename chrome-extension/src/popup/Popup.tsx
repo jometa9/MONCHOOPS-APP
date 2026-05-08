@@ -65,10 +65,6 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
     }
   }
 
-  function fillTest() {
-    setKey('123');
-  }
-
   return (
     <div className="relative isolate flex h-[440px] flex-col">
       <HomeBg />
@@ -102,14 +98,6 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
           className="inline-flex h-9 w-full items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
         >
           {submitting ? t('popup.loggingIn') : t('popup.continue')}
-        </button>
-        <button
-          type="button"
-          onClick={fillTest}
-          disabled={submitting}
-          className="inline-flex h-9 w-full items-center justify-center border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
-        >
-          {t('popup.useTestLicense')}
         </button>
       </form>
 

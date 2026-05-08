@@ -44,6 +44,38 @@ async function dismissByTitles(page: Page, titles: string[]): Promise<boolean> {
   return false;
 }
 
+const VIEW_AS_TITLES = ['view as ', 'ver como ', 'ver historia como '];
+const VIEW_STORY_LABELS = ['View story', 'Ver historia', 'Ver story'];
+
+export async function confirmViewStoryPrompt(page: Page): Promise<boolean> {
+  try {
+    const dialog = page.locator('div[role="dialog"]').first();
+    const visible = await dialog.isVisible({ timeout: 250 }).catch(() => false);
+    if (!visible) return false;
+
+    const text = ((await dialog.innerText({ timeout: 500 }).catch(() => '')) || '').toLowerCase();
+    if (!VIEW_AS_TITLES.some((t) => text.includes(t))) return false;
+
+    for (const label of VIEW_STORY_LABELS) {
+      const btn = dialog
+        .locator(`button:has-text("${label}"), div[role="button"]:has-text("${label}")`)
+        .first();
+      const btnVisible = await btn.isVisible({ timeout: 250 }).catch(() => false);
+      if (!btnVisible) continue;
+      try {
+        await btn.click({ timeout: 1500 });
+        await waitFor(500);
+        return true;
+      } catch {
+
+      }
+    }
+  } catch {
+
+  }
+  return false;
+}
+
 export async function dismissNotificationsPrompt(page: Page): Promise<boolean> {
   try {
     return await dismissByTitles(page, NOTIFICATIONS_TITLES);

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -31,6 +31,7 @@ import { uuid } from '@/shared/format';
 import { cn } from '@/shared/cn';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { enqueuePush, runSync } from '@/shared/sync';
+import { isDesktopReachable } from '@/shared/desktop-bridge';
 import type {
   Campaign,
   CampaignSource,
@@ -124,6 +125,24 @@ export function NewCampaign() {
   const [saveAsGroup, setSaveAsGroup] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [variantsLoading, setVariantsLoading] = useState(false);
+  const [desktopConnected, setDesktopConnected] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void isDesktopReachable().then((ok) => {
+      if (!cancelled) setDesktopConnected(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
+
+  useEffect(() => {
+    if (!desktopConnected && saveAsGroup) {
+      setSaveAsGroup(false);
+      setGroupName('');
+    }
+  }, [desktopConnected, saveAsGroup]);
 
   const cleanedVariants = useMemo(
     () => variants.map((v) => v.trim()).filter(Boolean),
@@ -300,6 +319,7 @@ export function NewCampaign() {
                 onToggleSaveAsGroup={setSaveAsGroup}
                 groupName={groupName}
                 onGroupNameChange={setGroupName}
+                desktopConnected={desktopConnected}
               />
             ) : null}
 
@@ -709,6 +729,7 @@ function MessageStep({
   onToggleSaveAsGroup,
   groupName,
   onGroupNameChange,
+  desktopConnected,
 }: {
   variants: string[];
   onVariantsChange: (v: string[]) => void;
@@ -721,6 +742,7 @@ function MessageStep({
   onToggleSaveAsGroup: (v: boolean) => void;
   groupName: string;
   onGroupNameChange: (v: string) => void;
+  desktopConnected: boolean;
 }) {
   const { t } = useTranslation();
   const MESSAGE_TABS: { id: MessageTab; label: string; icon: typeof Pencil }[] = useMemo(
@@ -801,32 +823,30 @@ function MessageStep({
         </div>
       </div>
 
-      <div className="border border-border bg-background">
-        <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          {t('screens.newCampaign.saveVariantsTitle')}
+      {desktopConnected ? (
+        <div className="border border-border bg-background">
+          <div className="border-b border-border bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t('screens.newCampaign.saveVariantsTitle')}
+          </div>
+          <div className="space-y-2 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                <Save className="h-3.5 w-3.5 text-muted-foreground" />
+                {t('screens.newCampaign.saveAsGroup')}
+              </span>
+              <Switch checked={saveAsGroup} onChange={onToggleSaveAsGroup} />
+            </div>
+            {saveAsGroup ? (
+              <input
+                value={groupName}
+                onChange={(e) => onGroupNameChange(e.target.value)}
+                placeholder={t('screens.newCampaign.groupNamePlaceholder')}
+                className="h-9 w-full border border-border bg-background px-3 text-sm outline-none focus:border-foreground"
+              />
+            ) : null}
+          </div>
         </div>
-        <div className="space-y-2 p-3">
-          <label className="inline-flex cursor-pointer items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={saveAsGroup}
-              onChange={(e) => onToggleSaveAsGroup(e.target.checked)}
-            />
-            <span className="inline-flex items-center gap-1">
-              <Save className="h-3 w-3" />
-              {t('screens.newCampaign.saveAsGroup')}
-            </span>
-          </label>
-          {saveAsGroup ? (
-            <input
-              value={groupName}
-              onChange={(e) => onGroupNameChange(e.target.value)}
-              placeholder={t('screens.newCampaign.groupNamePlaceholder')}
-              className="h-9 w-full border border-border bg-background px-3 text-sm outline-none focus:border-foreground"
-            />
-          ) : null}
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 }

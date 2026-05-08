@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ListTodo, Loader2, MessageSquare, Pause, Play, RefreshCw, X } from 'lucide-react';
@@ -46,6 +46,7 @@ export function Queue() {
   const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const campaigns = useLiveQuery(
     () =>
@@ -92,6 +93,22 @@ export function Queue() {
     return [...running, ...queued];
   }, [campaigns, desktopJobs, t]);
 
+  useEffect(() => {
+    if (cancellingIds.size === 0) return;
+    const desktopIds = new Set((desktopJobs ?? []).map((j) => j.id));
+    setCancellingIds((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of prev) {
+        if (!desktopIds.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [desktopJobs, cancellingIds.size]);
+
   async function refresh() {
     setRefreshing(true);
     try {
@@ -103,17 +120,22 @@ export function Queue() {
 
   async function cancelRow(row: QueueRow) {
     setCancellingIds((prev) => new Set(prev).add(row.id));
+    setCancelError(null);
     try {
       if (row.source === 'desktop') {
         await cancelDesktopJob(row.id);
         await runSync();
       } else {
-
         await db.campaigns.update(row.id, { status: 'paused' });
+        setCancellingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(row.id);
+          return next;
+        });
       }
     } catch (err) {
       console.warn('Cancel failed', err);
-    } finally {
+      setCancelError(err instanceof Error ? err.message : String(err));
       setCancellingIds((prev) => {
         const next = new Set(prev);
         next.delete(row.id);
@@ -141,6 +163,22 @@ export function Queue() {
           </button>
         }
       />
+
+      {cancelError ? (
+        <div className="flex items-start justify-between gap-3 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-800">
+          <span className="break-words">
+            <strong className="font-medium">Cancel failed:</strong> {cancelError}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCancelError(null)}
+            className="shrink-0 text-red-600 hover:text-red-900"
+            aria-label="Dismiss"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : null}
 
       {rows.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">

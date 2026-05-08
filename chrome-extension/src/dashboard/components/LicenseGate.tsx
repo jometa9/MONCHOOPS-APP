@@ -63,14 +63,6 @@ export function LicenseGate({ onLogin }: Props) {
           >
             {submitting ? t('popup.loggingIn') : t('popup.continue')}
           </button>
-          <button
-            type="button"
-            onClick={() => setKey('123')}
-            disabled={submitting}
-            className="inline-flex h-9 w-full items-center justify-center border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent"
-          >
-            {t('popup.useTestLicenseShort')}
-          </button>
         </form>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">

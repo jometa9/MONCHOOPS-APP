@@ -253,6 +253,25 @@ export function clickFollowButton(): boolean {
   return false;
 }
 
+export function confirmViewStoryIfPrompted(): boolean {
+  const TITLE_HINTS = ['view as ', 'ver como ', 'ver historia como '];
+  const CONFIRM_LABELS = ['view story', 'ver historia', 'ver story'];
+  const dialogs = Array.from(document.querySelectorAll<HTMLElement>('div[role="dialog"]'));
+  for (const d of dialogs) {
+    const text = (d.textContent ?? '').toLowerCase();
+    if (!TITLE_HINTS.some((h) => text.includes(h))) continue;
+    const buttons = Array.from(d.querySelectorAll<HTMLElement>('button, [role="button"]'));
+    for (const b of buttons) {
+      const label = (b.textContent ?? '').trim().toLowerCase();
+      if (CONFIRM_LABELS.some((l) => label === l || label.startsWith(l))) {
+        b.click();
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function confirmFollowAnywayIfPrompted(): boolean {
   const TITLE_HINTS = [
     'do you know this person',

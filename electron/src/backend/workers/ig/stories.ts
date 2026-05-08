@@ -1,6 +1,7 @@
 
 
 import { jitter, safeGoto, waitFor } from '../lib';
+import { confirmViewStoryPrompt } from './dialogs';
 
 type Page = any;
 
@@ -45,6 +46,11 @@ export async function viewUserStories(
     return { watched: 0, totalDwellMs: 0, hadStories: false };
   }
 
+  for (let i = 0; i < 4; i++) {
+    if (!(await confirmViewStoryPrompt(page))) break;
+    await waitFor(500);
+  }
+
   const startedAt = Date.now();
   const deadline =
     typeof opts.totalDurationMs === 'number' && opts.totalDurationMs > 0
@@ -72,6 +78,9 @@ export async function viewUserStories(
     }
     await waitFor(300);
     if (!page.url().includes('/stories/')) break;
+    if (await confirmViewStoryPrompt(page)) {
+      await waitFor(500);
+    }
   }
 
   try { await page.keyboard.press('Escape'); } catch {}

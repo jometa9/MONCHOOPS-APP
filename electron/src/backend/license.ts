@@ -76,28 +76,9 @@ export function getSession(): SessionSnapshot {
   };
 }
 
-const MOCK_LICENSE_KEY = '123';
-
-function buildMockSession(): SessionSnapshot {
-  return {
-    hasLicense: true,
-    profile: { email: 'mock@b2dm.app', name: 'Mock User' },
-    subscription: { plan: 'pro', active: true, version: '0.0.0-mock' },
-  };
-}
-
 export async function validateLicense(licenseKey: string): Promise<SessionSnapshot> {
   const trimmed = licenseKey.trim();
   if (!trimmed) throw new Error('License key is required');
-
-  if (trimmed === MOCK_LICENSE_KEY) {
-    const snapshot = buildMockSession();
-    ensureOwnerMatches(snapshot.profile!.email);
-    saveLicenseKey(trimmed);
-    saveProfile(snapshot.profile!);
-    saveSubscription(snapshot.subscription!);
-    return snapshot;
-  }
 
   const url = new URL('/api/validate-subscription', BUILD_CONFIG.LICENSE_API_BASE);
   url.searchParams.set('apiKey', trimmed);

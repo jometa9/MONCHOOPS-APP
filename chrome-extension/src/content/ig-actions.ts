@@ -4,6 +4,7 @@ import {
   clickFollowButton,
   clickLikeButton,
   confirmFollowAnywayIfPrompted,
+  confirmViewStoryIfPrompted,
   detectFollowState as detectFollowStateImpl,
   detectLikeState as detectLikeStateImpl,
   dismissIgPrompts,
@@ -34,6 +35,10 @@ export function isOnStories(): boolean {
 
 export async function dwellOneStoryFrame(dwellMs: number): Promise<{ stillOnStories: boolean }> {
   if (!isOnStories()) return { stillOnStories: false };
+  for (let i = 0; i < 4; i++) {
+    if (!confirmViewStoryIfPrompted()) break;
+    await sleep(500);
+  }
   await sleep(jitter(Math.max(500, dwellMs), 0.3));
   if (!isOnStories()) return { stillOnStories: false };
   const x = window.innerWidth - 100;

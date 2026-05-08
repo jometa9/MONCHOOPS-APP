@@ -391,7 +391,25 @@ async function verifyDelivery(tabId: number, message: string): Promise<boolean> 
   return true;
 }
 
+async function forceInstagramEnglish(): Promise<void> {
+  try {
+    await chrome.cookies.set({
+      url: 'https://www.instagram.com/',
+      domain: '.instagram.com',
+      name: 'ig_lang',
+      value: 'en',
+      path: '/',
+      secure: true,
+      sameSite: 'no_restriction',
+      expirationDate: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365,
+    });
+  } catch (err) {
+    console.warn('[b2dm sw] failed to set ig_lang cookie', err);
+  }
+}
+
 async function ensureIgTab(): Promise<chrome.tabs.Tab> {
+  await forceInstagramEnglish();
   const existing = await chrome.tabs.query({ url: ['https://www.instagram.com/*'] });
   for (const t of existing) {
     if (t.id !== undefined && t.url) {
@@ -411,6 +429,7 @@ async function ensureIgTab(): Promise<chrome.tabs.Tab> {
 
 async function navigateTab(tabId: number, url: string): Promise<void> {
   console.log('[b2dm sw] navigate tab', tabId, 'to', url);
+  await forceInstagramEnglish();
   await chrome.tabs.update(tabId, { url });
   await waitForTabReady(tabId, 30_000);
   await ensureContentScript(tabId);
