@@ -1,6 +1,6 @@
-# B2DM — Chrome extension
+# MonchoOps — Chrome extension
 
-Companion extension to the B2DM desktop app. Schedules cold DMs on the
+Companion extension to the MonchoOps desktop app. Schedules cold DMs on the
 Instagram account already logged into the user's browser. Single-account
 by design — no IG password handling, no proxy rotation, no Chromium
 bundling. Same UX as the desktop app for the Cold DM flow.
@@ -17,7 +17,7 @@ bundling. Same UX as the desktop app for the Cold DM flow.
 
 ## Desktop bridge
 
-If the B2DM desktop app is running on the same machine, the extension
+If the MonchoOps desktop app is running on the same machine, the extension
 talks to it over `127.0.0.1` and can read your saved lead categories
 and past scrape results — no CSV export step.
 
@@ -60,7 +60,7 @@ Then in Chrome:
 1. Open `chrome://extensions`
 2. Enable **Developer mode** (top right)
 3. Click **Load unpacked** and pick `chrome-extension/dist/`
-4. Pin the B2DM icon for quick access
+4. Pin the MonchoOps icon for quick access
 5. Make sure you're logged into <https://www.instagram.com/> in this same Chrome profile
 6. Click the icon → enter license key (or click **Use test license** for `123`)
 7. Click **Open dashboard** to land in the full UI

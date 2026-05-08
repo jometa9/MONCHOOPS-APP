@@ -1,5 +1,5 @@
 {
-  "name": "b2dm-electron",
+  "name": "monchoops-electron",
   "private": true,
   "type": "commonjs",
   "main": "dist/main.js"

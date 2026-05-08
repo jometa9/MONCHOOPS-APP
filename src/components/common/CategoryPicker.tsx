@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Plus, Tag, X } from 'lucide-react';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import { cn } from '@/lib/cn';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -31,14 +31,14 @@ export function CategoryPicker({ value, onChange, disabled }: Props) {
     let cancelled = false;
     async function load() {
       try {
-        const list = await b2dm.categories.list();
+        const list = await monchoops.categories.list();
         if (!cancelled) setCategories(list);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
     void load();
-    const off = b2dm.categories.onChange(() => void load());
+    const off = monchoops.categories.onChange(() => void load());
     return () => {
       cancelled = true;
       off();
@@ -54,7 +54,7 @@ export function CategoryPicker({ value, onChange, disabled }: Props) {
       const existing = categories.find(
         (c) => c.name.toLowerCase() === name.toLowerCase()
       );
-      const cat = existing ?? (await b2dm.categories.create(name));
+      const cat = existing ?? (await monchoops.categories.create(name));
       onChange({ mode: 'existing', categoryId: cat.id });
       setDrafting(false);
       setDraftName('');

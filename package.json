@@ -1,9 +1,9 @@
 {
-  "name": "b2dm-app",
+  "name": "monchoops-app",
   "private": true,
   "version": "0.1.0",
-  "description": "B2DM — Instagram DM automation",
-  "author": "B2DM",
+  "description": "MonchoOps — Instagram DM automation",
+  "author": "MonchoOps",
   "type": "module",
   "main": "electron/dist/main.js",
   "scripts": {
@@ -71,12 +71,12 @@
     "vite-plugin-javascript-obfuscator": "^3.1.0"
   },
   "build": {
-    "appId": "com.b2dm.app",
-    "productName": "B2DM",
+    "appId": "com.monchoops.app",
+    "productName": "MonchoOps",
     "protocols": {
-      "name": "B2DM URL",
+      "name": "MonchoOps URL",
       "schemes": [
-        "b2dm"
+        "monchoops"
       ]
     },
     "directories": {
@@ -118,7 +118,7 @@
           ]
         }
       ],
-      "artifactName": "B2DM-Setup.${ext}",
+      "artifactName": "MonchoOps-Setup.${ext}",
       "icon": "public/icon.png",
       "hardenedRuntime": true,
       "entitlements": "electron/entitlements.mac.plist",
@@ -130,8 +130,8 @@
         }
       ],
       "extendInfo": {
-        "CFBundleDisplayName": "B2DM",
-        "CFBundleName": "B2DM"
+        "CFBundleDisplayName": "MonchoOps",
+        "CFBundleName": "MonchoOps"
       }
     },
     "pkg": {
@@ -153,7 +153,7 @@
           ]
         }
       ],
-      "artifactName": "B2DM.${ext}",
+      "artifactName": "MonchoOps.${ext}",
       "requestedExecutionLevel": "asInvoker",
       "extraResources": [
         {
@@ -171,7 +171,7 @@
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "B2DM",
+      "shortcutName": "MonchoOps",
       "include": "build/installer.nsh",
       "installerIcon": "public/icon.ico",
       "uninstallerIcon": "public/icon.ico",

@@ -25,7 +25,7 @@ import {
 import { useAccounts } from '@/context/AccountsContext';
 import { JobStartedPanel } from '@/components/common/JobStartedPanel';
 import { cn } from '@/lib/cn';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import type { LeadCategoryPublic, ScrapeKind } from '@/types/domain';
 
 type Mode = ScrapeKind;
@@ -145,7 +145,7 @@ export function Scrape() {
       } else if (mode === 'scrape_by_location') {
         params = { ...params, locationUrl, ...targetPayload };
       }
-      const jobId = await b2dm.jobs.startScrape({ accountId, kind: mode, params });
+      const jobId = await monchoops.jobs.startScrape({ accountId, kind: mode, params });
       setWasEnqueued(enqueued);
       setStartedJobId(jobId);
     } catch (err) {
@@ -581,11 +581,11 @@ function CategorySummary({ value }: { value: CategorySelection }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const list = await b2dm.categories.list();
+      const list = await monchoops.categories.list();
       if (!cancelled) setCategories(list);
     })();
-    const off = b2dm.categories.onChange(async () => {
-      const list = await b2dm.categories.list();
+    const off = monchoops.categories.onChange(async () => {
+      const list = await monchoops.categories.list();
       if (!cancelled) setCategories(list);
     });
     return () => {

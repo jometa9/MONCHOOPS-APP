@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Spinner } from '@/components/common/Spinner';
 import { useJobs } from '@/context/JobsContext';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import { cn } from '@/lib/cn';
 import type { JobStatus } from '@/types/domain';
 
@@ -23,7 +23,7 @@ export function JobStartedPanel({ jobId, kind, wasEnqueued, onReset }: JobStarte
   const completed = finalStatus != null;
 
   useEffect(() => {
-    const off = b2dm.jobs.onDone((evt) => {
+    const off = monchoops.jobs.onDone((evt) => {
       if (evt.jobId !== jobId) return;
       setFinalStatus(evt.status as JobStatus);
     });

@@ -16,7 +16,7 @@ import type {
   SyncedVariantGroup,
 } from './types';
 
-class B2dmExtDb extends Dexie {
+class MonchoOpsExtDb extends Dexie {
 
   campaigns!: Table<Campaign, string>;
   leads!: Table<Lead, number>;
@@ -34,7 +34,7 @@ class B2dmExtDb extends Dexie {
   pendingMutations!: Table<PendingMutation, number>;
 
   constructor() {
-    super('b2dm-ext');
+    super('monchoops-ext');
     this.version(1).stores({
       campaigns: 'id, status, createdAt',
       leads: '++id, campaignId, status, [campaignId+status], username',
@@ -80,7 +80,7 @@ class B2dmExtDb extends Dexie {
   }
 }
 
-export const db = new B2dmExtDb();
+export const db = new MonchoOpsExtDb();
 
 export async function metaGet(key: string): Promise<string | null> {
   const row = await db.meta.get(key);

@@ -1,8 +1,8 @@
 {
-  "name": "b2dm-extension",
+  "name": "monchoops-extension",
   "private": true,
   "version": "0.1.0",
-  "description": "B2DM Chrome extension — Cold DM scheduling for the user's logged-in Instagram account",
+  "description": "MonchoOps Chrome extension — Cold DM scheduling for the user's logged-in Instagram account",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",

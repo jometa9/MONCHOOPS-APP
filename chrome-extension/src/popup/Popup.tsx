@@ -103,7 +103,7 @@ function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
 
       <footer className="border-t border-border p-3 text-center">
         <a
-          href="https://b2dm.app"
+          href="https://monchoops.com"
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:underline"

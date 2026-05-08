@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownCircle, Download } from 'lucide-react';
-import { b2dm, type UpdateStatus } from '@/lib/b2dm';
+import { monchoops, type UpdateStatus } from '@/lib/monchoops';
 
 const PREVIEW: UpdateStatus | null = null;
 
@@ -12,10 +12,10 @@ export function UpdateBanner() {
   useEffect(() => {
     if (PREVIEW) return;
     let cancelled = false;
-    void b2dm.updater.getState().then((s) => {
+    void monchoops.updater.getState().then((s) => {
       if (!cancelled) setState(s);
     });
-    const off = b2dm.updater.onStateChange((s) => setState(s));
+    const off = monchoops.updater.onStateChange((s) => setState(s));
     return () => {
       cancelled = true;
       off();
@@ -40,7 +40,7 @@ export function UpdateBanner() {
 
       <button
         type="button"
-        onClick={() => void b2dm.updater.openDownload()}
+        onClick={() => void monchoops.updater.openDownload()}
         className="inline-flex h-9 shrink-0 items-center gap-1.5 bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         <Download className="h-3.5 w-3.5" />

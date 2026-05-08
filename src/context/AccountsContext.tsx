@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import type { AccountPublic } from '@/types/domain';
 
 interface AccountsContextValue {
@@ -19,7 +19,7 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const list = await b2dm.accounts.list();
+      const list = await monchoops.accounts.list();
       setAccounts(list);
     } finally {
       setLoading(false);
@@ -28,7 +28,7 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refresh();
-    const off = b2dm.accounts.onChange(() => {
+    const off = monchoops.accounts.onChange(() => {
       void refresh();
     });
     return () => off();

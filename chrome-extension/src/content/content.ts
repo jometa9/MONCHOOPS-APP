@@ -20,12 +20,12 @@ import {
 } from './ig-actions';
 import { startDismisser } from './ig-dom';
 
-console.log('[b2dm] content script loaded on', location.href);
+console.log('[monchoops] content script loaded on', location.href);
 startDismisser();
 
 chrome.runtime.onMessage.addListener((req: CsRequest, _sender, sendResponse) => {
   if (!req || typeof req !== 'object' || !('type' in req)) return false;
-  if (!req.type.startsWith('b2dm/')) return false;
+  if (!req.type.startsWith('monchoops/')) return false;
 
   (async () => {
     try {
@@ -33,7 +33,7 @@ chrome.runtime.onMessage.addListener((req: CsRequest, _sender, sendResponse) => 
       sendResponse({ ok: true, data } satisfies CsResponse);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      console.warn('[b2dm] primitive failed', req.type, error);
+      console.warn('[monchoops] primitive failed', req.type, error);
       sendResponse({ ok: false, error } satisfies CsResponse);
     }
   })();
@@ -42,38 +42,38 @@ chrome.runtime.onMessage.addListener((req: CsRequest, _sender, sendResponse) => 
 
 async function dispatch(req: CsRequest): Promise<unknown> {
   switch (req.type) {
-    case 'b2dm/ping':
+    case 'monchoops/ping':
       return undefined;
-    case 'b2dm/url':
+    case 'monchoops/url':
       return { url: getUrl() };
-    case 'b2dm/dismissPrompts':
+    case 'monchoops/dismissPrompts':
       dismissPrompts();
       return undefined;
-    case 'b2dm/checkOnStories':
+    case 'monchoops/checkOnStories':
       return { value: isOnStories() };
-    case 'b2dm/dwellStory':
+    case 'monchoops/dwellStory':
       return await dwellOneStoryFrame(req.dwellMs);
-    case 'b2dm/detectFollowState':
+    case 'monchoops/detectFollowState':
       return { state: detectFollowState() };
-    case 'b2dm/clickFollow':
+    case 'monchoops/clickFollow':
       return await clickFollow();
-    case 'b2dm/findPostUrls':
+    case 'monchoops/findPostUrls':
       return { urls: findPostUrls(req.n) };
-    case 'b2dm/detectLikeState':
+    case 'monchoops/detectLikeState':
       return { state: detectLikeState() };
-    case 'b2dm/clickLike':
+    case 'monchoops/clickLike':
       return await clickLike();
-    case 'b2dm/waitForComposer':
+    case 'monchoops/waitForComposer':
       return await waitForComposer(req.timeoutMs ?? 15_000);
-    case 'b2dm/openNewDmDialog':
+    case 'monchoops/openNewDmDialog':
       return await openNewDmDialog();
-    case 'b2dm/pickFirstSearchResult':
+    case 'monchoops/pickFirstSearchResult':
       return await pickFirstSearchResult(req.username);
-    case 'b2dm/typeAndSendDm':
+    case 'monchoops/typeAndSendDm':
       return await typeAndSendDm(req.message);
-    case 'b2dm/threadContains':
+    case 'monchoops/threadContains':
       return { value: threadContains(req.needle) };
-    case 'b2dm/waitForUrlMatch':
+    case 'monchoops/waitForUrlMatch':
       return await waitForUrlMatch(req.pattern, req.timeoutMs ?? 20_000);
     default: {
       const _exhaustive: never = req;

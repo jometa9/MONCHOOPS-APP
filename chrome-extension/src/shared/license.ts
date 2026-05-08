@@ -3,10 +3,10 @@
 import type { Profile, Session, Subscription } from './types';
 import { EMPTY_SESSION } from './types';
 
-const LICENSE_API_BASE = 'https://b2dm.app';
-const STORAGE_KEY_LICENSE = 'b2dm_license_key';
-const STORAGE_KEY_PROFILE = 'b2dm_profile';
-const STORAGE_KEY_SUB = 'b2dm_subscription';
+const LICENSE_API_BASE = 'https://monchoops.com';
+const STORAGE_KEY_LICENSE = 'monchoops_license_key';
+const STORAGE_KEY_PROFILE = 'monchoops_profile';
+const STORAGE_KEY_SUB = 'monchoops_subscription';
 
 interface ExternalLicenseResponse {
   email?: string;

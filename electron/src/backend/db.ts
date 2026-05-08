@@ -8,7 +8,7 @@ let cached: Database | null = null;
 function dbPath(): string {
   const dir = app.getPath('userData');
   fs.mkdirSync(dir, { recursive: true });
-  return path.join(dir, 'b2dm.sqlite');
+  return path.join(dir, 'monchoops.sqlite');
 }
 
 function loadDriver(): typeof import('better-sqlite3') {

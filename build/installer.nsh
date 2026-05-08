@@ -1,5 +1,5 @@
-; Custom NSIS macros for the B2DM installer.
-; Registers b2dm:// protocol so Windows passes deep links to B2DM.exe, and
+; Custom NSIS macros for the MonchoOps installer.
+; Registers monchoops:// protocol so Windows passes deep links to MonchoOps.exe, and
 ; neutralises broken legacy uninstall entries when upgrading over a prior install.
 
 !macro preparePriorInstallForOverwrite
@@ -10,7 +10,7 @@
   ${endif}
   ${if} $R9 != ""
     nsExec::ExecToLog 'cmd.exe /c if exist "$R9" attrib -R -H -S "$R9\*" /S /D'
-    nsExec::ExecToLog 'cmd.exe /c set "B2DM_INST=$R9" && powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "if ($$env:B2DM_INST) { Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -and ($$_.ExecutablePath).StartsWith($$env:B2DM_INST, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue } }"'
+    nsExec::ExecToLog 'cmd.exe /c set "MonchoOps_INST=$R9" && powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "if ($$env:MonchoOps_INST) { Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -and ($$_.ExecutablePath).StartsWith($$env:MonchoOps_INST, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue } }"'
   ${endif}
   nsExec::ExecToLog 'taskkill /IM "${PRODUCT_FILENAME}.exe" /F /T 2>nul'
   nsExec::ExecToLog 'cmd.exe /c ping -n 2 127.0.0.1 >nul'
@@ -54,14 +54,14 @@
 !macroend
 
 !macro customInstall
-  WriteRegStr HKCR "b2dm" "" "URL:b2dm Protocol"
-  WriteRegStr HKCR "b2dm" "URL Protocol" ""
-  WriteRegStr HKCR "b2dm\shell\open\command" "" '"$INSTDIR\${PRODUCT_FILENAME}.exe" "$INSTDIR\${PRODUCT_FILENAME}.exe" "%1"'
+  WriteRegStr HKCR "monchoops" "" "URL:monchoops Protocol"
+  WriteRegStr HKCR "monchoops" "URL Protocol" ""
+  WriteRegStr HKCR "monchoops\shell\open\command" "" '"$INSTDIR\${PRODUCT_FILENAME}.exe" "$INSTDIR\${PRODUCT_FILENAME}.exe" "%1"'
   SetFileAttributes "$INSTDIR\resources" HIDDEN|SYSTEM
   nsExec::ExecToLog '"$SYSDIR\cmd.exe" /c attrib +H +S $\"$INSTDIR\resources$\" /S /D'
 !macroend
 
 !macro customUnInstall
   nsExec::ExecToLog 'cmd.exe /c if exist "$INSTDIR\resources" attrib -H -S "$INSTDIR\resources" /S /D'
-  DeleteRegKey HKCR "b2dm"
+  DeleteRegKey HKCR "monchoops"
 !macroend

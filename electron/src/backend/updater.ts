@@ -118,7 +118,7 @@ async function fetchAppVersion(): Promise<AppVersionResponse> {
     const res = await fetch(url, {
       method: 'GET',
       headers: {
-        'User-Agent': `B2DM/${app.getVersion?.() ?? 'dev'}`,
+        'User-Agent': `MonchoOps/${app.getVersion?.() ?? 'dev'}`,
       },
       signal: controller.signal,
     });

@@ -44,7 +44,7 @@ export default defineManifest({
   host_permissions: [
     'https://www.instagram.com/*',
     'https://ig.me/*',
-    'https://b2dm.app/*',
+    'https://monchoops.com/*',
     'http://127.0.0.1:17775/*',
     'http://127.0.0.1:17776/*',
     'http://127.0.0.1:17777/*',

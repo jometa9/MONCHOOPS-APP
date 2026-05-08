@@ -6,7 +6,7 @@ import { Select } from '@/components/ui/select';
 import { useSession } from '@/context/SessionContext';
 import { useTheme } from '@/context/ThemeContext';
 import { usePreferences } from '@/context/PreferencesContext';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import {
   getLocalePreference,
   setLocalePreference,
@@ -64,7 +64,7 @@ export function Settings() {
 
   useEffect(() => {
     let cancelled = false;
-    void b2dm.settings.getAppVersion().then((v) => {
+    void monchoops.settings.getAppVersion().then((v) => {
       if (!cancelled) setAppVersion(v);
     });
     return () => {
@@ -75,7 +75,7 @@ export function Settings() {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await b2dm.settings.refreshSession();
+      await monchoops.settings.refreshSession();
       await refresh();
     } finally {
       setIsRefreshing(false);
@@ -86,7 +86,7 @@ export function Settings() {
     if (!confirm(t('settings.confirmDeleteAccounts'))) return;
     setIsDeletingAccounts(true);
     try {
-      await b2dm.settings.deleteAllAccounts();
+      await monchoops.settings.deleteAllAccounts();
     } finally {
       setIsDeletingAccounts(false);
     }
@@ -96,7 +96,7 @@ export function Settings() {
     if (!confirm(t('settings.confirmDeleteScrapes'))) return;
     setIsDeletingScrapes(true);
     try {
-      await b2dm.settings.deleteAllScrapes();
+      await monchoops.settings.deleteAllScrapes();
     } finally {
       setIsDeletingScrapes(false);
     }
@@ -108,7 +108,7 @@ export function Settings() {
     }
     setIsWipingAll(true);
     try {
-      await b2dm.settings.wipeAllData();
+      await monchoops.settings.wipeAllData();
 
       try {
         localStorage.clear();

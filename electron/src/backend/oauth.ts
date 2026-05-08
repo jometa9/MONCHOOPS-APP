@@ -8,7 +8,7 @@ export async function handleAuthDeepLink(url: string): Promise<SessionSnapshot |
   } catch {
     return null;
   }
-  if (parsed.protocol !== 'b2dm:') return null;
+  if (parsed.protocol !== 'monchoops:') return null;
   if (parsed.hostname !== 'auth' && parsed.pathname !== '/auth') return null;
 
   const apiKey = parsed.searchParams.get('apiKey') ?? parsed.searchParams.get('token');

@@ -200,7 +200,7 @@ const settingsApi = {
   setFullWindow: (full: boolean) => invoke<void>('settings:setFullWindow', full),
 };
 
-contextBridge.exposeInMainWorld('b2dm', {
+contextBridge.exposeInMainWorld('monchoops', {
   ...platformApi,
   ...sessionApi,
   accounts: accountsApi,

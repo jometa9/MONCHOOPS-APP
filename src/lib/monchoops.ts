@@ -178,7 +178,7 @@ export interface SettingsApi {
   setFullWindow(full: boolean): Promise<void>;
 }
 
-export interface B2dmApi {
+export interface MonchoOpsApi {
 
   getPlatform(): Promise<NodeJS.Platform>;
   getIsFullScreen(): Promise<boolean>;
@@ -214,8 +214,8 @@ export interface B2dmApi {
 
 declare global {
   interface Window {
-    b2dm: B2dmApi;
+    monchoops: MonchoOpsApi;
   }
 }
 
-export const b2dm: B2dmApi = window.b2dm;
+export const monchoops: MonchoOpsApi = window.monchoops;

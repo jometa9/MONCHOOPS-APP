@@ -6,7 +6,7 @@ import es from './locales/es.json';
 export type LocalePreference = 'system' | 'en' | 'es';
 export type Locale = 'en' | 'es';
 
-const STORAGE_KEY = 'b2dm-locale';
+const STORAGE_KEY = 'monchoops-locale';
 const SUPPORTED: Locale[] = ['en', 'es'];
 
 function detectFromBrowser(): Locale {

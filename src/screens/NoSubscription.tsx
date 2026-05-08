@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { useSession } from '@/context/SessionContext';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 
-const BILLING_URL = 'https://b2dm.app/dashboard/billing';
+const BILLING_URL = 'https://monchoops.com/dashboard/billing';
 
 export function NoSubscription() {
   const { t } = useTranslation();
@@ -24,7 +24,7 @@ export function NoSubscription() {
             <button
               type="button"
               onClick={() => {
-                void b2dm.openExternalLink(BILLING_URL);
+                void monchoops.openExternalLink(BILLING_URL);
               }}
               className="inline-flex h-9 w-full items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >

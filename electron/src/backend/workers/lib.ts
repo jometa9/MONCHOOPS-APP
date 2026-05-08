@@ -5,7 +5,7 @@ import path from 'path';
 import type { AccountSecrets, InstagramCookie } from '../accounts';
 
 function resolveChromiumExecutable(): string | undefined {
-  const bundled = process.env.B2DM_CHROMIUM_DIR;
+  const bundled = process.env.MonchoOps_CHROMIUM_DIR;
   if (bundled) {
     const exe = findChromiumIn(bundled);
     if (exe) return exe;
@@ -137,8 +137,8 @@ export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browse
     const msg = err instanceof Error ? err.message : String(err);
     if (/Executable doesn't exist|browserType\.launch/i.test(msg)) {
       throw new Error(
-        process.env.B2DM_CHROMIUM_DIR
-          ? `Bundled Chromium not found under ${process.env.B2DM_CHROMIUM_DIR}. The build is incomplete.`
+        process.env.MonchoOps_CHROMIUM_DIR
+          ? `Bundled Chromium not found under ${process.env.MonchoOps_CHROMIUM_DIR}. The build is incomplete.`
           : 'Chromium for Playwright is missing. Run `npx playwright install chromium` once from the project root.'
       );
     }

@@ -21,22 +21,22 @@ export type IgSendResult =
   | { ok: false; error: string };
 
 export type CsRequest =
-  | { type: 'b2dm/ping' }
-  | { type: 'b2dm/url' }
-  | { type: 'b2dm/dismissPrompts' }
-  | { type: 'b2dm/checkOnStories' }
-  | { type: 'b2dm/dwellStory'; dwellMs: number }
-  | { type: 'b2dm/detectFollowState' }
-  | { type: 'b2dm/clickFollow' }
-  | { type: 'b2dm/findPostUrls'; n: number }
-  | { type: 'b2dm/detectLikeState' }
-  | { type: 'b2dm/clickLike' }
-  | { type: 'b2dm/waitForComposer'; timeoutMs?: number }
-  | { type: 'b2dm/openNewDmDialog' }
-  | { type: 'b2dm/pickFirstSearchResult'; username: string }
-  | { type: 'b2dm/typeAndSendDm'; message: string }
-  | { type: 'b2dm/threadContains'; needle: string }
-  | { type: 'b2dm/waitForUrlMatch'; pattern: string; timeoutMs?: number };
+  | { type: 'monchoops/ping' }
+  | { type: 'monchoops/url' }
+  | { type: 'monchoops/dismissPrompts' }
+  | { type: 'monchoops/checkOnStories' }
+  | { type: 'monchoops/dwellStory'; dwellMs: number }
+  | { type: 'monchoops/detectFollowState' }
+  | { type: 'monchoops/clickFollow' }
+  | { type: 'monchoops/findPostUrls'; n: number }
+  | { type: 'monchoops/detectLikeState' }
+  | { type: 'monchoops/clickLike' }
+  | { type: 'monchoops/waitForComposer'; timeoutMs?: number }
+  | { type: 'monchoops/openNewDmDialog' }
+  | { type: 'monchoops/pickFirstSearchResult'; username: string }
+  | { type: 'monchoops/typeAndSendDm'; message: string }
+  | { type: 'monchoops/threadContains'; needle: string }
+  | { type: 'monchoops/waitForUrlMatch'; pattern: string; timeoutMs?: number };
 
 export type CsResponse =
   | { ok: true; data?: unknown }

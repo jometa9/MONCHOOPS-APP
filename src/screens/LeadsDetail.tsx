@@ -5,7 +5,7 @@ import { ArrowLeft, ExternalLink, Search, Users } from 'lucide-react';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ScrapeSummaryOf } from '@/components/common/ScrapeSummary';
 import { Spinner } from '@/components/common/Spinner';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import type { ScrapeResultPublic, ScrapeUsernameRow } from '@/types/domain';
 
 export function LeadsDetail() {
@@ -20,8 +20,8 @@ export function LeadsDetail() {
     let cancelled = false;
     async function load() {
       const [meta, list] = await Promise.all([
-        b2dm.scrapes.get(jobId),
-        b2dm.scrapes.listUsernames(jobId),
+        monchoops.scrapes.get(jobId),
+        monchoops.scrapes.listUsernames(jobId),
       ]);
       if (cancelled) return;
       setResult(meta);
@@ -103,7 +103,7 @@ export function LeadsDetail() {
           <tbody>
             {filteredRows!.map((row) => {
               const openProfile = () =>
-                void b2dm.openExternalLink(
+                void monchoops.openExternalLink(
                   `https://www.instagram.com/${encodeURIComponent(row.username)}/`
                 );
               return (

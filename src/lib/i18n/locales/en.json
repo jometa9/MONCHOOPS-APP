@@ -60,7 +60,7 @@
     "continue": "Continue",
     "couldNotValidate": "Could not validate license",
     "googleSignIn": "Sign in with Google",
-    "noAccount": "No account? Visit b2dm.app"
+    "noAccount": "No account? Visit monchoops.com"
   },
   "settings": {
     "title": "Settings",
@@ -615,7 +615,7 @@
     },
     "updateBanner": {
       "available": "Update available — v{{version}}",
-      "availableHint": "Click Download to get the latest version from b2dm.app.",
+      "availableHint": "Click Download to get the latest version from monchoops.com.",
       "download": "Download"
     },
     "datePicker": {

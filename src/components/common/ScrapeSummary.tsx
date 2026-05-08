@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import { cn } from '@/lib/cn';
 import type { JobKind, ScrapeResultPublic } from '@/types/domain';
 
@@ -84,7 +84,7 @@ export function ExternalLinkWord({ url, label }: { url: string; label: string })
       type="button"
       onClick={(e) => {
         e.stopPropagation();
-        void b2dm.openExternalLink(url);
+        void monchoops.openExternalLink(url);
       }}
       className="font-medium underline decoration-dotted underline-offset-2"
     >

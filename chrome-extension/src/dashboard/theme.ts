@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
-const STORAGE_KEY = 'b2dm.themeMode';
+const STORAGE_KEY = 'monchoops.themeMode';
 const mql = window.matchMedia('(prefers-color-scheme: dark)');
 
 function resolve(mode: ThemeMode): boolean {

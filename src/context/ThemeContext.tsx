@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 type Theme = 'light' | 'dark' | 'system';
 type ResolvedTheme = 'light' | 'dark';
 
-const STORAGE_KEY = 'b2dm-theme';
+const STORAGE_KEY = 'monchoops-theme';
 
 interface ThemeContextValue {
   theme: Theme;

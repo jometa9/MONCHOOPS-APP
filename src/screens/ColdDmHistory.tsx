@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowRight, Eye, History, Instagram, Search } from 'lucide-react';
 import { EmptyState, EmptyStateLinkButton } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import { formatDateTime } from '@/lib/format';
 import type { MassDmResultPublic } from '@/types/domain';
 
@@ -37,12 +37,12 @@ export function ColdDmHistory() {
     let cancelled = false;
     async function load() {
       try {
-        const list = await b2dm.massDms.list();
+        const list = await monchoops.massDms.list();
         if (!cancelled) setRows(list);
       } catch {}
     }
     void load();
-    const off = b2dm.jobs.onDone(() => void load());
+    const off = monchoops.jobs.onDone(() => void load());
     const timer = setInterval(() => void load(), 5000);
     return () => {
       cancelled = true;

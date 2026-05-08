@@ -10,7 +10,7 @@ interface AfterPackContext {
 }
 
 function applyWindowsIcon(appOutDir: string) {
-  const exePath = path.join(appOutDir, 'B2DM.exe');
+  const exePath = path.join(appOutDir, 'MonchoOps.exe');
   if (!fs.existsSync(exePath)) return;
   const icoPath = path.join(appRoot, 'public', 'icon.ico');
   if (!fs.existsSync(icoPath)) return;

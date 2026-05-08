@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, ExternalLink, Instagram, MessageCircle, Search, Send } from 'lucide-react';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import { formatDateTime } from '@/lib/format';
 import type { MassDmResultPublic, MassDmSendPublic } from '@/types/domain';
 
@@ -20,8 +20,8 @@ export function ColdDmHistoryDetail() {
     let cancelled = false;
     async function load() {
       const [meta, list] = await Promise.all([
-        b2dm.massDms.get(jobId),
-        b2dm.massDms.listSends(jobId),
+        monchoops.massDms.get(jobId),
+        monchoops.massDms.listSends(jobId),
       ]);
       if (cancelled) return;
       setResult(meta);
@@ -120,11 +120,11 @@ export function ColdDmHistoryDetail() {
             <tbody>
               {filteredRows!.map((row, idx) => {
                 const openProfile = () =>
-                  void b2dm.openExternalLink(
+                  void monchoops.openExternalLink(
                     `https://www.instagram.com/${encodeURIComponent(row.username)}/`
                   );
                 const openChat = () =>
-                  void b2dm.openExternalLink(
+                  void monchoops.openExternalLink(
                     `https://ig.me/m/${encodeURIComponent(row.username)}`
                   );
                 const isFailed = row.status === 'failed';

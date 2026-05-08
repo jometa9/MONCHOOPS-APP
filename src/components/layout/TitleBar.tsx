@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import { cn } from '@/lib/cn';
 
 interface TitleBarProps {
@@ -12,9 +12,9 @@ export function TitleBar({ title = 'MonchoOps', transparent = false }: TitleBarP
   const [fullScreen, setFullScreen] = useState(false);
 
   useEffect(() => {
-    void b2dm.getPlatform().then(setPlatform);
-    void b2dm.getIsFullScreen().then(setFullScreen);
-    const off = b2dm.onFullScreenChange(setFullScreen);
+    void monchoops.getPlatform().then(setPlatform);
+    void monchoops.getIsFullScreen().then(setFullScreen);
+    const off = monchoops.onFullScreenChange(setFullScreen);
     return off;
   }, []);
 

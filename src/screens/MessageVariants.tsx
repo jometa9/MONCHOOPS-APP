@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import { formatDateTime } from '@/lib/format';
 import type { MessageVariantGroupPublic } from '@/types/domain';
 
@@ -32,11 +32,11 @@ export function MessageVariants() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const list = await b2dm.messageVariants.list();
+      const list = await monchoops.messageVariants.list();
       if (!cancelled) setRows(list);
     }
     void load();
-    const off = b2dm.messageVariants.onChange(() => void load());
+    const off = monchoops.messageVariants.onChange(() => void load());
     return () => {
       cancelled = true;
       off();
@@ -205,13 +205,13 @@ function EditGroupDialog({
     setError(null);
     try {
       if (isEdit && group) {
-        await b2dm.messageVariants.update({
+        await monchoops.messageVariants.update({
           id: group.id,
           name: name.trim(),
           variants,
         });
       } else {
-        await b2dm.messageVariants.create({ name: name.trim(), variants });
+        await monchoops.messageVariants.create({ name: name.trim(), variants });
       }
       onClose();
     } catch (err) {
@@ -335,7 +335,7 @@ function ConfirmDeleteGroupDialog({
     setBusy(true);
     setError(null);
     try {
-      await b2dm.messageVariants.delete(group.id);
+      await monchoops.messageVariants.delete(group.id);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('screens.messageVariants.couldNotDelete'));

@@ -8,7 +8,7 @@ import { ScrapeSummary } from '@/components/common/ScrapeSummary';
 import { Spinner } from '@/components/common/Spinner';
 import { useJobs } from '@/context/JobsContext';
 import { useAccounts } from '@/context/AccountsContext';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import type { JobKind, JobPublic, LeadCategoryPublic, ScrapeKind } from '@/types/domain';
 
 const SCRAPE_KINDS: ReadonlyArray<ScrapeKind> = [
@@ -49,11 +49,11 @@ export function Queue() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const list = await b2dm.categories.list();
+      const list = await monchoops.categories.list();
       if (!cancelled) setCategories(list);
     }
     void load();
-    const off = b2dm.categories.onChange(() => void load());
+    const off = monchoops.categories.onChange(() => void load());
     return () => {
       cancelled = true;
       off();
@@ -83,7 +83,7 @@ export function Queue() {
   async function cancel(jobId: string) {
     setCancellingIds((prev) => new Set(prev).add(jobId));
     try {
-      await b2dm.jobs.cancel(jobId);
+      await monchoops.jobs.cancel(jobId);
     } catch {
       setCancellingIds((prev) => {
         const next = new Set(prev);
@@ -186,7 +186,7 @@ function QueueRow({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  void b2dm.openExternalLink(
+                  void monchoops.openExternalLink(
                     `https://www.instagram.com/${encodeURIComponent(accountUsername)}/`
                   );
                 }}

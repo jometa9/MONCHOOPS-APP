@@ -2,8 +2,8 @@
 
 const PORT_RANGE_START = 17775;
 const PORT_RANGE_END = 17780;
-const STORAGE_KEY_PORT = 'b2dm_bridge_port';
-const LEGACY_STORAGE_KEY_TOKEN = 'b2dm_bridge_token';
+const STORAGE_KEY_PORT = 'monchoops_bridge_port';
+const LEGACY_STORAGE_KEY_TOKEN = 'monchoops_bridge_token';
 
 export interface DesktopPing {
   ok: boolean;
@@ -144,7 +144,7 @@ async function tryPing(port: number): Promise<DesktopPing | null> {
     clearTimeout(timer);
     if (!res.ok) return null;
     const body = (await res.json()) as DesktopPing;
-    if (body.productName !== 'B2DM') return null;
+    if (body.productName !== 'MonchoOps') return null;
     return body;
   } catch {
     return null;

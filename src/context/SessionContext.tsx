@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import type { SessionSnapshot } from '@/types/session';
 import { EMPTY_SESSION } from '@/types/session';
 
@@ -20,18 +20,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionSnapshot>(EMPTY_SESSION);
 
   const refresh = useCallback(async () => {
-    const next = await b2dm.getSession();
+    const next = await monchoops.getSession();
     setSession(next);
   }, []);
 
   const validateLicense = useCallback(async (key: string) => {
-    const next = await b2dm.validateLicense(key);
+    const next = await monchoops.validateLicense(key);
     setSession(next);
     return next;
   }, []);
 
   const logout = useCallback(async () => {
-    await b2dm.logout();
+    await monchoops.logout();
     setSession(EMPTY_SESSION);
   }, []);
 
@@ -39,13 +39,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const snapshot = await b2dm.getSession();
+        const snapshot = await monchoops.getSession();
         if (!cancelled) setSession(snapshot);
       } finally {
         if (!cancelled) setStatus('ready');
       }
     })();
-    const off = b2dm.onSessionChange((s) => setSession(s));
+    const off = monchoops.onSessionChange((s) => setSession(s));
     return () => {
       cancelled = true;
       off();

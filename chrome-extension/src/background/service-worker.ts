@@ -14,7 +14,7 @@ import type {
   IgSendResult,
 } from '@/shared/messages';
 
-const TICK_ALARM = 'b2dm-tick';
+const TICK_ALARM = 'monchoops-tick';
 const TICK_PERIOD_MIN = 1;
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -34,7 +34,7 @@ async function ensureTick(): Promise<void> {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TICK_ALARM) {
-    void tick().catch((err) => console.error('[b2dm] tick failed', err));
+    void tick().catch((err) => console.error('[monchoops] tick failed', err));
   }
 });
 
@@ -42,7 +42,7 @@ chrome.runtime.onMessage.addListener((req, _sender, sendResponse) => {
   if (!req || typeof req !== 'object' || !('type' in req)) return false;
   const type = (req as { type: string }).type;
 
-  if (type.startsWith('b2dm/')) return false;
+  if (type.startsWith('monchoops/')) return false;
 
   (async () => {
     try {
@@ -141,7 +141,7 @@ async function tick(): Promise<void> {
       try {
         await processOne(campaign, lead);
       } catch (err) {
-        console.error('[b2dm sw] processOne crashed', err);
+        console.error('[monchoops sw] processOne crashed', err);
       }
       await db.campaigns.update(campaign.id, {
         nextRunAt: Date.now() + jitter(campaign.intervalMs),
@@ -181,7 +181,7 @@ async function processOne(campaign: Campaign, lead: Lead): Promise<void> {
 
   const message = pickVariant(campaign.variants).replace(/\{\{username\}\}/g, lead.username);
 
-  console.log('[b2dm sw] processing lead', lead.username, 'in tab', tab.id);
+  console.log('[monchoops sw] processing lead', lead.username, 'in tab', tab.id);
   let result: IgSendResult;
   try {
     if (campaign.interactions) {
@@ -191,7 +191,7 @@ async function processOne(campaign: Campaign, lead: Lead): Promise<void> {
     result = { ok: true, verified };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    console.warn('[b2dm sw] processOne failed for', lead.username, error);
+    console.warn('[monchoops sw] processOne failed for', lead.username, error);
     result = { ok: false, error };
   }
 
@@ -254,7 +254,7 @@ async function runInteractions(
     try {
       await watchStoriesFlow(tabId, username, cfg.storyDwellSec);
     } catch (err) {
-      console.warn('[b2dm sw] watchStories failed for', username, err);
+      console.warn('[monchoops sw] watchStories failed for', username, err);
     }
     await sleep(jitter(1200));
   }
@@ -262,7 +262,7 @@ async function runInteractions(
     try {
       await followUserFlow(tabId, username);
     } catch (err) {
-      console.warn('[b2dm sw] follow failed for', username, err);
+      console.warn('[monchoops sw] follow failed for', username, err);
     }
     await sleep(jitter(1500));
   }
@@ -270,7 +270,7 @@ async function runInteractions(
     try {
       await likeNPostsFlow(tabId, username, cfg.likeCount);
     } catch (err) {
-      console.warn('[b2dm sw] likeNPosts failed for', username, err);
+      console.warn('[monchoops sw] likeNPosts failed for', username, err);
     }
     await sleep(jitter(1500));
   }
@@ -279,11 +279,11 @@ async function runInteractions(
 async function watchStoriesFlow(tabId: number, username: string, dwellSec: number): Promise<void> {
   await navigateTab(tabId, `https://www.instagram.com/stories/${encodeURIComponent(username)}/`);
 
-  const onStories = await rpc<CsBoolData>(tabId, { type: 'b2dm/checkOnStories' });
+  const onStories = await rpc<CsBoolData>(tabId, { type: 'monchoops/checkOnStories' });
   if (!onStories.value) return;
   const dwellMs = Math.max(1, dwellSec) * 1000;
   for (let i = 0; i < 5; i++) {
-    const r = await rpc<CsDwellData>(tabId, { type: 'b2dm/dwellStory', dwellMs }).catch(() => null);
+    const r = await rpc<CsDwellData>(tabId, { type: 'monchoops/dwellStory', dwellMs }).catch(() => null);
     if (!r || !r.stillOnStories) break;
   }
 }
@@ -291,15 +291,15 @@ async function watchStoriesFlow(tabId: number, username: string, dwellSec: numbe
 async function followUserFlow(tabId: number, username: string): Promise<void> {
   await navigateTab(tabId, `https://www.instagram.com/${encodeURIComponent(username)}/`);
   await sleep(jitter(1500));
-  const before = await rpc<CsFollowData>(tabId, { type: 'b2dm/detectFollowState' });
+  const before = await rpc<CsFollowData>(tabId, { type: 'monchoops/detectFollowState' });
   if (before.state === 'following' || before.state === 'requested' || before.state === 'unavailable') {
     return;
   }
-  await rpc(tabId, { type: 'b2dm/clickFollow' });
+  await rpc(tabId, { type: 'monchoops/clickFollow' });
 
   for (let i = 0; i < 6; i++) {
     await sleep(700);
-    const after = await rpc<CsFollowData>(tabId, { type: 'b2dm/detectFollowState' }).catch(() => null);
+    const after = await rpc<CsFollowData>(tabId, { type: 'monchoops/detectFollowState' }).catch(() => null);
     if (!after) return;
     if (after.state === 'following' || after.state === 'requested') return;
   }
@@ -309,13 +309,13 @@ async function likeNPostsFlow(tabId: number, username: string, n: number): Promi
   if (n <= 0) return;
   await navigateTab(tabId, `https://www.instagram.com/${encodeURIComponent(username)}/`);
   await sleep(jitter(1500));
-  const posts = await rpc<CsPostsData>(tabId, { type: 'b2dm/findPostUrls', n });
+  const posts = await rpc<CsPostsData>(tabId, { type: 'monchoops/findPostUrls', n });
   for (const url of posts.urls) {
     await navigateTab(tabId, url);
     await sleep(jitter(1500));
-    const state = await rpc<CsLikeData>(tabId, { type: 'b2dm/detectLikeState' }).catch(() => null);
+    const state = await rpc<CsLikeData>(tabId, { type: 'monchoops/detectLikeState' }).catch(() => null);
     if (!state || state.state !== 'not_liked') continue;
-    await rpc(tabId, { type: 'b2dm/clickLike' });
+    await rpc(tabId, { type: 'monchoops/clickLike' });
     await sleep(jitter(1200));
   }
 }
@@ -324,7 +324,7 @@ async function sendDm(tabId: number, username: string, message: string): Promise
   try {
     return await sendDmViaShortlink(tabId, username, message);
   } catch (err) {
-    console.warn('[b2dm sw] shortlink path failed, falling back to /direct/new/', err);
+    console.warn('[monchoops sw] shortlink path failed, falling back to /direct/new/', err);
     return sendDmViaDirectNew(tabId, username, message);
   }
 }
@@ -337,19 +337,19 @@ async function sendDmViaShortlink(
   await navigateTab(tabId, `https://ig.me/m/${encodeURIComponent(username)}`);
 
   const matched = await rpc<{ matched: boolean }>(tabId, {
-    type: 'b2dm/waitForUrlMatch',
+    type: 'monchoops/waitForUrlMatch',
     pattern: 'instagram\\.com/direct/(t|inbox)',
     timeoutMs: 25_000,
   });
   if (!matched.matched) throw new Error('shortlink_did_not_redirect');
 
   const composer = await rpc<{ found: boolean }>(tabId, {
-    type: 'b2dm/waitForComposer',
+    type: 'monchoops/waitForComposer',
     timeoutMs: 15_000,
   });
   if (!composer.found) throw new Error('composer_not_found');
 
-  await rpc(tabId, { type: 'b2dm/typeAndSendDm', message });
+  await rpc(tabId, { type: 'monchoops/typeAndSendDm', message });
   return verifyDelivery(tabId, message);
 }
 
@@ -361,22 +361,22 @@ async function sendDmViaDirectNew(
   await navigateTab(tabId, 'https://www.instagram.com/direct/new/');
   await sleep(jitter(1200));
 
-  const opened = await rpc<{ ok: boolean }>(tabId, { type: 'b2dm/openNewDmDialog' });
+  const opened = await rpc<{ ok: boolean }>(tabId, { type: 'monchoops/openNewDmDialog' });
   if (!opened.ok) throw new Error('cannot_open_new_dm_dialog');
 
   const picked = await rpc<{ ok: boolean }>(tabId, {
-    type: 'b2dm/pickFirstSearchResult',
+    type: 'monchoops/pickFirstSearchResult',
     username,
   });
   if (!picked.ok) throw new Error('cannot_pick_search_result');
 
   const composer = await rpc<{ found: boolean }>(tabId, {
-    type: 'b2dm/waitForComposer',
+    type: 'monchoops/waitForComposer',
     timeoutMs: 15_000,
   });
   if (!composer.found) throw new Error('composer_not_found');
 
-  await rpc(tabId, { type: 'b2dm/typeAndSendDm', message });
+  await rpc(tabId, { type: 'monchoops/typeAndSendDm', message });
   return verifyDelivery(tabId, message);
 }
 
@@ -386,7 +386,7 @@ async function verifyDelivery(tabId: number, message: string): Promise<boolean> 
   await waitForTabReady(tabId);
   await ensureContentScript(tabId);
   await sleep(2500);
-  const r = await rpc<CsBoolData>(tabId, { type: 'b2dm/threadContains', needle: message });
+  const r = await rpc<CsBoolData>(tabId, { type: 'monchoops/threadContains', needle: message });
   if (!r.value) throw new Error('verification_failed: message not found in thread after reload');
   return true;
 }
@@ -404,7 +404,7 @@ async function forceInstagramEnglish(): Promise<void> {
       expirationDate: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365,
     });
   } catch (err) {
-    console.warn('[b2dm sw] failed to set ig_lang cookie', err);
+    console.warn('[monchoops sw] failed to set ig_lang cookie', err);
   }
 }
 
@@ -428,7 +428,7 @@ async function ensureIgTab(): Promise<chrome.tabs.Tab> {
 }
 
 async function navigateTab(tabId: number, url: string): Promise<void> {
-  console.log('[b2dm sw] navigate tab', tabId, 'to', url);
+  console.log('[monchoops sw] navigate tab', tabId, 'to', url);
   await forceInstagramEnglish();
   await chrome.tabs.update(tabId, { url });
   await waitForTabReady(tabId, 30_000);
@@ -479,7 +479,7 @@ async function ensureContentScript(tabId: number): Promise<void> {
 function pingContentScript(tabId: number): Promise<boolean> {
   return new Promise((resolve) => {
     try {
-      chrome.tabs.sendMessage(tabId, { type: 'b2dm/ping' }, (resp) => {
+      chrome.tabs.sendMessage(tabId, { type: 'monchoops/ping' }, (resp) => {
         const err = chrome.runtime.lastError;
         resolve(!err && !!resp);
       });

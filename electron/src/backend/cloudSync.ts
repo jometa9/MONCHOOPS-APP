@@ -54,7 +54,7 @@ async function request<T>(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'User-Agent': `B2DM/${app.getVersion?.() ?? 'dev'}`,
+        'User-Agent': `MonchoOps/${app.getVersion?.() ?? 'dev'}`,
       },
       body: opts.body == null ? undefined : JSON.stringify(opts.body),
       signal: controller.signal,
@@ -96,7 +96,7 @@ export interface UsageSnapshot {
 }
 
 export async function fetchUsage(): Promise<UsageSnapshot | null> {
-  const res = await request<UsageSnapshot>('/api/b2dm/usage');
+  const res = await request<UsageSnapshot>('/api/monchoops/usage');
   if (!res.ok) return null;
   return res.data;
 }
@@ -124,7 +124,7 @@ export async function registerAccount(
     used: number;
     limit: number | null;
     remaining: number | null;
-  }>('/api/b2dm/accounts/register', {
+  }>('/api/monchoops/accounts/register', {
     method: 'POST',
     body: { username, deviceId: getDeviceId() },
   });
@@ -157,7 +157,7 @@ export async function registerAccount(
 }
 
 export async function unregisterAccount(username: string): Promise<boolean> {
-  const res = await request<{ removed: boolean }>('/api/b2dm/accounts/unregister', {
+  const res = await request<{ removed: boolean }>('/api/monchoops/accounts/unregister', {
     method: 'POST',
     body: { username },
   });
@@ -195,7 +195,7 @@ export async function reportDms(
     return { ok: true, used: 0, limit: null, remaining: null, recorded: 0, dropped: 0 };
   }
   const deviceId = getDeviceId();
-  const res = await request<DmReportResult>('/api/b2dm/dms/report', {
+  const res = await request<DmReportResult>('/api/monchoops/dms/report', {
     method: 'POST',
     body: {
       events: events.map((e) => ({

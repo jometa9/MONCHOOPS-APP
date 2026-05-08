@@ -60,7 +60,7 @@
     "continue": "Continuar",
     "couldNotValidate": "No se pudo validar la licencia",
     "googleSignIn": "Iniciar sesión con Google",
-    "noAccount": "¿No tenés cuenta? Visitá b2dm.app"
+    "noAccount": "¿No tenés cuenta? Visitá monchoops.com"
   },
   "settings": {
     "title": "Ajustes",
@@ -615,7 +615,7 @@
     },
     "updateBanner": {
       "available": "Actualización disponible — v{{version}}",
-      "availableHint": "Hacé clic en Descargar para bajar la última versión desde b2dm.app.",
+      "availableHint": "Hacé clic en Descargar para bajar la última versión desde monchoops.com.",
       "download": "Descargar"
     },
     "datePicker": {

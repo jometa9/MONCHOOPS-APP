@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Send, Users } from 'lucide-react';
 import { useSession } from '@/context/SessionContext';
 import { useAccounts } from '@/context/AccountsContext';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 import { UpdateBanner } from '@/components/common/UpdateBanner';
 
 interface Stats {
@@ -66,7 +66,7 @@ export function Home() {
     let cancelled = false;
     async function load() {
       try {
-        const next = await b2dm.stats.get();
+        const next = await monchoops.stats.get();
         if (!cancelled) setStats(next);
       } catch {}
     }

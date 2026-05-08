@@ -67,7 +67,7 @@ export function LicenseGate({ onLogin }: Props) {
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
           {t('popup.noAccountQuestion')}{' '}
-          <a href="https://b2dm.app" target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">
+          <a href="https://monchoops.com" target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">
             {t('popup.visitSite')}
           </a>
         </p>

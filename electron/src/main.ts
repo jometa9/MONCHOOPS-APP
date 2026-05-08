@@ -116,7 +116,7 @@ if (!app.isPackaged) {
 
 if (app.isPackaged) {
 
-  process.env.B2DM_CHROMIUM_DIR = path.join(process.resourcesPath, 'chromium');
+  process.env.MonchoOps_CHROMIUM_DIR = path.join(process.resourcesPath, 'chromium');
 }
 
 const gotTheLock = app.requestSingleInstanceLock();

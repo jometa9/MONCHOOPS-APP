@@ -4,9 +4,9 @@ import { Key } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { useSession } from '@/context/SessionContext';
-import { b2dm } from '@/lib/b2dm';
+import { monchoops } from '@/lib/monchoops';
 
-const GOOGLE_LOGIN_URL = 'https://b2dm.app/login/google?callback=b2dm://auth';
+const GOOGLE_LOGIN_URL = 'https://monchoops.com/login/google?callback=monchoops://auth';
 
 export function Login() {
   const { t } = useTranslation();
@@ -64,7 +64,7 @@ export function Login() {
               type="button"
               disabled={submitting}
               onClick={() => {
-                void b2dm.openExternalLink(GOOGLE_LOGIN_URL);
+                void monchoops.openExternalLink(GOOGLE_LOGIN_URL);
               }}
               className="inline-flex h-9 w-full items-center justify-center border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
             >
@@ -77,7 +77,7 @@ export function Login() {
           <button
             type="button"
             onClick={() => {
-              void b2dm.openExternalLink('https://b2dm.app');
+              void monchoops.openExternalLink('https://monchoops.com');
             }}
             className="text-xs text-muted-foreground underline-offset-2 hover:underline"
           >
