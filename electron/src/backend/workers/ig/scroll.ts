@@ -1,35 +1,26 @@
-// Generic "scroll-until-stable" helper. Callers supply an extract function
-// that returns the current snapshot of items visible in the DOM; the helper
-// tracks what's new, calls scroll(), and stops when the count is unchanged
-// for `maxIdleRounds` consecutive iterations — or when `target` is reached.
+
 
 import { waitFor } from '../lib';
 
-type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Page = any;
 
 export interface CollectOptions<T> {
   extract: () => Promise<T[]>;
   scroll: () => Promise<void>;
-  /** Optional cap. Collection stops once the result reaches this length. */
+
   target?: number;
-  /** Idle rounds with no growth before stopping. Default 6. */
+
   maxIdleRounds?: number;
-  /** Delay between extract + scroll cycles. Default 1200ms. */
+
   pauseMs?: number;
-  /** Optional per-iteration hook — receives only the items added this round. */
+
   onBatch?: (added: T[]) => void;
-  /** Custom dedup key. Defaults to `String(item)`. */
+
   keyOf?: (item: T) => string;
-  /** Short-circuit: when it returns true we stop scrolling immediately. Lets
-   *  upstream code halt a per-post comment slurp once the global lead cap
-   *  has been hit. */
+
   shouldStop?: () => boolean;
 }
 
-/** Lazy variant of `collectByScrolling`: yields each new item as soon as it
- *  appears in the DOM. Lets callers act on items one at a time (e.g. walk a
- *  post for leads) without pre-scrolling the whole grid. Stops when the DOM
- *  yields no new items for `maxIdleRounds` consecutive scrolls. */
 export async function* iterateByScrolling<T>(opts: {
   extract: () => Promise<T[]>;
   scroll: () => Promise<void>;
@@ -69,7 +60,6 @@ export async function* iterateByScrolling<T>(opts: {
   }
 }
 
-/** Incrementally collect items from a page, deduplicating by a string key. */
 export async function collectByScrolling<T>(opts: CollectOptions<T>): Promise<T[]> {
   const keyOf = opts.keyOf ?? ((item: T) => String(item));
   const idleMax = opts.maxIdleRounds ?? 6;
@@ -111,7 +101,6 @@ export async function collectByScrolling<T>(opts: CollectOptions<T>): Promise<T[
   return out;
 }
 
-/** Scroll the tallest scrollable element inside a [role="dialog"] modal. */
 export async function scrollDialog(page: Page): Promise<void> {
   await page.evaluate(() => {
     const scrollable = Array.from(
@@ -121,16 +110,10 @@ export async function scrollDialog(page: Page): Promise<void> {
   });
 }
 
-/** Scroll the main window. */
 export async function scrollWindow(page: Page): Promise<void> {
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 }
 
-/** Scroll the comments panel on a post/reel detail page. Instagram uses
- *  different containers depending on layout (post modal, reel player
- *  sidebar, reel-as-post column), so we search for the tallest scrollable
- *  element in the dialog/main and scroll it. Returns a short label
- *  describing which strategy hit, for diagnostic logging. */
 export async function scrollCommentList(page: Page): Promise<string> {
   return (await page.evaluate(() => {
     function pickTallestScrollable(root: Element | Document): HTMLElement | null {
@@ -148,8 +131,6 @@ export async function scrollCommentList(page: Page): Promise<string> {
       return candidates[0] ?? null;
     }
 
-    // Priority 1: scrollable inside an open dialog (covers reel comments
-    // panel and post modal).
     const dialog = document.querySelector('div[role="dialog"]');
     const dialogTarget = dialog ? pickTallestScrollable(dialog) : null;
     if (dialogTarget) {
@@ -157,7 +138,6 @@ export async function scrollCommentList(page: Page): Promise<string> {
       return 'dialog';
     }
 
-    // Priority 2: the canonical role="list" comment container.
     const list =
       document.querySelector<HTMLElement>('article ul[role="list"]') ??
       document.querySelector<HTMLElement>('ul[role="list"]');
@@ -166,7 +146,6 @@ export async function scrollCommentList(page: Page): Promise<string> {
       return 'ul[role=list]';
     }
 
-    // Priority 3: tallest scrollable inside <main> (reel-as-post side column).
     const main = document.querySelector('main');
     const mainTarget = main ? pickTallestScrollable(main) : null;
     if (mainTarget) {
@@ -174,7 +153,6 @@ export async function scrollCommentList(page: Page): Promise<string> {
       return 'main';
     }
 
-    // Fallback: the window itself.
     window.scrollTo(0, document.body.scrollHeight);
     return 'window';
   })) as string;

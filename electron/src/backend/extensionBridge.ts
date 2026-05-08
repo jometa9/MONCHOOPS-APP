@@ -1,11 +1,4 @@
-// Local HTTP server that lets the B2DM Chrome extension read leads from
-// this user's desktop install. Bound to 127.0.0.1 only — never exposed
-// over the network.
-//
-// CORS: allowed origins are chrome-extension:// (any) plus localhost dev.
-// No pairing/token flow — if the desktop app is running, the extension
-// can talk to it; if not, the extension surfaces a "start the desktop
-// app" message.
+
 
 import http from 'node:http';
 import { metaSetJson } from './db';
@@ -51,9 +44,6 @@ let listeningPort: number | null = null;
 
 let onMutation: ((channel: string) => void) | null = null;
 
-/** Fires when the bridge mutates renderer-visible state (e.g. the extension
- *  creates a variant group). Wire this to your renderer broadcast so the
- *  desktop UI re-renders. */
 export function setMutationHandler(cb: (channel: string) => void): void {
   onMutation = cb;
 }
@@ -63,7 +53,7 @@ function notifyMutation(channel: string): void {
   try {
     onMutation(channel);
   } catch (err) {
-    // eslint-disable-next-line no-console
+
     console.warn('[bridge] mutation handler threw', err);
   }
 }
@@ -75,32 +65,29 @@ export function getStatus(): BridgeStatus {
   };
 }
 
-// --- server lifecycle ----------------------------------------------------
-
 export async function startBridgeServer(): Promise<void> {
   if (server) return;
-  // Clear any stale paired-client tokens left over from the previous
-  // pairing-based bridge implementation.
+
   try {
     metaSetJson(TOKENS_META_KEY, []);
   } catch {
-    // Non-fatal — the table just won't be cleared this run.
+
   }
   for (let port = PORT_RANGE_START; port <= PORT_RANGE_END; port++) {
     try {
       await tryListen(port);
       listeningPort = port;
-      // eslint-disable-next-line no-console
+
       console.log(`[bridge] listening on http://127.0.0.1:${port}`);
       return;
     } catch (err) {
-      // Port in use — try the next one.
+
       if (isAddressInUseError(err)) continue;
-      // eslint-disable-next-line no-console
+
       console.warn(`[bridge] could not bind to port ${port}: ${err}`);
     }
   }
-  // eslint-disable-next-line no-console
+
   console.warn(
     `[bridge] could not find a free port in ${PORT_RANGE_START}-${PORT_RANGE_END}; extension bridge disabled`
   );
@@ -116,11 +103,9 @@ function tryListen(port: number): Promise<void> {
     const onListening = () => {
       s.removeListener('error', onError);
       server = s;
-      // Once listening, replace the temporary error handler with a
-      // permanent one that just logs (we don't want unhandled errors
-      // to crash the main process).
+
       s.on('error', (err) => {
-        // eslint-disable-next-line no-console
+
         console.warn('[bridge] server error', err);
       });
       resolve();
@@ -140,8 +125,6 @@ export function stopBridgeServer(): Promise<void> {
     s.close(() => resolve());
   });
 }
-
-// --- request handling ----------------------------------------------------
 
 function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
   const origin = req.headers.origin;
@@ -202,7 +185,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     }
 
     if (req.method === 'GET' && path === '/leads/scrapes') {
-      // Filter to scrapes that actually have a CSV/usernames available.
+
       respondJson(
         res,
         200,
@@ -295,7 +278,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     respondJson(res, 404, { error: 'not_found' });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // eslint-disable-next-line no-console
+
     console.warn('[bridge] handler error', err);
     respondJson(res, 500, { error: msg });
   }
@@ -358,8 +341,7 @@ async function readJsonBody<T>(
 }
 
 function handleCategoryLeads(res: http.ServerResponse, categoryId: string): void {
-  // Returns the full LeadPublic shape — the extension mirrors source
-  // metadata to render the same CategoryLeadsDetail UI as the desktop.
+
   const rows = listLeads({ categoryId, limit: 5000, offset: 0 });
   respondJson(res, 200, rows);
 }
@@ -456,12 +438,8 @@ function handleScrapeUsernames(res: http.ServerResponse, jobId: string): void {
   );
 }
 
-// --- helpers -------------------------------------------------------------
-
 function applyCors(res: http.ServerResponse, origin?: string): void {
-  // Allow chrome-extension://* and localhost dev. We bind to 127.0.0.1, so
-  // network attackers can't reach us; CORS narrows browser-side access to
-  // the extension and dev origins.
+
   let allowed = '';
   if (origin) {
     if (origin.startsWith('chrome-extension://')) allowed = origin;
@@ -506,5 +484,4 @@ function isAddressInUseError(err: unknown): boolean {
   return !!err && typeof err === 'object' && (err as { code?: string }).code === 'EADDRINUSE';
 }
 
-// Re-export for tests / consumers needing the constant.
 export const BRIDGE_PORT_RANGE = { start: PORT_RANGE_START, end: PORT_RANGE_END };

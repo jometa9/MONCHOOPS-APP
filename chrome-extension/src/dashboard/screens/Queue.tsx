@@ -84,7 +84,7 @@ export function Queue() {
       progressTotal: j.progressTotal,
       startedAt: j.runningAt ?? j.startedAt,
     }));
-    // Running first (extension + desktop), then queued.
+
     const running = [...fromCampaigns, ...fromDesktop].filter(
       (r) => r.status !== 'queued'
     );
@@ -108,7 +108,7 @@ export function Queue() {
         await cancelDesktopJob(row.id);
         await runSync();
       } else {
-        // Pause the campaign locally — the SW respects it on next tick.
+
         await db.campaigns.update(row.id, { status: 'paused' });
       }
     } catch (err) {

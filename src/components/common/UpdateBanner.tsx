@@ -3,11 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { ArrowDownCircle, Download } from 'lucide-react';
 import { b2dm, type UpdateStatus } from '@/lib/b2dm';
 
-// Preview mode: set to any UpdateStatus to see how the banner renders
-// without waiting for a real check. Keep null in production.
-// Example:
-//   { kind: 'available', version: '0.2.0', currentVersion: '0.1.0',
-//     downloadUrl: 'https://b2dm.app/download' }
 const PREVIEW: UpdateStatus | null = null;
 
 export function UpdateBanner() {

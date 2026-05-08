@@ -10,9 +10,6 @@ interface Props {
   className?: string;
 }
 
-// Renders a one-line description of a scrape job, with the URL-ish part
-// (post, location, hashtag, profile) turned into a clickable link word
-// so the table stays narrow and readable.
 export function ScrapeSummary({ kind, params, targetName, className }: Props) {
   const { t } = useTranslation();
   const p = (params && typeof params === 'object' ? params : {}) as Record<string, unknown>;
@@ -107,7 +104,6 @@ export function HashtagLink({ hashtag }: { hashtag: string }) {
   return <ExternalLinkWord url={url} label={`#${clean}`} />;
 }
 
-// Convenience wrapper for call sites that already have a ScrapeResultPublic.
 export function ScrapeSummaryOf({
   row,
   className,

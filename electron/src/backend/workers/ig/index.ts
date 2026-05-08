@@ -1,6 +1,4 @@
-// Public surface of the Instagram worker primitives. Workers import from
-// here rather than reaching into individual files so we can reorganise
-// internals without touching callers.
+
 
 export { ensureLoggedIn } from './login';
 export type { EnsureLoggedInOpts } from './login';

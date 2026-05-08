@@ -153,9 +153,6 @@ export function CategoryLeadsDetail() {
   );
 }
 
-// Parses a `source_detail` string from the leads table and renders the
-// "where we found this lead" reference with any URL replaced by a clickable
-// word matching the source kind (post, reel, hashtag, location, profile).
 function LeadSourceCell({
   sourceDetail,
   sourceKind,
@@ -170,7 +167,6 @@ function LeadSourceCell({
   const kind = parts[0] ?? sourceKind;
   const [kindLabel, linkWord] = labelsFor(kind, t);
 
-  // Find the first URL or @handle / #tag reference in the remaining parts.
   const ref = parts.slice(1).find(Boolean) ?? null;
   const refUrl = refToUrl(ref);
 

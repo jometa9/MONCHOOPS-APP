@@ -3,7 +3,7 @@ import { Clock } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 interface Props {
-  /** Time value as HH:MM (24h). */
+
   value: string;
   onChange: (hm: string) => void;
   disabled?: boolean;

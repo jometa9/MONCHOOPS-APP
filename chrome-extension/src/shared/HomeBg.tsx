@@ -1,5 +1,5 @@
 type HomeBgProps = {
-  // 'sidebar' offsets the bg by w-56 to clear the dashboard sidebar.
+
   offset?: 'none' | 'sidebar';
 };
 

@@ -179,7 +179,7 @@ export interface SettingsApi {
 }
 
 export interface B2dmApi {
-  // Platform
+
   getPlatform(): Promise<NodeJS.Platform>;
   getIsFullScreen(): Promise<boolean>;
   onFullScreenChange(cb: (isFullScreen: boolean) => void): Unsubscribe;
@@ -194,7 +194,6 @@ export interface B2dmApi {
   getPendingDeepLink(): Promise<string | null>;
   clearPendingDeepLink(url: string): Promise<void>;
 
-  // Session
   getSession(): Promise<SessionSnapshot>;
   validateLicense(licenseKey: string): Promise<SessionSnapshot>;
   logout(): Promise<void>;

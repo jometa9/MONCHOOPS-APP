@@ -130,8 +130,6 @@ export function NewCampaign() {
     [variants]
   );
 
-  // Variant groups come from the local mirror — populated by the sync
-  // engine. Always available, even with the desktop offline.
   const variantGroups = useLiveQuery(
     async () => {
       const all = await db.variantGroups.toArray();
@@ -366,8 +364,6 @@ export function NewCampaign() {
     </div>
   );
 }
-
-/* ---------------- Step 1: Leads ---------------- */
 
 type LeadsTab = 'manual' | 'file' | 'desktop';
 
@@ -699,8 +695,6 @@ function LeadsPreview({
   );
 }
 
-/* ---------------- Step 2: Message ---------------- */
-
 type MessageTab = 'write' | 'saved';
 
 function MessageStep({
@@ -965,8 +959,6 @@ function SavedVariantsPanel({
   );
 }
 
-/* ---------------- Step 3: Interactions ---------------- */
-
 function InteractionsStep({
   value,
   onChange,
@@ -1129,8 +1121,6 @@ function Switch({
     </span>
   );
 }
-
-/* ---------------- Step 4: Review ---------------- */
 
 function ReviewStep({
   leads,

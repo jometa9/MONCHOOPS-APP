@@ -2,9 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 function readAppVersion(): string {
-  // Both dev (running from source) and packaged (running from asar) can reach
-  // the bundled package.json via a relative path from this file's compiled
-  // location at `electron/dist/buildConfig.js` or the asar equivalent.
+
   try {
     const p = path.resolve(__dirname, '..', '..', 'package.json');
     if (fs.existsSync(p)) {

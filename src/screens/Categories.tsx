@@ -42,7 +42,7 @@ export function Categories() {
       offCats();
       offDone();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   async function exportCsv(id: string) {

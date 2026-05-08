@@ -1,11 +1,4 @@
-// DOM primitives for Instagram automation. Runs in the content-script
-// world (full access to instagram.com's DOM), not in the page world — so
-// React's internal state is opaque to us. To make IG's React composer
-// accept text we have to dispatch native input events the way React tracks
-// them, otherwise the value we set is silently discarded.
-//
-// Ported from electron/src/backend/workers/ig/ — same selectors, same
-// dialog dismissals, same like/follow/story flows, just without Playwright.
+
 
 export const sleep = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 
@@ -14,8 +7,6 @@ export function jitter(baseMs: number, range = 0.4): number {
   const max = baseMs * (1 + range);
   return Math.floor(min + Math.random() * (max - min));
 }
-
-// --- waiters --------------------------------------------------------------
 
 export async function waitFor<T>(
   fn: () => T | null | undefined,
@@ -47,8 +38,6 @@ export async function waitForUrl(matcher: RegExp, opts?: { timeoutMs?: number })
   });
 }
 
-// --- composer (DM) --------------------------------------------------------
-
 const COMPOSER_SELECTOR = [
   'main div[contenteditable="true"][role="textbox"]',
   'div[contenteditable="true"][aria-label*="Message" i]',
@@ -59,19 +48,11 @@ export async function findComposer(timeoutMs = 15_000): Promise<HTMLElement> {
   return waitForVisible(COMPOSER_SELECTOR, { timeoutMs });
 }
 
-// Type into a contenteditable composer in a way that IG's React tree
-// actually picks up. Setting innerText alone leaves React's internal
-// shadow value blank — clicking Send afterwards either no-ops or sends
-// an empty bubble. The fix is to fire a beforeinput + input pair with
-// a real InputEvent that has inputType: "insertText" and the data
-// payload. We do it character-by-character with human-ish jitter so the
-// keystroke timing distribution doesn't scream "bot".
 export async function humanType(el: HTMLElement, text: string): Promise<void> {
   el.focus();
   el.click();
   await sleep(jitter(250));
 
-  // Some IG variants need a clean state — clear any draft text first.
   if (el.isContentEditable && (el.textContent ?? '').length > 0) {
     document.execCommand('selectAll', false);
     document.execCommand('delete', false);
@@ -85,16 +66,12 @@ export async function humanType(el: HTMLElement, text: string): Promise<void> {
 }
 
 function insertCharacter(el: HTMLElement, ch: string): void {
-  // Newline support — IG composer treats Enter as send, so messages with
-  // \n should use a Shift+Enter equivalent: insert a <br> via execCommand.
+
   if (ch === '\n') {
     document.execCommand('insertLineBreak');
     return;
   }
-  // execCommand('insertText') is deprecated but still works in Chrome and
-  // is the only API that fires beforeinput+input with the right payload
-  // for React's contenteditable bridge. Falls back to manual event
-  // dispatch on browsers where it returns false.
+
   const ok = document.execCommand('insertText', false, ch);
   if (ok) return;
 
@@ -128,8 +105,6 @@ export function pressEnter(el: HTMLElement): void {
   el.dispatchEvent(ev('keypress'));
   el.dispatchEvent(ev('keyup'));
 }
-
-// --- dialog dismissers ----------------------------------------------------
 
 const NOT_NOW = ['Not now', 'Not Now', 'Ahora no', 'Ahora No'];
 const NOTIFICATIONS_TITLES = [
@@ -182,8 +157,6 @@ export function startDismisser(): () => void {
   };
 }
 
-// --- like state -----------------------------------------------------------
-
 const LIKED_LABELS = ['Unlike', 'Ya no me gusta'];
 const NOT_LIKED_LABELS = ['Like', 'Me gusta'];
 
@@ -235,8 +208,6 @@ export function clickLikeButton(): boolean {
   return false;
 }
 
-// --- follow state ---------------------------------------------------------
-
 export type FollowState = 'not_following' | 'following' | 'requested' | 'unavailable';
 
 export function detectFollowState(): FollowState {
@@ -282,8 +253,6 @@ export function clickFollowButton(): boolean {
   return false;
 }
 
-// IG sometimes pops a "Do you know this person?" guard after a follow click.
-// Confirms by clicking "Follow anyway" if the dialog is up.
 export function confirmFollowAnywayIfPrompted(): boolean {
   const TITLE_HINTS = [
     'do you know this person',
@@ -311,8 +280,6 @@ export function confirmFollowAnywayIfPrompted(): boolean {
   }
   return false;
 }
-
-// --- thread verification --------------------------------------------------
 
 export function threadContainsMessage(needle: string): boolean {
   const main = document.querySelector('main');

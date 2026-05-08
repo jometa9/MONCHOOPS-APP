@@ -26,15 +26,13 @@ export type JobKind =
   | 'scrape_by_location';
 
 export interface MassDmInteractionsConfig {
-  /** Follow the target username before DMing them. */
+
   follow: boolean;
-  /** Like this many of the target's most recent posts before DMing. 0
-   *  means "don't like anything". */
+
   likeCount: number;
-  /** Watch the target user's stories silently before the DM. Adds 5–15s
-   *  per recipient on average; pulls reply rate up empirically. */
+
   watchStories?: boolean;
-  /** Average dwell per story (seconds). Each story is jittered ±40%. */
+
   storyDwellSec?: number;
 }
 
@@ -138,9 +136,7 @@ export type JobEvent =
 const listeners = new Set<Listener>();
 const runningChildren = new Map<string, ChildProcess>();
 const runningMeta = new Map<string, { startedAt: number; accountId: string | null; kind: JobKind }>();
-// Jobs the user asked to cancel. Used so handleWorkerExit knows to flag the
-// job as 'cancelled' regardless of exit code, and so partial-result
-// persistence in handleWorkerExit can apply the same path used for success.
+
 const cancellingJobs = new Set<string>();
 
 const CANCEL_GRACE_MS = 15_000;
@@ -225,8 +221,6 @@ export function listRunningJobs(): JobPublic[] {
   return listJobs().filter((j) => j.status === 'running');
 }
 
-// Running + queued, in dispatch order (FIFO by started_at, which we use as
-// the enqueue timestamp). Used by the Queue UI.
 export function listActiveJobs(): JobPublic[] {
   const rows = getDb()
     .prepare<[], JobRow>(
@@ -430,9 +424,6 @@ export function listMassDmSends(jobId: string): MassDmSendPublic[] {
   return rows.map(massDmSendRowToPublic);
 }
 
-// Returns the set of usernames that the given account has successfully
-// DM'd in any past mass_dm job. Used by the Cold DM flow to warn the user
-// before re-DMing someone with the same account.
 export function listDmedUsernamesForAccount(accountId: string): string[] {
   const rows = getDb()
     .prepare<[string], { username: string }>(
@@ -451,23 +442,16 @@ function scrapesDir(): string {
 }
 
 function workerScriptPath(name: string): string {
-  // After tsc, this file lives at electron/dist/backend/jobs.js
+
   return path.join(__dirname, 'workers', `${name}.js`);
 }
 
-// Headless preference is persisted in the meta table so workers can read it
-// at job-start time. Defaults to true (browsers stay hidden) to match the
-// renderer's PreferencesContext default.
 function getHeadlessPref(): boolean {
   const raw = metaGet('headless');
   if (raw == null) return true;
   return raw !== 'false';
 }
 
-// "Full window" means: when headed, open the Chromium maximized instead of
-// tiling it into the screen-grid. Defaults to false (tiling on) since the
-// whole point of the headed mode is being able to monitor several runs
-// side-by-side.
 function getFullWindowPref(): boolean {
   return metaGet('full_window') === 'true';
 }
@@ -538,7 +522,6 @@ export interface LoginProxyInput {
   password?: string | null;
 }
 
-// jobId -> proxy to apply to the account that login creates on success.
 const pendingLoginProxies = new Map<string, LoginProxyInput>();
 
 function toWorkerProxy(proxy: LoginProxyInput | null | undefined) {
@@ -563,7 +546,7 @@ export function startLogin(args: StartLoginArgs = {}): string {
   }
   const jobId = insertJob('login', null, {});
   const scriptPath = workerScriptPath('login');
-  // Manual login is always headed — the user has to interact with it.
+
   const child = spawnWorker(
     scriptPath,
     jobId,
@@ -587,8 +570,7 @@ export interface StartAutoLoginArgs {
 }
 
 export function startAutoLogin(args: StartAutoLoginArgs): string {
-  // Single-credential auto-login is just a bulk import with one row. Keeps
-  // both paths on the same worker + persistence pipeline.
+
   return startBulkAutoLogin([
     {
       username: args.username,
@@ -641,16 +623,12 @@ export interface StartMassDmArgs {
   messages: string[];
   intervalMs: number;
   interactions?: MassDmInteractionsConfig | null;
-  /** Usernames the worker must skip entirely — typically targets that were
-   *  already DMed by this account in a past job. The list is a snapshot at
-   *  submit time; the worker does not re-query history mid-run. */
+
   excludeUsernames?: string[] | null;
 }
 
 const MAX_DM_VARIANTS = 20;
 
-// Resolved by the IPC layer (which can `await`) before invoking the
-// synchronous job-spawn path. Treat 0 as "unlimited / unknown — don't gate".
 let nextMassDmRemainingHint: number | null = null;
 
 export function setMassDmRemainingHint(remaining: number | null): void {
@@ -673,9 +651,7 @@ export function startMassDm(args: StartMassDmArgs): string {
       'You have reached your monthly DM limit for this plan. Upgrade or wait until next month.'
     );
   }
-  // Consume the hint — it only applies to the next start call. The DM
-  // batcher in cloudSync will stop the job mid-run if the cap is hit while
-  // sending, so an outdated hint here is fine.
+
   nextMassDmRemainingHint = null;
 
   const interactions = normaliseInteractions(args.interactions);
@@ -763,8 +739,6 @@ export function startScrape(args: StartScrapeArgs): string {
   const acc = getAccount(args.accountId);
   if (!acc) throw new Error('Account not found');
 
-  // Resolve category ref (existing id or new name) into a stable categoryId
-  // that we persist on the job params. null means "no category bucket".
   const category = resolveCategoryRef({
     categoryId: typeof args.params.categoryId === 'string' ? args.params.categoryId : null,
     newCategoryName:
@@ -827,8 +801,6 @@ function spawnScrapeWorker(
   setAccountStatus(accountId, 'busy');
 }
 
-// True if the account already has a running or queued job. Login jobs don't
-// have an accountId so they can't block anything here.
 function hasPendingJobForAccount(accountId: string): boolean {
   const row = getDb()
     .prepare<[string], { c: number }>(
@@ -839,8 +811,6 @@ function hasPendingJobForAccount(accountId: string): boolean {
   return (row?.c ?? 0) > 0;
 }
 
-// Pull the next queued job for this account and dispatch it. Returns true if
-// a job was started; false if the queue is empty.
 function dispatchNextForAccount(accountId: string): boolean {
   const row = getDb()
     .prepare<[string], JobRow>(
@@ -855,7 +825,7 @@ function dispatchNextForAccount(accountId: string): boolean {
   if (!secrets) {
     finaliseJob(row.id, 'failed', 'Account secrets not available');
     emit({ type: 'jobs:done', jobId: row.id, status: 'failed' });
-    // Try the next one (account may still have queue entries we should flush).
+
     return dispatchNextForAccount(accountId);
   }
 
@@ -887,7 +857,7 @@ function dispatchNextForAccount(accountId: string): boolean {
 export function cancelJob(jobId: string): void {
   const child = runningChildren.get(jobId);
   if (!child) {
-    // Queued (not yet running) job — no worker to stop. Just mark cancelled.
+
     const row = getDb()
       .prepare<[string], JobRow>('SELECT * FROM jobs WHERE id = ?')
       .get(jobId);
@@ -901,8 +871,6 @@ export function cancelJob(jobId: string): void {
   if (cancellingJobs.has(jobId)) return;
   cancellingJobs.add(jobId);
 
-  // Cooperative cancel: worker flushes partial state (CSV, result payload)
-  // then exits 0. Escalate to SIGTERM → SIGKILL if it doesn't respond in time.
   try { child.send({ type: 'cancel' } as any); } catch {}
 
   setTimeout(() => {
@@ -928,11 +896,6 @@ function spawnWorker(
 
   console.log(`[jobs] forking worker ${jobId} → ${scriptPath}`);
 
-  // Pick the headed-window strategy. "Full window" maximizes the Chromium
-  // and skips tiling entirely; otherwise we reserve a tile on the screen
-  // grid and inject its bounds into the worker's init payload (released in
-  // handleWorkerExit). Headless runs ignore both — there's no window to
-  // place.
   let messageToSend = initMessage as any;
   if (opts.headed && messageToSend && typeof messageToSend === 'object' && messageToSend.payload) {
     if (getFullWindowPref()) {
@@ -951,8 +914,6 @@ function spawnWorker(
     }
   }
 
-  // ELECTRON_RUN_AS_NODE makes Electron's binary behave like plain Node,
-  // which is what child_process.fork expects inside a packaged Electron app.
   const child = fork(scriptPath, [], {
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
@@ -969,7 +930,6 @@ function spawnWorker(
     finaliseJob(jobId, 'failed', err instanceof Error ? err.message : String(err));
   });
 
-  // Pipe stdout/stderr to main log for debugging.
   child.stdout?.on('data', (d) => console.log(`[worker ${jobId}] ${d.toString().trimEnd()}`));
   child.stderr?.on('data', (d) => console.error(`[worker ${jobId}] ${d.toString().trimEnd()}`));
 
@@ -1030,9 +990,6 @@ function persistDmSend(jobId: string, payload: any): void {
     console.error(`[jobs ${jobId}] failed to persist dm-send:`, err);
   }
 
-  // Mirror successful DMs to the cloud so monthly counts stay in sync. Only
-  // 'sent' counts toward the user's plan quota — failed attempts don't burn
-  // the cap (the recipient never saw a message).
   if (status === 'sent' && meta?.accountId) {
     const fromAccount = getAccount(meta.accountId);
     if (fromAccount?.username) {
@@ -1124,12 +1081,6 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
     finaliseJob(jobId, finalStatus, finalStatus === 'failed' ? (jobRow?.error ?? 'Worker exited unexpectedly') : null);
   }
 
-  // Persist result rows. For scrapes we record every terminal status
-  // (completed / cancelled / failed) so the history screen can surface the
-  // full picture — cancelled keeps whatever partial CSV the worker flushed,
-  // failed may have no CSV at all but we still want the row + retry action.
-  // For login / mass_dm we keep the previous behaviour (persist on
-  // completed or cancelled only).
   const isScrape = meta && meta.kind !== 'login' && meta.kind !== 'mass_dm';
   const shouldPersistResult = finalStatus === 'completed' || finalStatus === 'cancelled';
   if (meta && isScrape && finalStatus === 'failed') {
@@ -1242,8 +1193,6 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
             targetName
           );
 
-        // If the job was tagged with a category, ingest the CSV into that
-        // category's leads. Dedup happens at the DB layer via UNIQUE.
         if (typeof params.categoryId === 'string' && params.categoryId) {
           try {
             ingestLeadsFromCsv(params.categoryId, meta.kind, jobId, r.csvPath);
@@ -1261,26 +1210,14 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
 
   emit({ type: 'jobs:done', jobId, status: finalStatus });
 
-  // Login jobs don't carry an accountId (the account row is created *after*
-  // the worker succeeds), so they never trigger `jobs:accountDrained` and the
-  // renderer wouldn't get a completion cue. Emit a dedicated signal so the
-  // UI can play the completion sound when a login job — individual or bulk —
-  // finishes.
   if (meta?.kind === 'login') {
     emit({ type: 'jobs:loginFinished', jobId, status: finalStatus });
   }
 
-  // Per-account FIFO: if more jobs are queued for this account, dispatch the
-  // next one and keep the account flagged 'busy'. Only when the queue drains
-  // do we release the account and emit the "account drained" signal (used by
-  // the renderer to play the completion sound exactly once per batch).
   if (meta?.accountId) {
     const startedNext = dispatchNextForAccount(meta.accountId);
     if (!startedNext) {
-      // A failed scrape means the *target* or the scrape worker broke — the
-      // account's session is still good. Only login failures (and other
-      // account-level jobs) should flip the account into 'error'. Scrape
-      // failures keep the account idle so it can run more jobs immediately.
+
       const failedErrorsAccount = finalStatus === 'failed' && !isScrape;
       setAccountStatus(
         meta.accountId,
@@ -1324,13 +1261,8 @@ function buildScrapeSummary(kind: JobKind, params: any, _count: number): string 
   }
 }
 
-// Called from main on quit / before-close. Asks every running child to flush
-// its partial state (same path as a UI-initiated cancel), waits up to
-// `timeoutMs` for them to exit, then force-kills anything still running. The
-// caller is expected to await this before calling `app.exit()`.
 export async function shutdownAllJobs(timeoutMs = 15_000): Promise<void> {
-  // Cancel any queued jobs up front — they haven't forked yet and won't run
-  // during this shutdown.
+
   try {
     getDb()
       .prepare(`UPDATE jobs SET status='cancelled', ended_at=? WHERE status='queued'`)
@@ -1351,9 +1283,6 @@ export async function shutdownAllJobs(timeoutMs = 15_000): Promise<void> {
   }
 }
 
-// On app boot, mark any stranded 'running' rows as failed and 'queued' rows
-// as cancelled, then flip busy accounts back to idle. Jobs never survive an
-// app restart in v1.
 export function reconcileOnStartup(): void {
   try {
     const now = Date.now();

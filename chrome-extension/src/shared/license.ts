@@ -1,7 +1,4 @@
-// License validation against b2dm.app — same endpoint the desktop app hits.
-// The "123" mock key works offline so testing/demo flows don't need a real
-// license. License key is persisted in chrome.storage.local rather than in
-// IndexedDB so the popup can show the gate before Dexie has opened.
+
 
 import type { Profile, Session, Subscription } from './types';
 import { EMPTY_SESSION } from './types';

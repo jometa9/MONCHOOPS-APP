@@ -674,7 +674,7 @@ function AddAccountDialog({
       }
       return;
     }
-    // bulk
+
     if (validRows.length === 0) {
       setError(t('screens.instagramAccounts.noValidRows'));
       return;
@@ -1014,8 +1014,6 @@ const BULK_TEMPLATE = 'username,password,proxy_url,proxy_username,proxy_password
 
 type TFn = (key: string, opts?: Record<string, unknown>) => string;
 
-// Minimal CSV splitter: handles commas + double-quoted values. Embedded
-// newlines inside quoted fields are not supported (we split by line first).
 function splitCsvLine(line: string, rowNumber: number, t: TFn): ParsedRow {
   const fields: string[] = [];
   let buf = '';

@@ -11,10 +11,9 @@ interface JobProgress {
 }
 
 interface JobsContextValue {
-  // All running + queued jobs (FIFO). Running appear first for a given account.
+
   active: JobPublic[];
-  // Backward-compat subset: only running jobs. Consumers showing "spinner" can
-  // keep using this without seeing queued entries.
+
   running: JobPublic[];
   progressByJob: Record<string, JobProgress>;
   refresh: () => Promise<void>;
@@ -55,16 +54,13 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         return next;
       });
     });
-    // Sound plays exactly once per account — when the account's whole queue
-    // drains, not on every individual job completion.
+
     const offDrained = b2dm.jobs.onAccountDrained((evt) => {
       if (evt.status === 'completed' && soundsEnabledRef.current) {
         playCompletionSound();
       }
     });
-    // Login jobs (individual or bulk) don't have an accountId so they never
-    // fire `onAccountDrained`. Play the completion cue directly when a login
-    // job finishes.
+
     const offLoginFinished = b2dm.jobs.onLoginFinished((evt) => {
       if (evt.status === 'completed' && soundsEnabledRef.current) {
         playCompletionSound();

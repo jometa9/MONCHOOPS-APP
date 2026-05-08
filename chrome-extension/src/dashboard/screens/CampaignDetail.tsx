@@ -24,9 +24,6 @@ export function CampaignDetail() {
     [] as Lead[]
   );
 
-  // Index of the row to keep in view: prefer the lead currently sending,
-  // otherwise the last completed (sent/failed) so the next pending rows
-  // stay visible just below it.
   let activeIndex = -1;
   if (leads) {
     const sendingIdx = leads.findIndex((l) => l.status === 'sending');
@@ -236,7 +233,7 @@ function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
   if (src.kind === 'manual') return null;
 
   async function sync() {
-    if (src.kind === 'manual') return; // unreachable — guarded by early return
+    if (src.kind === 'manual') return;
     setBusy(true);
     setMessage(null);
     try {
@@ -263,14 +260,13 @@ function DesktopSourcePanel({ campaign }: { campaign: Campaign }) {
         );
         await db.campaigns.update(campaign.id, {
           totalLeads: campaign.totalLeads + newOnes.length,
-          // If the campaign had finished, re-open it so the SW picks
-          // up the new pending leads.
+
           status: campaign.status === 'done' ? 'running' : campaign.status,
           completedAt: campaign.status === 'done' ? undefined : campaign.completedAt,
           nextRunAt: Date.now(),
         });
       });
-      // Re-arm the worker if we re-opened a finished campaign.
+
       if (campaign.status === 'done') {
         await chrome.runtime.sendMessage({
           type: 'sw/runCampaignNow',

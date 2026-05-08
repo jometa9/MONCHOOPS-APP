@@ -11,11 +11,8 @@ function dbPath(): string {
   return path.join(dir, 'b2dm.sqlite');
 }
 
-// better-sqlite3 is a native addon and must only be required at runtime inside
-// Electron's main process. Lazy-require it here so that the TypeScript module
-// graph can still be analysed on platforms where the binary isn't installed.
 function loadDriver(): typeof import('better-sqlite3') {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+
   const mod = require('better-sqlite3') as typeof import('better-sqlite3');
   return mod;
 }
@@ -95,8 +92,7 @@ function migrate(db: Database): void {
   }
 
   if (current < 4) {
-    // Login jobs run before an account exists, so account_id must be nullable.
-    // SQLite can't drop NOT NULL in place — rebuild the table.
+
     db.exec(`
       CREATE TABLE jobs_new (
         id TEXT PRIMARY KEY,
@@ -119,10 +115,7 @@ function migrate(db: Database): void {
   }
 
   if (current < 5) {
-    // Lead categories: grouping layer on top of individual scrape jobs.
-    // A single scrape can contribute its leads to one category; the
-    // UNIQUE(category_id, username) constraint dedups when multiple
-    // scrapes target the same category.
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS lead_categories (
         id TEXT PRIMARY KEY,
@@ -155,9 +148,7 @@ function migrate(db: Database): void {
   }
 
   if (current < 6) {
-    // History of mass DM runs. One row per completed/cancelled mass_dm job,
-    // used both for the Cold DM history UI and for computing Time Saved /
-    // Messages Sent stats on Home.
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS mass_dm_results (
         job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
@@ -174,10 +165,7 @@ function migrate(db: Database): void {
   }
 
   if (current < 7) {
-    // Per-account FIFO queueing. `started_at` stays as the enqueue timestamp
-    // (used for FIFO ordering); `running_at` tracks when the worker actually
-    // started. Jobs with status='queued' have running_at = NULL until they
-    // get dispatched.
+
     db.exec(`
       ALTER TABLE jobs ADD COLUMN running_at INTEGER;
       UPDATE jobs SET running_at = started_at WHERE running_at IS NULL;
@@ -185,18 +173,12 @@ function migrate(db: Database): void {
   }
 
   if (current < 8) {
-    // Store the password used for auto-login so the user can one-click retry
-    // an account that landed in status='error'. Encrypted at rest via the
-    // same AES-GCM key used for cookies/proxy creds.
+
     db.exec(`ALTER TABLE accounts ADD COLUMN password_encrypted BLOB;`);
   }
 
   if (current < 9) {
-    // History of warmup runs. action_json stores the full action payload
-    // (type + params); result_json stores counters (visited, liked,
-    // followed, skipped, failed). One row per completed/cancelled
-    // warmup job — used by the Warmup screen to surface "last run" state
-    // alongside the accounts table.
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS warmup_results (
         job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
@@ -215,13 +197,7 @@ function migrate(db: Database): void {
   }
 
   if (current < 10) {
-    // Recurring warmup schedules. Each row represents a "daily warmup
-    // plan" for one account across a date range. The actions_json
-    // column stores an ordered list of WarmupAction payloads — all of
-    // them fire (sequentially, via the per-account FIFO) when the
-    // schedule's daily slot arrives. last_fired_at is the ms timestamp
-    // of the latest successful firing; the scheduler uses it to avoid
-    // double-running on the same local day.
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS warmup_schedules (
         id TEXT PRIMARY KEY,
@@ -240,15 +216,12 @@ function migrate(db: Database): void {
   }
 
   if (current < 11) {
-    // Allow a user to temporarily turn off a saved proxy without losing the
-    // credentials. Default 1 means every existing row with a proxy stays on.
+
     db.exec(`ALTER TABLE accounts ADD COLUMN proxy_enabled INTEGER NOT NULL DEFAULT 1;`);
   }
 
   if (current < 12) {
-    // Capture every scrape outcome — not just completed ones — so the user
-    // can see failed/cancelled scrapes in history and retry the failed ones.
-    // csv_path becomes nullable (a failed scrape may have produced no CSV).
+
     db.exec(`
       CREATE TABLE scrape_results_new (
         job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
@@ -273,17 +246,12 @@ function migrate(db: Database): void {
   }
 
   if (current < 13) {
-    // Target identity of the scrape: @username for user/post scrapes,
-    // #hashtag for hashtag scrapes, location name for location scrapes.
-    // Used by the UI to show a clean, clickable summary instead of raw URLs.
+
     db.exec(`ALTER TABLE scrape_results ADD COLUMN target_name TEXT;`);
   }
 
   if (current < 14) {
-    // Reusable named sets of DM message variations. A group holds up to 20
-    // variants, each with a stable display order. Selected from the Cold DM
-    // flow as a snapshot — the job still serialises the raw strings, so
-    // editing or deleting the group never mutates historical jobs.
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS message_variant_groups (
         id TEXT PRIMARY KEY,
@@ -304,11 +272,7 @@ function migrate(db: Database): void {
   }
 
   if (current < 15) {
-    // Per-username log of every DM attempt within a mass_dm job. The parent
-    // mass_dm_results row keeps aggregate counts; this table keeps the
-    // individual outcomes so the user can see exactly who was DM'd
-    // successfully, who failed and why, and avoid re-DMing the same person
-    // from the same account when starting a new Cold DM.
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS mass_dm_sends (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -327,16 +291,12 @@ function migrate(db: Database): void {
   }
 
   if (current < 16) {
-    // Persist the exact message body sent to each target so the DM History
-    // detail view can show "what was said to whom". Nullable because rows
-    // written before this migration have no message captured.
+
     db.exec(`ALTER TABLE mass_dm_sends ADD COLUMN message TEXT;`);
   }
 
   if (current < 17) {
-    // Phase 7 — Unified Inbox + AI Responder + Follow-ups.
-    // One thread per (account, IG conversation). Messages live in inbox_messages.
-    // Sync state per account drives the polling scheduler.
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS inbox_threads (
         id TEXT PRIMARY KEY,
@@ -473,11 +433,7 @@ function migrate(db: Database): void {
   }
 
   if (current < 18) {
-    // Drop the inbox / AI responder / follow-up tables introduced in v17.
-    // The product was simplified down to scrape + cold DM, and
-    // none of these surfaces survive. Existing rows are wiped along with
-    // the tables; the schedulers, workers, and IPC handlers that wrote
-    // them are gone.
+
     db.exec(`
       DROP TABLE IF EXISTS followup_send_log;
       DROP TABLE IF EXISTS followup_enrollments;
@@ -500,9 +456,7 @@ function migrate(db: Database): void {
   }
 
   if (current < 19) {
-    // Drop the warmup tables introduced in v9/v10. The warmup feature was
-    // removed from the product — the worker, IPC handlers, and UI are gone,
-    // so existing rows would just sit there orphaned.
+
     db.exec(`
       DROP TABLE IF EXISTS warmup_schedules;
       DROP TABLE IF EXISTS warmup_results;
@@ -512,7 +466,6 @@ function migrate(db: Database): void {
   db.pragma('user_version = 19');
 }
 
-// meta helpers — used by license.ts for ad-hoc key/value state.
 export function metaGet(key: string): string | null {
   const row = getDb()
     .prepare<[string], { value: string }>('SELECT value FROM meta WHERE key = ?')

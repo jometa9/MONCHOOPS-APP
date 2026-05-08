@@ -1,13 +1,11 @@
-// Profile-level primitives: enumerate a target user's posts, reels, and
-// followers. Each function navigates on its own so callers can compose them
-// freely. Post/reel iterators yield URLs lazily as the grid is scrolled.
+
 
 import { safeGoto, sendLog, waitFor } from '../lib';
 import { SELECTORS, RESERVED_PATHS } from './selectors';
 import { waitForLocatorReady, waitForPageReady } from './network';
 import { collectByScrolling, iterateByScrolling, scrollDialog, scrollWindow } from './scroll';
 
-type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Page = any;
 
 function sanitizeUsername(raw: string): string {
   return raw.replace(/^@+/, '').trim();
@@ -57,10 +55,6 @@ export async function* iterUserReels(
   });
 }
 
-// Robust media-link extractor. Scans every anchor on the page, normalises
-// its pathname, and accepts any `/<kind>/<shortcode>/` segment anywhere in
-// the path (not just at the start) — IG sometimes namespaces thumbnails
-// under the profile path, e.g. `/username/p/ABC/`.
 async function extractMediaLinks(page: Page, kind: 'p' | 'reel'): Promise<string[]> {
   return page.evaluate((mediaKind: string) => {
     const set = new Set<string>();
@@ -73,8 +67,6 @@ async function extractMediaLinks(page: Page, kind: 'p' | 'reel'): Promise<string
   }, kind);
 }
 
-// One-shot diagnostic: dump what the profile DOM actually looks like so we
-// can iterate on selectors without asking the user to re-run repeatedly.
 async function dumpGridDiagnostics(page: Page, kind: 'p' | 'reel'): Promise<void> {
   try {
     const diag = (await page.evaluate((mediaKind: string) => {
@@ -114,9 +106,6 @@ async function dumpGridDiagnostics(page: Page, kind: 'p' | 'reel'): Promise<void
 
 type GridState = 'ready' | 'empty' | 'private' | 'timeout';
 
-/** Wait until the profile grid has rendered (or IG reported it's private /
- *  empty). Prevents us from scrolling for 7s against an empty DOM because
- *  the page was still hydrating. */
 async function waitForProfileGrid(page: Page, kind: 'post' | 'reel'): Promise<GridState> {
   const anchorSel = kind === 'post' ? 'a[href*="/p/"]' : 'a[href*="/reel/"]';
   const deadline = Date.now() + 15_000;
@@ -167,10 +156,6 @@ export async function getFollowers(
 
   await safeGoto(page, `https://www.instagram.com/${encodeURIComponent(clean)}/`);
 
-  // Page has to be settled before we can trust the followers anchor is
-  // either present or genuinely missing. After clicking it, we wait again
-  // for IG's followers-list XHR to come back before scrolling — otherwise
-  // the dialog is empty and the scroll loop bails on iter 0.
   const link = page.locator(SELECTORS.followersLinkAnchor(clean)).first();
   await waitForLocatorReady(page, link, { state: 'visible', timeout: 15_000 });
   await link.click();

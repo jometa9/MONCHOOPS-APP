@@ -33,7 +33,7 @@ export function DesktopImportDialog({ onImport, onClose }: Props) {
 
   useEffect(() => {
     void boot();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   async function boot() {

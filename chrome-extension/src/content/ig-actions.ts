@@ -1,9 +1,4 @@
-// Atomic IG operations callable from the service worker.
-//
-// Each function in here MUST complete before any navigation happens — the
-// SW drives all navigation via chrome.tabs.update. If a primitive needs to
-// land on a different URL it returns first; the SW navigates and then calls
-// the next primitive on the new page.
+
 
 import {
   clickFollowButton,
@@ -37,9 +32,6 @@ export function isOnStories(): boolean {
   return /\/stories\//.test(location.href);
 }
 
-// "Watch" one frame of a story: dwell for the configured time, then click
-// the right edge to advance. Returns whether IG kept us on /stories/ — if
-// false, the user is out of stories (or never had any).
 export async function dwellOneStoryFrame(dwellMs: number): Promise<{ stillOnStories: boolean }> {
   if (!isOnStories()) return { stillOnStories: false };
   await sleep(jitter(Math.max(500, dwellMs), 0.3));
@@ -56,9 +48,6 @@ export function detectFollowState(): FollowState {
   return detectFollowStateImpl();
 }
 
-// One follow attempt: click the button + confirm "Follow anyway" if IG
-// pops the guard. Does not poll for state changes — the SW will re-call
-// detectFollowState a moment later to see if it stuck.
 export async function clickFollow(): Promise<{ clicked: boolean }> {
   const clicked = clickFollowButton();
   if (!clicked) return { clicked: false };
@@ -83,7 +72,6 @@ export function detectLikeState(): LikeState {
   return detectLikeStateImpl();
 }
 
-// One like attempt: click + brief settle. The SW can re-check state.
 export async function clickLike(): Promise<{ clicked: boolean }> {
   const clicked = clickLikeButton();
   if (!clicked) return { clicked: false };
@@ -154,8 +142,6 @@ export async function pickFirstSearchResult(username: string): Promise<{ ok: boo
   return { ok: true };
 }
 
-// Type the message into the composer and press Enter. No navigation, no
-// reload — verification happens later via a SW-driven reload + threadContains.
 export async function typeAndSendDm(message: string): Promise<{ ok: boolean }> {
   const composer = await findComposer(15_000).catch(() => null);
   if (!composer) return { ok: false };

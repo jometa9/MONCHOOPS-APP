@@ -108,8 +108,7 @@ export function Settings() {
     setIsWipingAll(true);
     try {
       await b2dm.settings.wipeAllData();
-      // Client-side caches (theme, sounds toggle, export dir) live in
-      // localStorage; blow them away too so the app really feels reset.
+
       try {
         localStorage.clear();
       } catch {}
@@ -134,7 +133,7 @@ export function Settings() {
         </p>
 
         <div className="mt-4 flex flex-col gap-2">
-          {/* Account */}
+          {}
           <div className="border border-border bg-background">
             <SectionHeader title={t('settings.account')} />
             <InfoRow label={t('settings.name')} value={session.profile?.name} />
@@ -158,7 +157,7 @@ export function Settings() {
             </div>
           </div>
 
-          {/* Language */}
+          {}
           <div className="border border-border bg-background">
             <SectionHeader title={t('settings.languageSection')} />
             <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
@@ -178,7 +177,7 @@ export function Settings() {
             </p>
           </div>
 
-          {/* Preferences */}
+          {}
           <div className="border border-border bg-background">
             <SectionHeader title={t('settings.preferences')} />
             <SwitchRow
@@ -205,7 +204,7 @@ export function Settings() {
             />
           </div>
 
-          {/* Data */}
+          {}
           <div className="border border-border bg-background">
             <SectionHeader title={t('settings.data')} />
             <div className="flex items-stretch border-t border-border">

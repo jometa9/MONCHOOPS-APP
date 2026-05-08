@@ -24,7 +24,7 @@ export function uuid(): string {
 }
 
 export function jitter(baseMs: number, range = 0.4): number {
-  // ±range fraction around baseMs. range=0.4 → 60%-140%.
+
   const min = baseMs * (1 - range);
   const max = baseMs * (1 + range);
   return Math.floor(min + Math.random() * (max - min));

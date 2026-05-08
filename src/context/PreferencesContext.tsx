@@ -18,10 +18,6 @@ interface PreferencesContextValue {
 
 const STORAGE_KEY = 'b2dm-prefs';
 
-// `headless` is authoritative in the backend meta table (workers read it at
-// job start). `soundsEnabled` and `scrapeExportDir` stay in localStorage /
-// their own IPC respectively — this cache exists only to keep the renderer's
-// initial paint from flashing stale values before the backend responds.
 function loadPrefs(): Preferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

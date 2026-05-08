@@ -39,7 +39,6 @@ export function HistoryDetail() {
 
   const isDesktop = source === 'desktop';
 
-  // ---- Desktop branch — pulls SyncedDmJob + SyncedDmSends -----------------
   const dmJob = useLiveQuery(
     async () => (isDesktop ? await db.dmJobs.get(id) : undefined),
     [isDesktop, id]
@@ -57,11 +56,10 @@ export function HistoryDetail() {
   useEffect(() => {
     if (!isDesktop || !id) return;
     void pullDmSends(id).catch(() => {
-      // Failures surface via the sidebar sync indicator.
+
     });
   }, [isDesktop, id]);
 
-  // ---- Campaign branch — local extension data ----------------------------
   const campaign = useLiveQuery(
     async () => (!isDesktop ? await db.campaigns.get(id) : undefined),
     [isDesktop, id]

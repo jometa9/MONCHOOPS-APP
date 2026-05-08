@@ -6,9 +6,7 @@ import { db } from '@/shared/db';
 
 export function Home() {
   const { t } = useTranslation();
-  // Aggregates pulled from the local mirror — they reflect everything the
-  // extension knows: campaigns it ran itself plus categories / variants
-  // synced from the desktop.
+
   const totalCampaigns = useLiveQuery(() => db.campaigns.count(), [], 0);
   const totalSent = useLiveQuery(
     () => db.history.where('status').equals('sent').count(),

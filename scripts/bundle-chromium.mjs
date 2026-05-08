@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-// Stage Chrome-for-Testing builds into build-resources/ so electron-builder
-// can ship them via extraResources. Targets are passed as CLI args:
-//   node scripts/bundle-chromium.mjs --mac --win
-// Defaults to the host platform when no flags are given.
-//
-// The Chrome version is read from playwright-core's browsers.json so it stays
-// in lock-step with whatever playwright-core build resolves to at runtime.
 
 import { spawnSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
@@ -19,7 +12,6 @@ const repoRoot = path.resolve(__dirname, '..');
 const stagingRoot = path.join(repoRoot, 'build-resources');
 const cacheRoot = path.join(stagingRoot, '.cache');
 
-// Map our short target names to the layout playwright resolves at runtime.
 const TARGETS = {
   'mac-arm64': {
     folder: 'chrome-mac-arm64',
@@ -96,8 +88,7 @@ function downloadFollowingRedirects(url, dest, attempt = 0) {
 }
 
 function unzip(zipPath, destDir) {
-  // Prefer unzip when available (preserves perms + symlinks); fall back to tar
-  // (bsdtar handles zips and ships with macOS and Windows 10+).
+
   const tryRun = (bin, args) => {
     const result = spawnSync(bin, args, { stdio: 'inherit' });
     return result.status === 0;
@@ -110,8 +101,7 @@ function unzip(zipPath, destDir) {
 }
 
 async function ensureExecutable(target, destDir) {
-  // Mac binaries inside .app bundles need the executable bit. unzip preserves
-  // it but tar may not, so be explicit.
+
   if (target !== 'mac-arm64') return;
   const bin = path.join(
     destDir,

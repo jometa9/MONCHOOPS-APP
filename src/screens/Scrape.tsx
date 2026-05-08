@@ -285,8 +285,6 @@ export function Scrape() {
   );
 }
 
-/* ---------------- Step 2: Scrape config ---------------- */
-
 interface ConfigState {
   username: string;
   targetInput: string;
@@ -452,8 +450,6 @@ function ScrapeConfigStep({
     </div>
   );
 }
-
-/* ---------------- Step 3: Review ---------------- */
 
 function ReviewStep({
   account,

@@ -283,9 +283,7 @@ function DeleteCategoryDialog({
     setError(null);
     try {
       const now = Date.now();
-      // Tombstone locally so the UI hides it immediately. The push runs the
-      // real DELETE on the desktop; if offline it stays queued and the
-      // tombstone keeps the item out of every screen until reconciled.
+
       await db.categories.update(category.id, {
         deletedAt: now,
         updatedAt: now,

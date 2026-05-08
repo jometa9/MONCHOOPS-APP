@@ -72,8 +72,6 @@ export function Queue() {
     return map;
   }, [categories]);
 
-  // Running first, then queued (FIFO). For login jobs (no accountId) we keep
-  // them at the end — they're transient anyway.
   const orderedJobs = useMemo(() => {
     const running = active.filter((j) => j.status === 'running');
     const queued = active

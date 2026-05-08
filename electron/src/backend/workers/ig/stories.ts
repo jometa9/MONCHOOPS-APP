@@ -1,13 +1,11 @@
-// Story-watching primitives. Non-destructive — we never reply, like or send.
-// Used by the Cold DM worker for the optional per-recipient story view.
+
 
 import { jitter, safeGoto, waitFor } from '../lib';
 
-type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Page = any;
 
 export interface UserStoriesOpts {
-  // Either cap by total time on the user's stories, or by per-story dwell.
-  // When both are set, the function honours whichever runs out first.
+
   totalDurationMs?: number;
   perStoryDwellMs?: [min: number, max: number];
   maxStories?: number;

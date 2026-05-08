@@ -35,8 +35,6 @@ export function AccountStep({ accounts, value, onChange }: Props) {
     return map;
   }, [active]);
 
-  // Error-status accounts have no valid session — omit them from the picker
-  // so the user can't start a job that will fail at the first Playwright step.
   const usable = useMemo(
     () => accounts.filter((a) => a.status !== 'error'),
     [accounts]

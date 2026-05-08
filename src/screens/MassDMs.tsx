@@ -349,8 +349,6 @@ export function MassDMs() {
   );
 }
 
-/* ---------------- Step 2: Leads ---------------- */
-
 type LeadsTab = 'file' | 'job' | 'category' | 'manual';
 
 interface LeadsTabDef {
@@ -486,7 +484,7 @@ function ManualPanel({
       cancelled = true;
       window.clearTimeout(handle);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [rows]);
 
   return (
@@ -999,8 +997,6 @@ function CategoryPanel({
   );
 }
 
-/* ---------------- Step 3: Message ---------------- */
-
 type MessageTab = 'write' | 'saved';
 
 interface MessageTabDef {
@@ -1258,8 +1254,6 @@ function SavedVariantsPanel({ onLoad }: { onLoad: (variants: string[]) => void }
   );
 }
 
-/* ---------------- Step 4: Interactions ---------------- */
-
 function InteractionsStep({
   value,
   onChange,
@@ -1391,8 +1385,6 @@ function summariseInteractions(s: InteractionsState, t: TFn): string {
   if (s.watchStories) parts.push(t('screens.massDms.summaryWatch', { secs: s.storyDwellSec }));
   return parts.join(' · ');
 }
-
-/* ---------------- Step 5: Review ---------------- */
 
 function ReviewStep({
   account,

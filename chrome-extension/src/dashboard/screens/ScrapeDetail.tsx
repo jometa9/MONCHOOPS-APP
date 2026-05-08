@@ -38,7 +38,7 @@ export function ScrapeDetail() {
 
   useEffect(() => {
     if (jobId) void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [jobId]);
 
   const filtered = useMemo(() => {

@@ -1,21 +1,4 @@
-// Service worker — single source of truth for campaign progress.
-//
-// Why alarms: MV3 service workers are evicted after ~30s of inactivity.
-// chrome.alarms is the only API that wakes us back up reliably even when
-// the dashboard tab is closed. We register a global "tick" alarm and let
-// every running campaign be re-evaluated on each fire — no per-campaign
-// alarms, no in-memory job state to lose.
-//
-// Why one DM at a time: IG hates parallel sends from the same account.
-// The single content-script tab guarantees serialization. The dashboard
-// also locks its navigation while a campaign is running so the user can't
-// start another one in parallel.
-//
-// Why the SW orchestrates instead of the content script: every navigation
-// (location.href = X) destroys the content-script context, killing any
-// in-flight async work. The fix is to keep each content-script call
-// atomic (sub-second, never navigates) and drive navigation from the SW
-// via chrome.tabs.update + waitForTabReady + ping-after-load.
+
 
 import { db, nextPendingLead, countLeads } from '@/shared/db';
 import { jitter, pickVariant, uuid } from '@/shared/format';
@@ -30,8 +13,6 @@ import type {
   CsResponse,
   IgSendResult,
 } from '@/shared/messages';
-
-// --- alarms --------------------------------------------------------------
 
 const TICK_ALARM = 'b2dm-tick';
 const TICK_PERIOD_MIN = 1;
@@ -57,13 +38,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-// --- popup / dashboard messages -----------------------------------------
-
 chrome.runtime.onMessage.addListener((req, _sender, sendResponse) => {
   if (!req || typeof req !== 'object' || !('type' in req)) return false;
   const type = (req as { type: string }).type;
-  // b2dm/* primitives are addressed at content scripts via chrome.tabs.sendMessage
-  // and never reach here, but be defensive in case any code uses runtime.sendMessage.
+
   if (type.startsWith('b2dm/')) return false;
 
   (async () => {
@@ -137,8 +115,6 @@ async function openDashboard(path?: string): Promise<void> {
   }
   await chrome.tabs.create({ url: baseUrl + hash });
 }
-
-// --- the tick ------------------------------------------------------------
 
 let ticking = false;
 
@@ -269,8 +245,6 @@ async function processOne(campaign: Campaign, lead: Lead): Promise<void> {
   }
 }
 
-// --- interaction flows (orchestrated step-by-step) -----------------------
-
 async function runInteractions(
   tabId: number,
   username: string,
@@ -304,7 +278,7 @@ async function runInteractions(
 
 async function watchStoriesFlow(tabId: number, username: string, dwellSec: number): Promise<void> {
   await navigateTab(tabId, `https://www.instagram.com/stories/${encodeURIComponent(username)}/`);
-  // Quick check: if IG bounced us off /stories/, no story exists.
+
   const onStories = await rpc<CsBoolData>(tabId, { type: 'b2dm/checkOnStories' });
   if (!onStories.value) return;
   const dwellMs = Math.max(1, dwellSec) * 1000;
@@ -322,7 +296,7 @@ async function followUserFlow(tabId: number, username: string): Promise<void> {
     return;
   }
   await rpc(tabId, { type: 'b2dm/clickFollow' });
-  // Settle: re-poll a few times until state changes or timeout.
+
   for (let i = 0; i < 6; i++) {
     await sleep(700);
     const after = await rpc<CsFollowData>(tabId, { type: 'b2dm/detectFollowState' }).catch(() => null);
@@ -346,8 +320,6 @@ async function likeNPostsFlow(tabId: number, username: string, n: number): Promi
   }
 }
 
-// --- DM flow -------------------------------------------------------------
-
 async function sendDm(tabId: number, username: string, message: string): Promise<boolean> {
   try {
     return await sendDmViaShortlink(tabId, username, message);
@@ -363,8 +335,7 @@ async function sendDmViaShortlink(
   message: string
 ): Promise<boolean> {
   await navigateTab(tabId, `https://ig.me/m/${encodeURIComponent(username)}`);
-  // ig.me 3xx-redirects to instagram.com/direct/t/<thread_id>/. If IG can't
-  // resolve the username it lands on the inbox or a 404 — wait for either.
+
   const matched = await rpc<{ matched: boolean }>(tabId, {
     type: 'b2dm/waitForUrlMatch',
     pattern: 'instagram\\.com/direct/(t|inbox)',
@@ -409,8 +380,6 @@ async function sendDmViaDirectNew(
   return verifyDelivery(tabId, message);
 }
 
-// IG's optimistic UI lies on rejected sends — reload the thread to force a
-// server fetch, then check the rendered DOM for the message text.
 async function verifyDelivery(tabId: number, message: string): Promise<boolean> {
   await sleep(jitter(2000));
   await chrome.tabs.reload(tabId);
@@ -421,8 +390,6 @@ async function verifyDelivery(tabId: number, message: string): Promise<boolean> 
   if (!r.value) throw new Error('verification_failed: message not found in thread after reload');
   return true;
 }
-
-// --- IG tab management --------------------------------------------------
 
 async function ensureIgTab(): Promise<chrome.tabs.Tab> {
   const existing = await chrome.tabs.query({ url: ['https://www.instagram.com/*'] });
@@ -451,9 +418,7 @@ async function navigateTab(tabId: number, url: string): Promise<void> {
 
 async function waitForTabReady(tabId: number, timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  // First wait for the tab to LEAVE 'complete' (i.e. start loading the new
-  // url) — chrome.tabs.update is async and 'complete' from a previous nav
-  // may still be reported on the very next read.
+
   let sawLoading = false;
   while (Date.now() < deadline) {
     const t = await chrome.tabs.get(tabId).catch(() => null);
@@ -463,7 +428,7 @@ async function waitForTabReady(tabId: number, timeoutMs = 30_000): Promise<void>
     }
     if (sawLoading && t.status === 'complete') return;
     if (!sawLoading && t.status === 'complete') {
-      // Maybe the navigation hasn't been picked up yet — give it a beat.
+
       await sleep(150);
       const t2 = await chrome.tabs.get(tabId).catch(() => null);
       if (!t2) return;
@@ -474,14 +439,12 @@ async function waitForTabReady(tabId: number, timeoutMs = 30_000): Promise<void>
 }
 
 async function ensureContentScript(tabId: number): Promise<void> {
-  // Newly-loaded pages need a beat for the content script to attach its
-  // listener at document_idle.
+
   for (let i = 0; i < 20; i++) {
     if (await pingContentScript(tabId)) return;
     await sleep(300);
   }
-  // Last resort: reload the tab. Happens if the URL is one our manifest
-  // doesn't match (eg ig.me before redirect) or the script crashed.
+
   try {
     await chrome.tabs.reload(tabId);
   } catch {
@@ -510,8 +473,6 @@ function pingContentScript(tabId: number): Promise<boolean> {
 function sleep(ms: number) {
   return new Promise<void>((res) => setTimeout(res, ms));
 }
-
-// --- RPC primitive calls -------------------------------------------------
 
 async function rpc<T = unknown>(tabId: number, message: CsRequest, timeoutMs = 60_000): Promise<T> {
   const resp = await sendToTab<CsResponse>(tabId, message, timeoutMs);
@@ -547,8 +508,6 @@ function sendToTab<T>(tabId: number, message: unknown, timeoutMs: number): Promi
     }
   });
 }
-
-// --- notifications ------------------------------------------------------
 
 function notify(title: string, body: string): void {
   try {

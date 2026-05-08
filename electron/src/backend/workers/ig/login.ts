@@ -1,20 +1,15 @@
-// ensureLoggedIn — reusable entry-point for scrape/DM workers. Assumes the
-// browser context was already seeded with the account's sessionid cookie via
-// launchBrowser(). This function navigates to instagram.com, waits out any
-// reCAPTCHA challenge, dismisses post-login nudges, and confirms the session
-// is live. If no sessionid cookie is present and credentials were provided,
-// it falls back to a password login.
+
 
 import { safeGoto, sendLog, waitFor } from '../lib';
 import { dismissIgPrompts } from './dialogs';
 import { SELECTORS } from './selectors';
 
-type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Page = any;
 
 export interface EnsureLoggedInOpts {
-  /** Max time to wait while a captcha challenge is visible. Default 5 min. */
+
   captchaTimeoutMs?: number;
-  /** Optional fallback credentials if the cookie session is stale. */
+
   username?: string;
   password?: string;
 }
@@ -84,7 +79,6 @@ async function passwordLogin(
 
   await waitOutCaptcha(page, captchaTimeoutMs);
 
-  // Wait for the session cookie to appear after submit.
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
     if (await hasSession(page)) return;

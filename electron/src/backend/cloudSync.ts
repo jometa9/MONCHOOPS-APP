@@ -1,13 +1,4 @@
-// Talks to the MonchoOps landing API to enforce per-user plan limits across
-// devices. The local SQLite DB is still authoritative for cookies and worker
-// state — this module only mirrors "which IG accounts has the user connected
-// in total" and "how many DMs has the user sent this month" so the server
-// can refuse over-quota actions.
-//
-// All calls are best-effort with a short timeout: if the server is offline
-// we don't block the user from using already-authenticated accounts. The
-// register/check-quota call BEFORE adding an account is the only hard
-// barrier — that one returns 403 if the user is already at their plan limit.
+
 
 import crypto from 'crypto';
 import { app } from 'electron';
@@ -30,8 +21,6 @@ function loadLicenseKey(): string | null {
   }
 }
 
-// Stable per-install identifier. Used purely as a tag on usage rows so the
-// server can later show "added on this device". Not used for auth.
 function getDeviceId(): string {
   const existing = metaGet(DEVICE_ID_META);
   if (existing) return existing;
@@ -74,9 +63,7 @@ async function request<T>(
     try {
       data = await res.json();
     } catch {}
-    // Piggyback an app-version freshness check on every landing call. The
-    // helper is internally rate-limited to once per 24h, so calling it on
-    // hot paths is cheap.
+
     void checkVersionIfStale().catch(() => {});
     if (!res.ok) {
       const error =
@@ -180,7 +167,7 @@ export async function unregisterAccount(username: string): Promise<boolean> {
 export interface DmReportInput {
   fromUsername: string;
   targetUsername: string;
-  sentAt?: number; // epoch ms
+  sentAt?: number;
 }
 
 export interface DmReportResult {
@@ -249,22 +236,10 @@ export async function reportDms(
   return { ok: false, status: res.status, code: 'unknown', message: res.error };
 }
 
-// Re-encrypt a license key into the on-disk slot. Wrapper kept here so
-// license.ts can avoid importing crypto helpers in two places when we add
-// new fields later. Currently unused but reserved for the next iteration.
 export function persistLicenseKey(key: string): void {
   const encrypted = encryptString(key);
   metaSet(LICENSE_KEY_META, encrypted.toString('base64'));
 }
-
-// ---- DM event batcher ----------------------------------------------------
-//
-// Mass DM jobs fire one IPC `dm-send` per recipient. Round-tripping each one
-// to the cloud would burn 5k requests for a single Pro-tier monthly run, so
-// we buffer them and flush every BATCH_FLUSH_MS or when the queue hits
-// BATCH_MAX_EVENTS, whichever comes first. Buffer survives crashes only as
-// long as the process — that's deliberate: a hard crash mid-batch loses at
-// most a few DM-counter rows and we'd rather under-count than double-count.
 
 const BATCH_FLUSH_MS = 5_000;
 const BATCH_MAX_EVENTS = 100;
@@ -297,9 +272,7 @@ export async function flushDmBuffer(): Promise<void> {
   try {
     const res = await reportDms(batch);
     if (res.ok && res.dropped > 0) {
-      // Server trimmed the batch because the user hit the monthly DM cap.
-      // Drop the rest of the buffer too — there's no point sending more
-      // until the limit resets next month.
+
       dmBuffer = [];
       for (const cb of dmLimitListeners) {
         try { cb({ limit: res.limit, used: res.used }); } catch {}
@@ -310,9 +283,7 @@ export async function flushDmBuffer(): Promise<void> {
         try { cb({ limit: res.limit ?? null, used: res.used }); } catch {}
       }
     } else if (!res.ok && (res.code === 'network' || res.code === 'unknown')) {
-      // Transient — put events back at the head and retry on the next flush.
-      // We cap the re-queue at 5x the normal max so a long outage doesn't
-      // grow memory unbounded; older events get dropped first.
+
       const cap = BATCH_MAX_EVENTS * 5;
       dmBuffer = batch.concat(dmBuffer).slice(-cap);
       scheduleFlush();

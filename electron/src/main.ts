@@ -115,9 +115,7 @@ if (!app.isPackaged) {
 }
 
 if (app.isPackaged) {
-  // Forked Playwright workers run in ELECTRON_RUN_AS_NODE mode where
-  // process.resourcesPath isn't populated. Surface the bundled chromium dir
-  // through an env var that workers can read.
+
   process.env.B2DM_CHROMIUM_DIR = path.join(process.resourcesPath, 'chromium');
 }
 
@@ -190,8 +188,7 @@ if (!gotTheLock) {
 }
 
 function handleDeepLink(url: string) {
-  // Give the backend a chance to consume the URL (e.g. `b2dm://auth?apiKey=…`).
-  // The backend's fallback callback re-enters forwardDeepLinkToRenderer below.
+
   void dispatchDeepLink(url);
 }
 

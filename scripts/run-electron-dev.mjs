@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Compile Electron TS once, wait for Vite on :7775, then spawn Electron.
+
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import http from 'node:http';

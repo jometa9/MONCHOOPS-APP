@@ -1,36 +1,22 @@
-// Post / reel primitives: commenters and likers for a single permalink.
-// Strategy: IG's standalone /p/ and /reel/ pages in 2026 don't use stable
-// selectors (role="list" etc. come and go with A/B tests, and the "Liked
-// by" anchor has been removed in many markets since likes became optional
-// to hide). So we:
-//   1. Dump the post DOM once on entry to make debugging easier.
-//   2. Extract commenters by scanning every username anchor in the main
-//      content region — broader than a `role="list"` match, still
-//      filtering reserved paths and the post author.
-//   3. Open the likers modal via multiple fallback strategies: href,
-//      aria-label, then text-based clicks on "likes" / "others" / "y otros".
+
 
 import { safeGoto, sendLog } from '../lib';
 import { RESERVED_PATHS } from './selectors';
 import { collectByScrolling, scrollCommentList, scrollDialog } from './scroll';
 import { createNetworkTracker, waitForPageReady } from './network';
 
-type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Page = any;
 
 export interface LikersResult {
   users: string[];
-  /** True when IG did not expose a "Liked by" list (common on popular reels
-   *  and accounts with hidden like counts). Callers can decide whether to
-   *  treat a partial result as an error. */
+
   partial: boolean;
 }
 
 export interface ExtractOpts {
   target?: number;
   onBatch?: (added: string[]) => void;
-  /** When it returns true, stop scrolling the comments/likers list right
-   *  away — the caller has already hit its global lead cap and further
-   *  extraction would be wasted work. */
+
   shouldStop?: () => boolean;
 }
 
@@ -42,14 +28,10 @@ export async function getCommenters(page: Page, postUrl: string, opts: ExtractOp
   await safeGoto(page, postUrl);
   await waitForPageReady(page);
 
-  // Reels don't show comments inline — the player sidebar has a comment
-  // icon we must click to open the comments panel.
   if (isReel) await openReelCommentsPanel(page);
 
   await dumpPostDom(page, 'comments');
 
-  // Some layouts need a click on "View all N comments" before any
-  // usernames render.
   await clickViewAllComments(page);
   await expandHiddenComments(page);
 
@@ -62,8 +44,7 @@ export async function getCommenters(page: Page, postUrl: string, opts: ExtractOp
     return await collectByScrolling<string>({
       target: opts.target,
       shouldStop: opts.shouldStop,
-      // With the network tracker deciding when to advance, stale-idle
-      // counting is a tiebreaker more than a timer. Keep it tight.
+
       maxIdleRounds: 3,
       pauseMs: 100,
       onBatch: (added) => {
@@ -75,8 +56,7 @@ export async function getCommenters(page: Page, postUrl: string, opts: ExtractOp
         await expandHiddenComments(page);
         await expandReplies(page);
         const target = await scrollCommentList(page);
-        // Wait for IG's "load more comments" XHR to land before extracting.
-        // Scroll is considered complete once no API call fires for 1.5s.
+
         const settled = await tracker.waitSettle(1500, 10_000);
         sendLog(
           'info',
@@ -90,12 +70,6 @@ export async function getCommenters(page: Page, postUrl: string, opts: ExtractOp
   }
 }
 
-// Reels render in one of two layouts:
-//  A) Post-style (comments already visible as a side column) — no action.
-//  B) Player-only (comments hidden behind a speech-bubble icon) — we click
-//     the icon to open the side panel.
-// We detect (A) by counting username anchors already present in main; if
-// it looks empty, we fall back to clicking the icon.
 async function openReelCommentsPanel(page: Page): Promise<void> {
   const visibleUsernames = (await page
     .evaluate(() => {
@@ -135,7 +109,7 @@ async function openReelCommentsPanel(page: Page): Promise<void> {
       await waitForPageReady(page);
       return;
     } catch {
-      // Try next selector.
+
     }
   }
   sendLog('warn', '      could not find reel comment icon — comments may be empty');
@@ -152,8 +126,7 @@ export async function getLikers(page: Page, postUrl: string, opts: ExtractOpts =
   sendLog('info', `      likes modal opened via: ${opened ?? 'none'}`);
 
   if (opened) {
-    // Wait for the likers list XHR to land before we start scrolling — an
-    // empty dialog would make the scroll loop give up after `maxIdleRounds`.
+
     await waitForPageReady(page);
     let iteration = 0;
     const tracker = createNetworkTracker(page);
@@ -184,8 +157,6 @@ export async function getLikers(page: Page, postUrl: string, opts: ExtractOpts =
     }
   }
 
-  // Fallback: pull the visible "Liked by X and Y" inline usernames that
-  // are rendered below the caption.
   const fallback = await page.evaluate((reserved: string[]) => {
     const set = new Set<string>();
     const root = document.querySelector('main') ?? document.querySelector('article') ?? document.body;
@@ -201,15 +172,8 @@ export async function getLikers(page: Page, postUrl: string, opts: ExtractOpts =
   return { users: capped, partial: true };
 }
 
-// Try several strategies to open the likers modal. Returns a label of
-// the strategy that worked (for logs) or null.
-//
-// We deliberately avoid any aria-label match on "like" / "me gusta":
-// those also hit the HEART action button (aria-label="Like"), and a stray
-// click there would double-tap the post instead of opening the viewer
-// list. Only safe, modal-specific signals below.
 async function openLikesModal(page: Page): Promise<string | null> {
-  // 1) The traditional /liked_by/ anchor.
+
   try {
     const a = page.locator('a[href$="/liked_by/"]').first();
     if ((await a.count()) > 0) {
@@ -218,8 +182,6 @@ async function openLikesModal(page: Page): Promise<string | null> {
     }
   } catch {}
 
-  // 2) Text-based click. These strings only appear in the likers-count
-  //    caption, never on the heart icon — safe.
   const textCandidates = [
     /\band others\b/i,
     /\by otros\b/i,
@@ -333,8 +295,6 @@ async function expandReplies(page: Page): Promise<void> {
   }
 }
 
-// Post-page username extraction: look at every anchor inside the main
-// content region. Exclude reserved routes and the post author.
 async function extractPostUsernames(page: Page, author: string | null): Promise<string[]> {
   return page.evaluate(
     (params: { reserved: string[]; author: string | null }) => {
@@ -377,7 +337,7 @@ async function extractUsernamesFromDialog(page: Page): Promise<string[]> {
 export async function readPostAuthor(page: Page): Promise<string | null> {
   try {
     return (await page.evaluate(() => {
-      // IG puts the author link near the top of the post header.
+
       const header = document.querySelector('header') ?? document.querySelector('article header');
       if (header) {
         const a = header.querySelector<HTMLAnchorElement>('a');
@@ -386,7 +346,7 @@ export async function readPostAuthor(page: Page): Promise<string | null> {
           if (m) return m[1];
         }
       }
-      // Fallback: first anchor in <main> whose pathname looks like /username/.
+
       const main = document.querySelector('main');
       if (main) {
         const anchors = Array.from(main.querySelectorAll<HTMLAnchorElement>('a'));
@@ -402,8 +362,6 @@ export async function readPostAuthor(page: Page): Promise<string | null> {
   }
 }
 
-// One-shot diagnostic: dump what the post DOM looks like. Helps us adapt
-// selectors without asking for repeated re-runs.
 async function dumpPostDom(page: Page, phase: string): Promise<void> {
   try {
     const diag = (await page.evaluate(() => {

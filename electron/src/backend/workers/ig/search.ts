@@ -1,16 +1,13 @@
-// Search primitives: lazily yield post URLs from a hashtag or location grid.
-// The caller drives iteration — we only scroll the grid when they ask for the
-// next URL, so if they hit their lead cap after one post we never scroll at
-// all.
+
 
 import { safeGoto, sendLog } from '../lib';
 import { waitForPageReady } from './network';
 import { iterateByScrolling, scrollWindow } from './scroll';
 
-type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Page = any;
 
 export interface LocationSearchOpts {
-  /** Use Instagram's /recent/ variant of the location page. Default true. */
+
   recent?: boolean;
 }
 
@@ -53,9 +50,6 @@ export async function gotoLocationGrid(
   await safeGoto(page, url);
   await waitForPageReady(page);
 
-  // IG has progressively gutted /recent/ for logged-out / newer accounts —
-  // sometimes it renders an empty shell even when /top/ has posts. If we
-  // land on /recent/ and the grid is empty, retry the base URL (Top tab).
   if (wantRecent) {
     const counts = await probeGridAnchors(page);
     sendLog(
@@ -86,9 +80,6 @@ function toRecentUrl(url: string): string {
   return `${u}recent/`;
 }
 
-// Read the human-friendly location name from a location grid page. IG
-// renders it as an <h1> at the top of the header. Returns null if the
-// page layout doesn't expose one (e.g. slug redirect, error page).
 export async function readLocationName(page: Page): Promise<string | null> {
   try {
     return (await page.evaluate(() => {
@@ -126,10 +117,7 @@ function iterateGridPosts(page: Page): AsyncGenerator<string, void, void> {
 async function extractGridPostUrls(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const set = new Set<string>();
-    // Match `/p/<shortcode>/` or `/reel/<shortcode>/` anywhere in the
-    // string — IG sometimes renders hrefs as relative paths on location
-    // grids, so the anchor's .pathname resolves to
-    // `/explore/locations/.../p/<shortcode>/` rather than starting at `/p/`.
+
     const addFrom = (s: string) => {
       const mp = s.match(/\/p\/([A-Za-z0-9_-]+)/);
       const mr = s.match(/\/reel\/([A-Za-z0-9_-]+)/);
@@ -142,8 +130,7 @@ async function extractGridPostUrls(page: Page): Promise<string[]> {
         addFrom(a.pathname || '');
         if (set.size === 0) addFrom(a.getAttribute('href') || '');
       });
-    // Fallback: newer IG grids sometimes use [role="link"] wrappers. Widen
-    // the sweep to any nested or ancestor <a> under a role=link element.
+
     document
       .querySelectorAll<HTMLElement>('[role="link"]')
       .forEach((el) => {

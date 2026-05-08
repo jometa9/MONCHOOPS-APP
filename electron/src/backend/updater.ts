@@ -2,9 +2,6 @@ import { app, shell } from 'electron';
 import { BUILD_CONFIG } from '../buildConfig';
 import { metaGetJson, metaSetJson } from './db';
 
-// The landing returns the current shipping version + per-OS download URLs.
-// We compare against `app.getVersion()` and surface a manual-download banner.
-// No auto-download, no auto-install.
 export type UpdateStatus =
   | { kind: 'idle' }
   | { kind: 'checking' }
@@ -67,9 +64,6 @@ function getPlatformKey(): 'mac' | 'windows' | null {
   return null;
 }
 
-// Plain dotted-numeric compare, e.g. "1.10.0" > "1.9.5". Non-numeric segments
-// sort lexicographically. Avoids pulling in the `semver` package for a single
-// comparison.
 function compareVersions(a: string, b: string): number {
   const pa = a.split('.');
   const pb = b.split('.');
@@ -141,15 +135,12 @@ async function fetchAppVersion(): Promise<AppVersionResponse> {
   }
 }
 
-// Refresh the version cache + status. By default, no-op if we already
-// checked within the last 24h. Pass `force=true` for the manual settings
-// trigger or any time the user explicitly asks for a check.
 export async function checkVersionIfStale(force = false): Promise<void> {
   if (inFlightCheck) return inFlightCheck;
   const cache = loadCache();
   const now = Date.now();
   if (!force && cache && now - cache.lastCheckedAt < STALE_THRESHOLD_MS) {
-    // Cache still fresh — make sure the banner reflects it.
+
     if (currentStatus.kind === 'idle') applyCacheToStatus(cache);
     return;
   }
@@ -172,8 +163,7 @@ export async function checkVersionIfStale(force = false): Promise<void> {
       applyCacheToStatus(next);
     } catch (err) {
       logUpdater('check failed', err);
-      // Fall back to cached state if we have one — otherwise stay silent
-      // so a flaky network never paints an error in the user's face.
+
       const stale = loadCache();
       if (stale) {
         applyCacheToStatus(stale);
@@ -196,8 +186,6 @@ export function initUpdater(broadcast: Broadcaster): void {
   initialized = true;
   broadcaster = broadcast;
 
-  // Paint last-known state immediately so the banner doesn't flicker on
-  // every cold start while we wait for the network check.
   const cache = loadCache();
   if (cache) applyCacheToStatus(cache);
 

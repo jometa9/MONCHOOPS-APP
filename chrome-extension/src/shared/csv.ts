@@ -1,6 +1,4 @@
-// Username CSV parser. Accepts files where the first column is the
-// username, with or without a header row. Strips leading "@" and lowercases
-// for dedup. Mirrors parseUsernamesCsv() from the desktop massDm worker.
+
 
 import Papa from 'papaparse';
 

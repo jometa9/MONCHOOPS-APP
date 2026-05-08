@@ -36,8 +36,6 @@ export function App() {
     })();
   }, []);
 
-  // Kick off background sync once we know the user is logged in. The poller
-  // is idempotent — pushing once is enough.
   useEffect(() => {
     if (!session.hasLicense) return;
     startSyncPolling();
@@ -80,8 +78,6 @@ function Shell({
   const running = useRunningCampaign();
   const location = useLocation();
 
-  // While a campaign is running, force the user onto its detail page —
-  // they can pause from there but cannot navigate elsewhere.
   if (running) {
     const detailPath = `/campaigns/${running.id}`;
     if (location.pathname !== detailPath) {

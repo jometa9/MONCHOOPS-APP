@@ -5,9 +5,6 @@ import path from 'node:path';
 import fs from 'node:fs';
 import manifest from './manifest.config';
 
-// crxjs only bundles icons referenced from `default_icon` / `icons`. The
-// `theme_icons` entries are skipped, so we copy the dark-theme variants over
-// after the bundle is written.
 function copyThemeIcons(): Plugin {
   return {
     name: 'copy-theme-icons',

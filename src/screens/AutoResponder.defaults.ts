@@ -1,6 +1,4 @@
-// Default Markdown system prompt seeded into the editor when no custom one
-// has been saved. Mirrored from the backend default so the UI shows the same
-// thing the responder would actually use if the user never edits it.
+
 
 export const DEFAULT_PROMPT_MD = `# You are responding on behalf of {{account_username}} on Instagram.
 

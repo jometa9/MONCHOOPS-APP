@@ -23,7 +23,7 @@ function readPreference(): LocalePreference {
     const v = localStorage.getItem(STORAGE_KEY);
     if (v === 'en' || v === 'es' || v === 'system') return v;
   } catch {
-    // ignore — fall through to default
+
   }
   return 'system';
 }
@@ -56,7 +56,7 @@ export function setLocalePreference(pref: LocalePreference): void {
   try {
     localStorage.setItem(STORAGE_KEY, pref);
   } catch {
-    // ignore — i18n still updates in-memory
+
   }
   void i18n.changeLanguage(resolve(pref));
 }

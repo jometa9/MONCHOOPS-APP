@@ -6,11 +6,10 @@ import { EMPTY_SESSION } from './types';
 import { wipeUserData } from './userData';
 import { checkVersionIfStale } from './updater';
 
-const LICENSE_KEY_META = 'license_key_encrypted'; // base64 of encrypted blob
+const LICENSE_KEY_META = 'license_key_encrypted';
 const PROFILE_META = 'profile';
 const SUBSCRIPTION_META = 'subscription';
-// Sticks around after logout so we can detect when a different user logs
-// back in on the same machine and scrub the previous user's data.
+
 const LAST_OWNER_EMAIL_META = 'last_owner_email';
 
 interface ExternalLicenseResponse {
@@ -55,10 +54,6 @@ function saveSubscription(sub: SubscriptionInfo): void {
   metaSetJson(SUBSCRIPTION_META, sub);
 }
 
-// Wipes user-scoped data if the incoming session belongs to someone other
-// than the last owner. The first login after a fresh install has no stored
-// owner, so nothing gets wiped. A matching email (same user re-logging in)
-// is also a no-op so the user keeps their accounts/leads/history.
 function ensureOwnerMatches(incomingEmail: string): void {
   const normalized = incomingEmail.trim().toLowerCase();
   if (!normalized) return;
@@ -81,9 +76,6 @@ export function getSession(): SessionSnapshot {
   };
 }
 
-// Dev/demo shortcut: typing "123" as the license key bypasses the real
-// license server and logs the user in as a mock "pro" user. Keep this until
-// the real B2DM license endpoint is live.
 const MOCK_LICENSE_KEY = '123';
 
 function buildMockSession(): SessionSnapshot {
@@ -117,8 +109,6 @@ export async function validateLicense(licenseKey: string): Promise<SessionSnapsh
     throw new Error('Could not reach the license server. Check your connection.');
   }
 
-  // Any successful round-trip to the landing is a chance to refresh the
-  // version cache. Internally rate-limited to once per 24h.
   void checkVersionIfStale().catch(() => {});
 
   const body = await res.text();

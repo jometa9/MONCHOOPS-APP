@@ -28,7 +28,7 @@ import { useThemeMode, type ThemeMode } from '../theme';
 interface Props {
   session: Session;
   onLogout: () => void;
-  /** When true, navigation is disabled because a campaign is in progress. */
+
   locked?: boolean;
 }
 

@@ -1,16 +1,4 @@
-// Forked worker: runs one of four scrape modes, composing the primitives
-// from ./ig/. Writes usernames to a CSV (one row per unique username per
-// job) while streaming progress back to main via process.send(). The main
-// process ingests the CSV into the `leads` table on completion if the job
-// was tagged with a categoryId.
-//
-// Two Playwright pages run per job on a shared context:
-//   - gridPage: stays parked on the hashtag/location/profile grid while we
-//     scroll lazily to yield post URLs.
-//   - postPage: navigates into each post in turn to extract its commenters
-//     and likers.
-// Session cookies live on the context, so a single ensureLoggedIn on
-// gridPage authenticates both pages.
+
 
 import fs from 'fs';
 import path from 'path';
@@ -31,7 +19,7 @@ import {
 } from './ig';
 import type { AccountSecrets } from '../accounts';
 
-type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Page = any;
 
 type ScrapeKind =
   | 'scrape_by_username'
@@ -51,22 +39,14 @@ interface ScrapeInit {
 }
 
 interface CsvSink {
-  /** Write a (deduped) username row. Returns true if the username was new
-   *  AND fit under the sink's cap. A false return can mean either the
-   *  username was already seen, or the cap has been reached. */
+
   write(username: string, sourceDetail: string): boolean;
   count(): number;
-  /** True once the sink has reached its configured cap. Callers use this
-   *  to short-circuit the collectors inside getCommenters/getLikers so we
-   *  don't keep scrolling past the user's objective. */
+
   atCap(): boolean;
   close(): void;
 }
 
-// Job-scoped dedup: one row per unique username per scrape, regardless of
-// how many sub-sources (followers / likers / commenters) mention it. If a
-// cap is set, the sink stops writing once reached — belt-and-suspenders
-// alongside shouldStop plumbing.
 function openCsv(csvPath: string, target: number): CsvSink {
   fs.mkdirSync(path.dirname(csvPath), { recursive: true });
   const fd = fs.openSync(csvPath, 'w');
@@ -154,8 +134,6 @@ async function runByUsername(
   return `@${username}`;
 }
 
-// Extract commenters + likers from a single post/reel, streaming each batch
-// into the sink and short-circuiting when the global target cap is reached.
 async function walkEngagement(
   page: Page,
   url: string,
@@ -222,9 +200,7 @@ async function runByPost(page: Page, params: any, sink: CsvSink): Promise<string
       }
     },
   });
-  // getCommenters already navigated to the post and called readPostAuthor
-  // internally — we read it again here on the same page to surface it as
-  // the scrape target. Cheap: same DOM, no network.
+
   const author = await readPostAuthor(page);
   if (shouldStop()) return author ? `@${author}` : null;
 

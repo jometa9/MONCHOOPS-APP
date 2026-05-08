@@ -1,12 +1,4 @@
-// Client for the B2DM desktop app's local HTTP bridge.
-//
-// Discovery: scans 127.0.0.1:17775..17780 for a /ping that returns
-// `{ ok, productName: 'B2DM' }`. The first match wins; we cache the port
-// in chrome.storage so subsequent calls skip the scan.
-//
-// No auth — if the desktop app is running, the extension can talk to it.
-// If it's not running, calls fail with BridgeError('no_desktop') and the
-// UI tells the user to start the desktop app.
+
 
 const PORT_RANGE_START = 17775;
 const PORT_RANGE_END = 17780;
@@ -44,9 +36,6 @@ export interface DesktopLead {
   displayName: string;
 }
 
-/** Full lead row shape returned by /leads/categories/:id (mirrors the
- *  desktop's `LeadPublic`). The extension stores these in its categoryLeads
- *  table to render CategoryLeadsDetail offline. */
 export interface DesktopCategoryLead {
   id: number;
   categoryId: string;
@@ -65,7 +54,6 @@ export interface DesktopVariantGroup {
   updatedAt: number;
 }
 
-/** Mirrors `MassDmResultPublic` on the desktop. */
 export interface DesktopDmResult {
   jobId: string;
   accountId: string | null;
@@ -78,7 +66,6 @@ export interface DesktopDmResult {
   completedAt: number;
 }
 
-/** Mirrors `MassDmSendPublic` on the desktop. */
 export interface DesktopDmSend {
   jobId: string;
   accountId: string | null;
@@ -89,7 +76,6 @@ export interface DesktopDmSend {
   sentAt: number;
 }
 
-/** Mirrors `JobPublic` on the desktop — only the fields we render in Queue. */
 export interface DesktopJob {
   id: string;
   kind: string;
@@ -124,10 +110,8 @@ async function storageRemove(key: string): Promise<void> {
   await chrome.storage.local.remove(key);
 }
 
-/** Returns the cached port if reachable, otherwise scans the range. Throws
- *  BridgeError('no_desktop') when no instance answers. */
 export async function discoverDesktop(): Promise<{ port: number; ping: DesktopPing }> {
-  // Drop any leftover token from the previous pairing-based bridge.
+
   await storageRemove(LEGACY_STORAGE_KEY_TOKEN);
 
   const cached = await storageGet<number>(STORAGE_KEY_PORT);
@@ -191,15 +175,11 @@ export async function listDesktopCategories(): Promise<DesktopCategory[]> {
   return (await res.json()) as DesktopCategory[];
 }
 
-/** Used by the campaign import flow — returns just `{username, displayName}`
- *  derived from the full lead rows. */
 export async function listCategoryLeads(categoryId: string): Promise<DesktopLead[]> {
   const rows = await listCategoryLeadsFull(categoryId);
   return rows.map((r) => ({ username: r.username, displayName: r.username }));
 }
 
-/** Full lead-row payload — the sync engine uses this to mirror category
- *  leads into the local Dexie table for offline rendering. */
 export async function listCategoryLeadsFull(
   categoryId: string
 ): Promise<DesktopCategoryLead[]> {
@@ -244,8 +224,6 @@ export async function deleteDesktopCategory(id: string): Promise<void> {
     throw new BridgeError('request_failed', msg);
   }
 }
-
-// --- DM history & queue --------------------------------------------------
 
 export async function listDesktopDmResults(): Promise<DesktopDmResult[]> {
   const res = await bridgeFetch('/dm/results');
@@ -294,8 +272,6 @@ export async function pushLeadsToDesktopCategory(
   return (await res.json()) as { added: number };
 }
 
-/** Probe the bridge without forcing a full discovery round-trip. Used by the
- *  sync engine to short-circuit when the desktop is offline. */
 export async function isDesktopReachable(): Promise<boolean> {
   try {
     await discoverDesktop();
@@ -316,12 +292,6 @@ export async function listScrapeLeads(jobId: string): Promise<DesktopLead[]> {
   if (!res.ok) throw new BridgeError('request_failed', `scrape leads returned ${res.status}`);
   return (await res.json()) as DesktopLead[];
 }
-
-// --- variant groups ------------------------------------------------------
-//
-// The desktop app is the source of truth for variant groups. The extension
-// reads/writes through these wrappers so a group created here shows up in
-// the desktop UI without a manual refresh, and vice versa.
 
 export async function listVariantGroups(): Promise<DesktopVariantGroup[]> {
   const res = await bridgeFetch('/variants');

@@ -1,5 +1,4 @@
-// Domain types mirrored from electron/src/backend. Keep in sync with
-// electron/src/backend/accounts.ts and electron/src/backend/jobs.ts.
+
 
 export type AccountStatus = 'idle' | 'busy' | 'error';
 

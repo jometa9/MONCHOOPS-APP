@@ -4,13 +4,13 @@ import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 interface Props {
-  /** Selected date as a YYYY-MM-DD string, or '' when unset. */
+
   value: string;
   onChange: (ymd: string) => void;
   disabled?: boolean;
-  /** Optional lower bound as YYYY-MM-DD (inclusive). */
+
   min?: string;
-  /** Optional upper bound as YYYY-MM-DD (inclusive). */
+
   max?: string;
   placeholder?: string;
   id?: string;
@@ -31,8 +31,6 @@ const MONTH_KEYS = [
   'components.datePicker.monthDecember',
 ];
 
-// Week starts Monday — matches most non-US locales and is consistent
-// across the app's target audience.
 const DAY_LABEL_KEYS = [
   'components.datePicker.dayMo',
   'components.datePicker.dayTu',
@@ -70,8 +68,6 @@ export function DatePicker({ value, onChange, disabled, min, max, placeholder, i
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Calendar cursor: which month is currently shown in the popover.
-  // Defaults to the month of `value`, or today's month if `value` is empty.
   const [cursor, setCursor] = useState<{ year: number; month: number }>(() => {
     const parsed = parseYmd(value);
     if (parsed) return { year: parsed.year, month: parsed.month };
@@ -79,15 +75,11 @@ export function DatePicker({ value, onChange, disabled, min, max, placeholder, i
     return { year: now.getFullYear(), month: now.getMonth() };
   });
 
-  // When the value changes externally, snap the visible month to it so the
-  // user doesn't have to re-navigate after the form writes back.
   useEffect(() => {
     const parsed = parseYmd(value);
     if (parsed) setCursor({ year: parsed.year, month: parsed.month });
   }, [value]);
 
-  // Click-outside closes the popover. Attached only while open so we don't
-  // pay the listener cost when the picker is idle.
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -116,8 +108,6 @@ export function DatePicker({ value, onChange, disabled, min, max, placeholder, i
     setOpen(false);
   }
 
-  // Apply min/max to each cell so out-of-range days render as disabled
-  // (still visible, just not clickable).
   for (const c of cells) {
     if (min && c.ymd < min) c.disabled = true;
     if (max && c.ymd > max) c.disabled = true;
@@ -211,8 +201,7 @@ interface GridCell {
 
 function buildGrid(year: number, month0: number): GridCell[] {
   const firstOfMonth = new Date(year, month0, 1);
-  // Convert Sun=0..Sat=6 into Mon=0..Sun=6 so columns align with
-  // DAY_LABELS above.
+
   const startOffset = (firstOfMonth.getDay() + 6) % 7;
   const daysInMonth = new Date(year, month0 + 1, 0).getDate();
   const daysInPrev = new Date(year, month0, 0).getDate();
@@ -229,7 +218,7 @@ function buildGrid(year: number, month0: number): GridCell[] {
   for (let d = 1; d <= daysInMonth; d++) {
     cells.push({ day: d, inMonth: true, ymd: ymd(year, month0, d), disabled: false });
   }
-  // Pad out to six full weeks (42 cells) so the popover height is stable.
+
   const remaining = 42 - cells.length;
   for (let d = 1; d <= remaining; d++) {
     cells.push({ day: d, inMonth: false, ymd: ymd(nextYear, nextMonth0, d), disabled: false });

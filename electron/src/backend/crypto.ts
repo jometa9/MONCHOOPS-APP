@@ -15,9 +15,6 @@ function keyPath(): string {
   return path.join(app.getPath('userData'), KEY_FILE);
 }
 
-// Returns a 32-byte key. Prefers an OS-keychain-backed key via safeStorage;
-// falls back to a file in userData/ (0600) if the keychain isn't available
-// (e.g. first run on a headless Linux box).
 export function getEncryptionKey(): Buffer {
   if (cachedKey) return cachedKey;
   const p = keyPath();
@@ -34,7 +31,7 @@ export function getEncryptionKey(): Buffer {
       }
     }
   } catch {
-    // Fall through and regenerate.
+
   }
   const fresh = crypto.randomBytes(KEY_LENGTH);
   const asHex = fresh.toString('hex');

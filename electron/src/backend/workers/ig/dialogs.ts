@@ -1,22 +1,13 @@
-// Shared dismisser for Instagram's interstitial prompts. IG drops two modals
-// on top of the page at unpredictable moments — "Turn on Notifications" and
-// "Save your login info?" — that cover the composer / grid / feed and break
-// every selector-based worker until someone clicks "Not now". We watch for
-// them on a low-frequency timer so any worker that opens an IG page is
-// protected regardless of which route it lands on.
+
 
 import { sendLog, waitFor } from '../lib';
 
-type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Page = any;
 
 const POLL_MS = 2500;
 
-// "Not now" label variants across EN/ES and IG's alternate casings.
 const NOT_NOW_LABELS = ['Not now', 'Not Now', 'Ahora no', 'Ahora No'];
 
-// Title snippets we expect to see in the dialog body. We match against the
-// modal heading so we never click "Not now" on an unrelated dialog — e.g. a
-// confirmation the worker itself opened.
 const NOTIFICATIONS_TITLES = [
   'turn on notifications',
   'activar las notificaciones',
@@ -47,7 +38,7 @@ async function dismissByTitles(page: Page, titles: string[]): Promise<boolean> {
       await waitFor(500);
       return true;
     } catch {
-      // Keep trying the next label variant.
+
     }
   }
   return false;
@@ -69,16 +60,11 @@ export async function dismissSaveLoginPrompt(page: Page): Promise<boolean> {
   }
 }
 
-// Runs both dismissers once. Callers use this right after a navigation when
-// they want the page to be in a known state before continuing.
 export async function dismissIgPrompts(page: Page): Promise<void> {
   await dismissSaveLoginPrompt(page);
   await dismissNotificationsPrompt(page);
 }
 
-// Starts a background watcher that keeps dismissing IG prompts while the
-// page is alive. Returns a stop() so the worker can detach before tearing
-// down the browser. Safe to call once per page.
 export function attachDialogDismisser(page: Page): () => void {
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
@@ -105,7 +91,7 @@ export function attachDialogDismisser(page: Page): () => void {
         }
       }
     } catch {
-      // Page may be navigating or the context is closing — ignore and retry.
+
     }
     schedule();
   };
@@ -116,7 +102,7 @@ export function attachDialogDismisser(page: Page): () => void {
       if (timer) clearTimeout(timer);
     });
   } catch {
-    // Older playwright shims without event emitters — no-op.
+
   }
 
   schedule();

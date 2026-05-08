@@ -119,11 +119,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   subscribeToJobs(broadcastJobEvent);
   initUpdater(broadcast);
 
-  // Local HTTP bridge for the Chrome extension. Starts in the background;
-  // failures (port range exhausted, OS firewall) are logged but never block
-  // the main app boot.
-  // The bridge can mutate variant groups; forward the change so the desktop
-  // UI re-renders without a manual refresh.
   setBridgeMutationHandler((channel) => {
     broadcast(channel);
   });
@@ -142,26 +137,19 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     broadcastSessionChange(getSession());
   });
 
-  // Accounts
   ipcMain.handle('accounts:list', async () => listAccounts());
   ipcMain.handle('accounts:get', async (_e, id: string) => getAccount(id));
 
-  // Hard quota check: refuse to even open the login window when the user is
-  // already at the per-plan account limit. Pass the usernames you're about
-  // to log in if you know them (auto-login + bulk); pass an empty list for
-  // manual login where the username isn't known yet — in that case we
-  // assume one new slot is needed.
   async function ensureAccountSlotAvailable(
     requestedUsernames: string[]
   ): Promise<void> {
     const usage = await fetchUsage();
-    if (!usage) return; // Server unreachable — fall back to local-only behaviour.
-    if (usage.accounts.limit == null) return; // unlimited plan / admin
+    if (!usage) return;
+    if (usage.accounts.limit == null) return;
     const localUsernames = new Set(
       listAccounts().map((a) => a.username.toLowerCase())
     );
-    // Pre-existing local accounts (re-logins) don't take a new slot since
-    // they're already counted on the server. Filter them out of the ask.
+
     const newSlotsNeeded =
       requestedUsernames.length === 0
         ? 1
@@ -210,19 +198,13 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       return { jobId };
     }
   );
-  // Retry a failed auto-login. If `password` is provided, use it (and persist
-  // it on success). Otherwise fall back to the password stored on the account
-  // from the original attempt.
+
   ipcMain.handle(
     'accounts:retryLogin',
     async (_e, payload: { id: string; password?: string | null }) => {
       const acc = getAccount(payload.id);
       if (!acc) throw new Error('Account not found');
-      // Retry is on an account that's already in our local list — the server
-      // has either already counted it or doesn't know about it yet. Either
-      // way we don't want to *block* a retry just because the user is at
-      // their cap, so we skip the slot check here. The post-success register
-      // will be a no-op for already-tracked usernames.
+
       const password =
         typeof payload.password === 'string' && payload.password.length > 0
           ? payload.password
@@ -266,10 +248,8 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     }
   );
 
-  // Stats (Home)
   ipcMain.handle('stats:get', async () => getStats());
 
-  // Jobs
   ipcMain.handle('jobs:list', async () => listJobs());
   ipcMain.handle('jobs:listRunning', async () => listRunningJobs());
   ipcMain.handle('jobs:listActive', async () => listActiveJobs());
@@ -286,11 +266,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       interactions?: MassDmInteractionsConfig | null;
       excludeUsernames?: string[] | null;
     }) => {
-      // Hand startMassDm a fresh remaining-quota number so it can refuse
-      // to even spawn the worker once the user is at their cap. fetchUsage
-      // returning null (server unreachable) leaves the hint cleared, so
-      // the local job runs and the in-flight DM batcher catches a 403
-      // mid-run if needed.
+
       const usage = await fetchUsage();
       if (usage && usage.dms.remaining != null) {
         setMassDmRemainingHint(usage.dms.remaining);
@@ -311,7 +287,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     }
   );
 
-  // Mass DM history
   ipcMain.handle('massDms:list', async () => listMassDmResults());
   ipcMain.handle('massDms:get', async (_e, jobId: string) => getMassDmResult(jobId));
   ipcMain.handle('massDms:listSends', async (_e, jobId: string) => listMassDmSends(jobId));
@@ -319,7 +294,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     listDmedUsernamesForAccount(accountId)
   );
 
-  // Scrape results
   ipcMain.handle('scrapes:list', async () => listScrapeResults());
   ipcMain.handle('scrapes:download', async (_e, jobId: string) => {
     const row = getScrapeResult(jobId);
@@ -343,8 +317,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   );
   ipcMain.handle('scrapes:get', async (_e, jobId: string) => getScrapeResult(jobId));
 
-  // CSV upload (for Mass DM source). Returns the absolute temp path so the
-  // renderer can pass it back when starting the job.
   ipcMain.handle('csv:pickAndPersist', async () => {
     const res = await dialog.showOpenDialog({
       title: 'Select a usernames file',
@@ -363,9 +335,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     return persistUsernameFile(srcPath);
   });
 
-  // Read the usernames out of an already-persisted CSV. Used by the Cold DM
-  // Review step to diff the list against accounts' past DM history and warn
-  // about targets that have already been messaged.
   ipcMain.handle('csv:listUsernames', async (_e, csvPath: string) => {
     if (!csvPath || typeof csvPath !== 'string') throw new Error('Invalid path');
     if (!fs.existsSync(csvPath)) return [];
@@ -410,7 +379,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     fs.writeFileSync(dest, content, 'utf8');
     const count = content
       .split(/\r?\n/)
-      .slice(1) // drop header
+      .slice(1)
       .filter((l) => l.trim().length > 0).length;
     return { path: dest, count };
   });
@@ -471,7 +440,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     return { path: dest, count: usernames.length };
   });
 
-  // Settings
   ipcMain.handle('session:refresh', async () => {
     const snapshot = await refreshSession();
     broadcastSessionChange(snapshot);
@@ -479,12 +447,12 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   });
 
   ipcMain.handle('accounts:deleteAll', async () => {
-    // Cancel all running jobs first
+
     const running = listRunningJobs();
     for (const job of running) cancelJob(job.id);
     const all = listAccounts();
     getDb().prepare('DELETE FROM accounts').run();
-    // Mirror to the cloud so the per-user count drops back to zero.
+
     await Promise.allSettled(all.map((a) => unregisterAccount(a.username)));
     broadcast('accounts:changed');
   });
@@ -498,10 +466,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     getDb().prepare('DELETE FROM scrape_results').run();
   });
 
-  // Wipe every trace of user data except the authenticated session (license
-  // key + cached profile/subscription stay so the user doesn't get kicked
-  // out). Shares the same helper with the automatic wipe-on-user-switch in
-  // license.validateLicense so the two code paths stay in lockstep.
   ipcMain.handle('settings:wipeAllData', async () => {
     wipeUserData();
     broadcast('accounts:changed');
@@ -517,9 +481,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
 
   ipcMain.handle('app:getVersion', () => app.getVersion());
 
-  // Manual-update banner: queries the landing for the latest shipping
-  // version and opens the download page in the user's browser. No
-  // auto-download or auto-install.
   ipcMain.handle('updater:getState', () => getUpdateStatus());
   ipcMain.handle('updater:check', () => {
     checkForUpdatesManual();
@@ -538,14 +499,11 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     metaSet('headless', headless ? 'true' : 'false');
   });
 
-  // Default false → tile windows into a grid. When true, every headed
-  // Chromium opens maximized (no tiling).
   ipcMain.handle('settings:getFullWindow', () => metaGet('full_window') === 'true');
   ipcMain.handle('settings:setFullWindow', (_e, full: boolean) => {
     metaSet('full_window', full ? 'true' : 'false');
   });
 
-  // Lead categories
   ipcMain.handle('categories:list', async () => listCategories());
   ipcMain.handle('categories:create', async (_e, name: string) => {
     const cat = createCategory(name);
@@ -577,7 +535,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     return res.filePath;
   });
 
-  // Message variant groups
   ipcMain.handle('messageVariants:list', async () => listMessageVariantGroups());
   ipcMain.handle(
     'messageVariants:create',
@@ -600,8 +557,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     broadcast('messageVariants:changed');
   });
 
-  // Bridge IPC — Settings status UI reads this to show whether the local
-  // HTTP bridge is up.
   ipcMain.handle('bridge:getStatus', async () => getBridgeStatus());
 
   let shutdownStarted = false;
@@ -609,9 +564,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     void stopBridgeServer().catch(() => {});
     void flushDmBuffer().catch(() => {});
     if (listRunningJobs().length === 0) return;
-    // Block every before-quit cycle until the flush is done — otherwise the
-    // second app.quit() (from main.ts's 5s prepare-quit timer) would tear the
-    // workers down before they finish writing partial results.
+
     event.preventDefault();
     if (shutdownStarted) return;
     shutdownStarted = true;
@@ -636,7 +589,7 @@ function persistUsernameFile(src: string): { path: string; count: number } {
 
   if (ext === '.xlsx' || ext === '.xls') {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+
       const XLSX = require('xlsx') as typeof import('xlsx');
       const wb = XLSX.readFile(src);
       const sheet = wb.Sheets[wb.SheetNames[0]!]!;

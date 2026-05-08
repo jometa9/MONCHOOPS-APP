@@ -1,7 +1,4 @@
-// Forked worker: opens a headed Chromium to let the user log into Instagram
-// manually. Everything happens through Playwright — navigation + DOM reads,
-// never by hitting Instagram's internal JSON endpoints. That's friendlier to
-// IG's bot detection and avoids the schema drift we'd get from private APIs.
+
 
 import { isCancelled, launchBrowser, onInit, sendError, sendResult, waitFor, type WindowBounds } from './lib';
 import { attachDialogDismisser } from './ig';
@@ -28,7 +25,6 @@ onInit<LoginInit>(async (init) => {
   const detachDismisser = attachDialogDismisser(page);
   await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'domcontentloaded' });
 
-  // Poll until a sessionid cookie appears under .instagram.com.
   const deadline = Date.now() + LOGIN_DEADLINE_MS;
   let sessionFound = false;
 
@@ -65,10 +61,6 @@ onInit<LoginInit>(async (init) => {
     return;
   }
 
-  // Enrich with display name + avatar from the profile page when missing.
-  // blob:/data: URLs only live inside the Chromium context — they can't be
-  // persisted and re-rendered later, so treat them as missing and fall
-  // through to the profile-page scrape.
   let displayName: string | null = identity.displayName;
   let profilePicUrl: string | null = isPersistableUrl(identity.profilePicUrl) ? identity.profilePicUrl : null;
   if (!displayName || !profilePicUrl) {
@@ -92,13 +84,10 @@ onInit<LoginInit>(async (init) => {
         profilePicUrl = info.pic;
       }
     } catch {
-      // Non-fatal: we can persist the account without a display name / pfp.
+
     }
   }
 
-  // IG CDN URLs carry a short-lived HMAC (oh/oe params) and will 403 once
-  // they expire. Snapshot the bytes now and store them inline as a data URL
-  // so the UI doesn't end up rendering a broken avatar days later.
   if (profilePicUrl) {
     const dataUrl = await downloadAsDataUrl(context, profilePicUrl);
     if (dataUrl) profilePicUrl = dataUrl;
@@ -127,11 +116,6 @@ interface Identity {
   profilePicUrl: string | null;
 }
 
-// Tries two strategies in order: reading the avatar link from IG's own
-// navigation on the home feed, then falling back to the legacy account-edit
-// form. Each strategy polls patiently because IG's SPA hydrates lazily and
-// can redirect through intermediate pages (Account Center, two-factor prompts)
-// before settling — bailing early was the root cause of failed manual logins.
 async function extractIdentity(page: any): Promise<Identity | null> {
   const fromHome = await readIdentityFromHome(page);
   if (fromHome) return fromHome;
@@ -182,8 +166,7 @@ async function readIdentityFromHome(page: any): Promise<Identity | null> {
       .catch(() => null);
 
     if (found && found.username) {
-      // Some IG layouts use "<username>'s profile photo" as alt — use it as
-      // a hint for display name only when it clearly isn't the username.
+
       return {
         username: found.username,
         displayName: null,
@@ -227,7 +210,7 @@ async function readUsernameFromEdit(page: any): Promise<string | null> {
     try {
       await page.waitForSelector('input[name="username"]', { state: 'visible', timeout: 3000 });
     } catch {
-      // Selector not yet there; keep polling.
+
     }
     const found = await page
       .evaluate(() => {

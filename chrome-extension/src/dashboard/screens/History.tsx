@@ -10,9 +10,9 @@ import { runSync } from '@/shared/sync';
 import type { Campaign, SyncedDmJob } from '@/shared/types';
 
 interface UnifiedRow {
-  /** Source — drives the detail-route prefix. */
+
   source: 'campaign' | 'desktop';
-  /** ID used to navigate to the detail. */
+
   id: string;
   title: string;
   subtitle: string;

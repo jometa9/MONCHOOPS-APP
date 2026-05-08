@@ -1,15 +1,9 @@
-// Helpers shared by forked Playwright workers. Not a real entry point —
-// these run inside child processes spawned via child_process.fork().
+
 
 import fs from 'fs';
 import path from 'path';
 import type { AccountSecrets, InstagramCookie } from '../accounts';
 
-// Find a usable chromium binary. In packaged builds we bundle Chrome for
-// Testing under <Resources>/chromium/ via electron-builder.extraResources, and
-// the main process exposes that location via the B2DM_CHROMIUM_DIR env var.
-// In dev we fall through to playwright-core's own cache resolution by
-// returning undefined.
 function resolveChromiumExecutable(): string | undefined {
   const bundled = process.env.B2DM_CHROMIUM_DIR;
   if (bundled) {
@@ -19,9 +13,6 @@ function resolveChromiumExecutable(): string | undefined {
   return undefined;
 }
 
-// Looks for a chrome binary directly under `root` (the layout extraResources
-// produces) or one level deeper inside a chromium-<rev>/ folder (the layout
-// playwright's own cache uses).
 function findChromiumIn(root: string): string | undefined {
   if (!fs.existsSync(root)) return undefined;
   const direct = chromiumBinaryPaths(root);
@@ -45,10 +36,6 @@ function findChromiumIn(root: string): string | undefined {
   return undefined;
 }
 
-// Possible locations of the launchable chromium binary inside an extracted
-// Chrome-for-Testing tree. The folder name comes from the zip name and the
-// .app name has shifted across Chrome versions (Chromium.app vs. Google Chrome
-// for Testing.app), so we list every variant we have seen.
 function chromiumBinaryPaths(base: string): string[] {
   if (process.platform === 'darwin') {
     return [
@@ -70,11 +57,9 @@ function chromiumBinaryPaths(base: string): string[] {
   ];
 }
 
-// Lazy require so the Electron main process can reference the type graph
-// without pulling playwright-core into memory on startup.
-type BrowserContext = any; // eslint-disable-line @typescript-eslint/no-explicit-any
-type Browser = any; // eslint-disable-line @typescript-eslint/no-explicit-any
-type Page = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+type BrowserContext = any;
+type Browser = any;
+type Page = any;
 
 export interface WindowBounds {
   x: number;
@@ -87,26 +72,18 @@ export interface LaunchOpts {
   headless: boolean;
   secrets?: AccountSecrets;
   proxy?: AccountSecrets['proxy'];
-  // When set (and headless=false), position + size the Chromium window so
-  // the main process can tile concurrent automations into a grid. The
-  // bounds come from windowSlots in main and are forwarded here via the
-  // worker's init payload.
+
   windowBounds?: WindowBounds;
-  // When true (and headless=false), open the Chromium window maximized
-  // instead of tiling it. Mutually exclusive with windowBounds — set by
-  // the user's "Full window" preference.
+
   maximizeWindow?: boolean;
 }
 
-// IG's mobile breakpoint is ~768px. We use 1024 as the cutoff with margin so
-// browser chrome / scrollbars don't shave us under the breakpoint.
 const DESKTOP_LAYOUT_MIN_WIDTH = 1024;
 const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
 
 function pickViewport(opts: LaunchOpts): { width: number; height: number } | null {
   if (opts.headless) return DEFAULT_VIEWPORT;
-  // Maximized headed window is always larger than the desktop breakpoint —
-  // let the page fill it naturally.
+
   if (opts.maximizeWindow) return null;
   if (!opts.windowBounds) return DEFAULT_VIEWPORT;
   if (opts.windowBounds.width >= DESKTOP_LAYOUT_MIN_WIDTH) return null;
@@ -114,7 +91,7 @@ function pickViewport(opts: LaunchOpts): { width: number; height: number } | nul
 }
 
 export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browser; context: BrowserContext }> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+
   const { chromium } = require('playwright-core') as typeof import('playwright-core');
 
   const proxy = opts.proxy ?? opts.secrets?.proxy;
@@ -124,10 +101,6 @@ export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browse
 
   const executablePath = resolveChromiumExecutable();
 
-  // --disable-blink-features=AutomationControlled strips the "controlled by
-  // automated test software" banner AND flips navigator.webdriver to false
-  // at the Chromium layer — the single most important anti-detection flag.
-  // The rest are anti-fingerprint hardening (stable across Chrome releases).
   const launchArgs: string[] = [
     '--disable-blink-features=AutomationControlled',
     '--disable-features=IsolateOrigins,site-per-process',
@@ -150,9 +123,7 @@ export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browse
       headless: opts.headless,
       executablePath,
       args: launchArgs,
-      // Hide the default "Chrome is being controlled by automated test
-      // software" infobar & related switches that IG's detection scripts
-      // sniff for.
+
       ignoreDefaultArgs: ['--enable-automation'],
       proxy: proxy
         ? {
@@ -176,21 +147,12 @@ export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browse
 
   const context = await browser.newContext({
     userAgent,
-    // Viewport policy when we tile the window:
-    //   - Big tile (≥1024px wide): viewport:null lets the page fill the
-    //     window naturally, since IG's desktop layout still applies.
-    //   - Small tile: pin viewport to 1280x800 so IG doesn't collapse into
-    //     mobile layout (which would break our desktop selectors). The
-    //     page renders at 1280x800 but is clipped inside the smaller OS
-    //     window — fine for monitoring, scraper sees the same DOM as
-    //     when running un-tiled.
+
     viewport: pickViewport(opts),
-    // Locale + timezone must be set so navigator.languages and Date.toString
-    // agree with the UA's implied country — mismatch is a hard signal.
+
     locale: 'en-US',
     timezoneId: 'America/New_York',
-    // Modern Chrome sends these client hints; their absence (or mismatch
-    // with the UA string) is fingerprinted by IG's Edge workers.
+
     extraHTTPHeaders: {
       'Accept-Language': 'en-US,en;q=0.9',
       'sec-ch-ua': '"Chromium";v="131", "Google Chrome";v="131", "Not_A Brand";v="24"',
@@ -210,16 +172,6 @@ export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browse
   return { browser, context };
 }
 
-// Safety net against orphan Chromiums. Workers may get SIGTERM (cancel
-// escalation in jobs.ts after the cooperative grace window), or their parent
-// may die unexpectedly (main crashed / was kill -9'd) — in both cases the
-// happy-path `browser.close()` calls scattered through each worker wouldn't
-// run. We track every open browser here and close them from process-level
-// hooks.
-//
-// SIGKILL to the worker itself is the one case we can't catch: the kernel
-// terminates the process immediately, no JS runs. Chromium normally detects
-// the pipe close and self-terminates, which is the best we can do.
 const activeBrowsers = new Set<Browser>();
 let cleanupHooksInstalled = false;
 
@@ -245,23 +197,16 @@ function installCleanupHooks(): void {
     );
   };
 
-  // Parent disconnected — main process died or was killed before it could
-  // send us a cooperative cancel. Close gracefully and exit.
   process.on('disconnect', () => {
     void closeAll().finally(() => process.exit(0));
   });
 
-  // jobs.ts escalates cancel → SIGTERM after CANCEL_GRACE_MS. SIGINT covers
-  // Ctrl+C during dev; SIGHUP covers terminal close.
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
     process.on(signal, () => {
       void closeAll().finally(() => process.exit(0));
     });
   }
 
-  // Last-resort sync kill. `exit` can't await, so we grab each Chromium's
-  // pid and SIGKILL it directly — prevents orphans when the worker exits
-  // without Playwright having finished its own teardown.
   process.on('exit', () => {
     for (const browser of activeBrowsers) {
       try {
@@ -274,20 +219,9 @@ function installCleanupHooks(): void {
   });
 }
 
-// Anti-fingerprint patches injected into every page via addInitScript. These
-// run before any page script, including IG's inline detection bundle. Covers
-// the 7 fingerprint vectors IG actually checks in 2026:
-//   1. navigator.webdriver          (undefined, not false)
-//   2. navigator.plugins / mimeTypes (non-empty, shaped like real Chrome)
-//   3. window.chrome.{runtime,loadTimes,csi}
-//   4. navigator.permissions.query  (notifications returns real state)
-//   5. WebGLRenderingContext.getParameter vendor/renderer
-//   6. navigator.languages
-//   7. iframe.contentWindow navigator isolation
 async function applyStealthPatches(context: BrowserContext): Promise<void> {
   await context.addInitScript(() => {
-    // 1. navigator.webdriver — delete instead of `= false`, which is itself
-    //    a tell (real browsers have the property absent).
+
     try {
       Object.defineProperty(Navigator.prototype, 'webdriver', {
         get: () => undefined,
@@ -295,7 +229,6 @@ async function applyStealthPatches(context: BrowserContext): Promise<void> {
       });
     } catch {}
 
-    // 2. plugins / mimeTypes — IG checks `navigator.plugins.length > 0`.
     try {
       const fakePlugins = [
         { name: 'PDF Viewer', description: 'Portable Document Format', filename: 'internal-pdf-viewer' },
@@ -314,8 +247,6 @@ async function applyStealthPatches(context: BrowserContext): Promise<void> {
       });
     } catch {}
 
-    // 3. window.chrome — real Chrome has this populated; Playwright's
-    //    Chromium leaves it mostly empty.
     try {
       const w = window as unknown as { chrome?: Record<string, unknown> };
       if (!w.chrome || Object.keys(w.chrome).length < 2) {
@@ -331,8 +262,6 @@ async function applyStealthPatches(context: BrowserContext): Promise<void> {
       }
     } catch {}
 
-    // 4. permissions.query — IG probes 'notifications'; should return the
-    //    actual Notification.permission state, not the stock "denied".
     try {
       const origQuery = navigator.permissions.query.bind(navigator.permissions);
       navigator.permissions.query = (parameters: PermissionDescriptor) => {
@@ -343,9 +272,6 @@ async function applyStealthPatches(context: BrowserContext): Promise<void> {
       };
     } catch {}
 
-    // 5. WebGL vendor/renderer — 37445=UNMASKED_VENDOR_WEBGL,
-    //    37446=UNMASKED_RENDERER_WEBGL. Playwright's headless reports
-    //    "Google Inc." / "SwiftShader" which is a dead giveaway.
     try {
       const patchGL = (proto: any) => {
         const orig = proto.getParameter;
@@ -359,7 +285,6 @@ async function applyStealthPatches(context: BrowserContext): Promise<void> {
       if (typeof WebGL2RenderingContext !== 'undefined') patchGL(WebGL2RenderingContext.prototype);
     } catch {}
 
-    // 6. navigator.languages — must agree with UA language.
     try {
       Object.defineProperty(navigator, 'languages', {
         get: () => ['en-US', 'en'],
@@ -367,9 +292,6 @@ async function applyStealthPatches(context: BrowserContext): Promise<void> {
       });
     } catch {}
 
-    // 7. iframe isolation — IG opens hidden iframes and re-checks
-    //    navigator.webdriver inside them. Patches leak into child contexts
-    //    if we override createElement.
     try {
       const origCreate = document.createElement.bind(document);
       document.createElement = function (tag: string, ...rest: unknown[]) {
@@ -410,7 +332,7 @@ export async function safeGoto(page: Page, url: string): Promise<void> {
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   } catch (err) {
-    // Retry once on transient navigation errors.
+
     await waitFor(1500);
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     void err;
@@ -441,9 +363,6 @@ export function sendError(msg: string): void {
   }
 }
 
-// Emitted by login workers when an auto-login attempt fails. Main upserts a
-// shell account row with status='error' so the user can see the attempt in
-// the Accounts list and decide to retry or delete it.
 export function sendLoginFailed(payload: {
   username: string;
   password: string;
@@ -454,9 +373,6 @@ export function sendLoginFailed(payload: {
   }
 }
 
-// Emitted by the mass DM worker after every send attempt. Main inserts a
-// row into mass_dm_sends so the UI can show per-username history and the
-// Cold DM flow can warn when a username was already DM'd by this account.
 export function sendDmSend(payload: {
   username: string;
   status: 'sent' | 'failed';
@@ -468,11 +384,6 @@ export function sendDmSend(payload: {
   }
 }
 
-// Cooperative cancellation: the main process sends `{type:'cancel'}` over IPC
-// when the user hits Cancel in the UI. Workers check `isCancelled()` at their
-// natural yield points and return early so they can flush partial state (CSVs,
-// result payloads) before exiting with code 0. Main escalates to SIGTERM /
-// SIGKILL if the worker doesn't exit within its grace window.
 let cancelled = false;
 const cancelCallbacks = new Set<() => void | Promise<void>>();
 

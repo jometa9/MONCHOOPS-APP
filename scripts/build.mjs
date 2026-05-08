@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Full release build: frontend → electron TS → electron-builder.
+
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,6 +26,9 @@ run(npxBin, ['vite', 'build', '--mode', 'production']);
 
 console.log('[build] tsc -p electron/tsconfig.json');
 run(npxBin, ['tsc', '-p', path.join('electron', 'tsconfig.json')]);
+
+console.log('[build] obfuscate electron/dist');
+run(process.execPath, [path.join('scripts', 'obfuscate-electron.mjs')]);
 
 console.log('[build] writing electron/dist/package.json');
 import('node:fs').then(({ writeFileSync, mkdirSync }) => {

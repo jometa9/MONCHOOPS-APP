@@ -163,6 +163,6 @@ export function updateMessageVariantGroup(
 }
 
 export function deleteMessageVariantGroup(id: string): void {
-  // Variants cascade via FK.
+
   getDb().prepare('DELETE FROM message_variant_groups WHERE id = ?').run(id);
 }

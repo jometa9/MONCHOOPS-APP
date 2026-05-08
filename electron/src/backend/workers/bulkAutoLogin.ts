@@ -1,8 +1,4 @@
-// Forked worker: signs into many Instagram accounts sequentially. For each
-// row it spins up a fresh Chromium with the row's optional proxy, fills the
-// login form, harvests cookies + profile, and emits a `bulk-account` message
-// so the main process can persist the account immediately. The worker keeps
-// going past per-row failures (it just logs them and moves on).
+
 
 import { isCancelled, launchBrowser, onInit, sendError, sendLog, sendLoginFailed, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
 import { attachDialogDismisser } from './ig';
@@ -24,11 +20,6 @@ interface BulkInit {
   maximizeWindow?: boolean;
 }
 
-// Post-submit window is generous on purpose: if Instagram throws a captcha or
-// checkpoint, the login flow is headed and the user can solve it manually
-// before the sessionid cookie lands. 3 min covers reCAPTCHA + 2FA SMS wait.
-// PER_ROW_DEADLINE_MS must stay above POST_SUBMIT plus navigation and
-// identity extraction (~90s worst case).
 const POST_SUBMIT_DEADLINE_MS = 180_000;
 const PER_ROW_DEADLINE_MS = 300_000;
 
@@ -62,8 +53,7 @@ onInit<BulkInit>(async (init) => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       sendLog('error', `[${i + 1}/${total}] ${label}: ${msg}`);
-      // Persist the failed attempt as an error-status account so the user
-      // can retry it from the Accounts screen without re-importing the CSV.
+
       if (row.username) {
         sendLoginFailed({ username: row.username, password: row.password, error: msg });
       }
@@ -139,7 +129,6 @@ async function runLogin(page: any, context: any, row: BulkRowInit): Promise<void
     await page.keyboard.press('Enter').catch(() => {});
   }
 
-  // Poll until sessionid lands or we hit a known error / timeout.
   const start = Date.now();
   while (Date.now() - start < POST_SUBMIT_DEADLINE_MS) {
     if (page.isClosed()) throw new Error('Login page closed unexpectedly');
@@ -173,16 +162,12 @@ async function runLogin(page: any, context: any, row: BulkRowInit): Promise<void
     await waitFor(2000);
   }
 
-  // Re-check sessionid after the loop (the loop may have exited on timeout).
   const finalCookies = (await context.cookies()) as InstagramCookie[];
   const hasSession = finalCookies.some(
     (c) => c.name === 'sessionid' && c.domain.includes('instagram.com')
   );
   if (!hasSession) throw new Error('Timed out waiting for login to complete');
 
-  // Extract the canonical username using the same robust pipeline as the
-  // manual login worker: home → avatar-link in the nav first, /accounts/edit/
-  // as fallback.
   const identity = await extractIdentity(page);
   const canonicalUsername = identity?.username || row.username;
 
@@ -213,8 +198,6 @@ async function runLogin(page: any, context: any, row: BulkRowInit): Promise<void
     } catch {}
   }
 
-  // IG CDN URLs expire (HMAC'd via oh/oe) — snapshot the bytes now and store
-  // them inline as a data URL so the avatar survives past the token TTL.
   if (profilePicUrl) {
     const dataUrl = await downloadAsDataUrl(context, profilePicUrl);
     if (dataUrl) profilePicUrl = dataUrl;
@@ -224,8 +207,6 @@ async function runLogin(page: any, context: any, row: BulkRowInit): Promise<void
     (await page.evaluate(() => navigator.userAgent).catch(() => '')) ||
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
 
-  // Hand the account to main right away — main creates the row and applies
-  // the proxy. We don't wait for an ack; main treats this fire-and-forget.
   if (process.send) {
     process.send({
       type: 'bulk-account',
@@ -255,9 +236,7 @@ function delayThenThrow(ms: number, msg: string): Promise<never> {
 }
 
 async function fillLoginField(page: any, selector: string, value: string): Promise<void> {
-  // Locator re-resolves on every action, so we survive the React re-renders
-  // that drop cached ElementHandle keystrokes. Verify the DOM value after
-  // each attempt and retry with a different technique if it didn't stick.
+
   const loc = page.locator(selector).first();
   await loc.waitFor({ state: 'visible', timeout: 20_000 });
 
@@ -342,7 +321,7 @@ async function dismissCookieBanner(page: any): Promise<void> {
     });
     if (clicked) await waitFor(800);
   } catch {
-    // Non-fatal.
+
   }
 }
 
@@ -425,7 +404,7 @@ async function readUsernameFromEdit(page: any): Promise<string | null> {
     try {
       await page.waitForSelector('input[name="username"]', { state: 'visible', timeout: 3000 });
     } catch {
-      // Selector not yet there; keep polling.
+
     }
     const found = await page
       .evaluate(() => {

@@ -86,9 +86,7 @@ export interface CreateAccountInput {
   profilePicUrl?: string | null;
   cookies: InstagramCookie[];
   userAgent: string;
-  // Password used to log in — persisted encrypted so the user can retry a
-  // later failure without re-typing. Pass null to leave the stored password
-  // unchanged; pass a string to overwrite it.
+
   password?: string | null;
 }
 
@@ -139,9 +137,7 @@ export function createAccount(input: CreateAccountInput): AccountPublic {
       : null;
 
   if (existing) {
-    // Keep the previously stored password if the caller didn't provide a new
-    // one (success path from the classic manual-login worker, which doesn't
-    // know the password).
+
     const nextPassword = passwordBlob ?? existing.password_encrypted;
     getDb()
       .prepare(
@@ -186,20 +182,13 @@ export function createAccount(input: CreateAccountInput): AccountPublic {
       now,
       now
     );
-  // Mirror to the cloud so cross-device account counts stay in sync. The
-  // hard limit check runs *before* login is started (see ipcMain handlers in
-  // backend/index.ts), so by the time we get here the slot has already been
-  // validated. Best-effort: a network failure does not unwind the local row.
+
   void registerAccount(input.username).catch((err) => {
     console.warn(`[accounts] cloud register failed for @${input.username}:`, err);
   });
   return getAccount(id)!;
 }
 
-// Called when an auto-login attempt fails. Creates (or updates) a shell
-// account row with status='error' so the user can see the failed attempt and
-// choose to retry or delete it. Cookies are stored as an empty list — the
-// row is not usable for scraping/DMs until a successful retry replaces them.
 export interface UpsertFailedAccountInput {
   username: string;
   password?: string | null;
@@ -217,10 +206,7 @@ export function upsertFailedAccount(input: UpsertFailedAccountInput): AccountPub
       : null;
 
   if (existing) {
-    // Don't nuke existing cookies/UA if we already have a working session —
-    // only flip status to 'error' and record the new error message. This way
-    // a transient failure on a healthy account just surfaces the error; the
-    // old cookies remain until the user retries.
+
     const nextPassword = passwordBlob ?? existing.password_encrypted;
     getDb()
       .prepare(
@@ -247,8 +233,6 @@ export function upsertFailedAccount(input: UpsertFailedAccountInput): AccountPub
   return getAccount(id)!;
 }
 
-// Returns the decrypted password stored on the account row, or null if none
-// was ever stored (e.g. account was created via the manual-login flow).
 export function getAccountPassword(id: string): string | null {
   const row = getDb()
     .prepare<[string], AccountRow>('SELECT * FROM accounts WHERE id = ?')
@@ -303,16 +287,14 @@ export function updateProxy(id: string, cfg: ProxyConfig): AccountPublic {
       : null;
 
   const nextUrl = trimmed || null;
-  // Clearing the URL implicitly clears credentials too, since there's no
-  // host to attach them to.
+
   const nextUsername = nextUrl
     ? cfg.username && cfg.username.length > 0
       ? cfg.username
       : null
     : null;
   const nextPassword = nextUrl ? passwordBlob : null;
-  // When no URL is saved there's nothing to enable; force back to the
-  // default so re-adding a proxy later starts in the "on" state.
+
   const nextEnabled = nextUrl ? (cfg.enabled === false ? 0 : 1) : 1;
 
   getDb()

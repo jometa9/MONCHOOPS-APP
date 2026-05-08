@@ -1,9 +1,4 @@
-// Content script — thin RPC layer.
-//
-// All orchestration (navigation, retries, sequencing) lives in the service
-// worker. This script just exposes atomic primitives the SW can call. Each
-// handler must return promptly so we never have a pending sendResponse when
-// the SW navigates the tab.
+
 
 import type { CsRequest, CsResponse } from '@/shared/messages';
 import {

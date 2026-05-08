@@ -1,7 +1,4 @@
-// Wire protocol between extension contexts. The service worker is the
-// single authority — popup, dashboard, and content script all talk to it.
-// Keeping every payload typed here means the SW switch and the senders
-// can't drift apart silently.
+
 
 import type { FollowState, LikeState } from '@/content/ig-actions';
 
@@ -19,18 +16,9 @@ export interface SwResponse {
   data?: unknown;
 }
 
-// Result of one campaign lead's send attempt — produced by the SW
-// orchestrator (no longer by the content script) and persisted to the
-// leads/history tables.
 export type IgSendResult =
   | { ok: true; verified: boolean }
   | { ok: false; error: string };
-
-// --- atomic content-script primitives ------------------------------------
-//
-// Every primitive must complete BEFORE any navigation. The orchestration
-// (driving navigations between primitives) lives in the service worker via
-// chrome.tabs.update — content scripts no longer call location.href.
 
 export type CsRequest =
   | { type: 'b2dm/ping' }

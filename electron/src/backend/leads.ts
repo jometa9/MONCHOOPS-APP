@@ -127,11 +127,10 @@ export function renameCategory(id: string, name: string): LeadCategoryPublic {
 }
 
 export function deleteCategory(id: string): void {
-  // Leads cascade via FK.
+
   getDb().prepare('DELETE FROM lead_categories WHERE id = ?').run(id);
 }
 
-/** Resolve a categoryId or a freeform name (create if missing) to a category row. */
 export function resolveCategoryRef(ref: {
   categoryId?: string | null;
   newCategoryName?: string | null;
@@ -156,8 +155,6 @@ export function sanitizeUsername(raw: string): string {
   return raw.trim().replace(/^[@#]+/, '').trim();
 }
 
-/** Bulk-insert leads into a category. Deduplicates via UNIQUE(category_id, username).
- *  Returns the number of rows actually inserted (new leads). */
 export function ingestLeads(
   categoryId: string,
   sourceKind: string,
@@ -209,7 +206,6 @@ export function ingestLeads(
   return added;
 }
 
-/** Parse a 3-column CSV (username,source,source_ref) into lead inputs. */
 export function ingestLeadsFromCsv(
   categoryId: string,
   sourceKind: string,
@@ -273,7 +269,6 @@ export function listLeads(opts: ListLeadsOpts): LeadPublic[] {
   return rows.map(leadRowToPublic);
 }
 
-/** Build CSV content for every lead in a category. */
 export function exportCategoryCsv(categoryId: string): string {
   const rows = getDb()
     .prepare<[string], LeadRow>(

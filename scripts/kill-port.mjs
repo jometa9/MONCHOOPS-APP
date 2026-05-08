@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// Kill whatever is bound to the given port. Used before `vite` to avoid
-// "port is in use, trying next..." which breaks our strictPort contract.
+
 import { execSync } from 'node:child_process';
 
 const port = Number(process.argv[2]);
@@ -32,5 +31,5 @@ try {
     });
   }
 } catch {
-  // Best-effort; never block the dev command.
+
 }

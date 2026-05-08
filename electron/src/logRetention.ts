@@ -8,7 +8,7 @@ const TRIM_INTERVAL_MS = 60 * 60 * 1000;
 const lastTrimByPath = new Map<string, number>();
 
 function parseLineDateMs(line: string): number | null {
-  // Look for YYYY-MM-DD near the beginning; this avoids false positives in message payloads.
+
   const scan = line.slice(0, 96);
   const re = /(\d{4})-(\d{2})-(\d{2})/g;
   let m: RegExpExecArray | null;
@@ -53,7 +53,7 @@ export function trimLogFileToRetention(logPath: string, force = false): void {
       .join('\n');
     fs.writeFileSync(logPath, kept.length > 0 ? `${kept}\n` : '', 'utf8');
   } catch {
-    // Best effort cleanup; never block app startup or logging.
+
   }
 }
 
@@ -64,6 +64,6 @@ export function appendLogLineWithRetention(logPath: string, line: string): void 
     fs.appendFileSync(logPath, `${line}\n`, 'utf8');
     trimLogFileToRetention(logPath);
   } catch {
-    // Best effort logging; never throw.
+
   }
 }

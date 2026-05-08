@@ -1,20 +1,4 @@
-// Sync engine. Reconciles the extension's Dexie mirror with the desktop's
-// SQLite over the local HTTP bridge.
-//
-// Strategy: full-snapshot pull per entity. The bridge GET endpoints return
-// the desktop's complete state for each entity, and we diff against the
-// local mirror by id + updatedAt:
-//
-//   - rows present remotely → upsert if remote.updatedAt > local.updatedAt
-//   - rows missing remotely → tombstone (deletedAt = now) unless they have
-//     pendingPush set (extension-only inserts that the desktop hasn't
-//     acknowledged yet)
-//   - rows queued in `pendingMutations` → POST/PUT/DELETE to the desktop;
-//     drop from the queue on success, increment `attempts` on failure
-//
-// All entities the user cares about are small (a few hundred rows at most),
-// so a full snapshot every 30s is much simpler than maintaining tombstones
-// and `?since=` deltas on the desktop side.
+
 
 import { db } from './db';
 import {
@@ -83,7 +67,6 @@ function emit(next: SyncStatus): void {
   }
 }
 
-/** Trigger a sync now. Concurrent calls dedupe onto the same in-flight run. */
 export async function runSync(): Promise<void> {
   if (inflight) return inflight;
   inflight = (async () => {
@@ -93,7 +76,7 @@ export async function runSync(): Promise<void> {
         emit({ kind: 'offline' });
         return;
       }
-      // Drain pending mutations first so subsequent pulls reflect them.
+
       await flushPendingMutations();
       await Promise.all([
         pullCategories(),
@@ -120,8 +103,6 @@ export async function runSync(): Promise<void> {
   return inflight;
 }
 
-/** Start the periodic background sync. Idempotent — calling twice does not
- *  schedule two timers. */
 export function startSyncPolling(): void {
   if (pollTimer !== null) return;
   void runSync();
@@ -136,8 +117,6 @@ export function stopSyncPolling(): void {
   pollTimer = null;
 }
 
-// --- pulls ---------------------------------------------------------------
-
 async function pullCategories(): Promise<void> {
   const remote = await listDesktopCategories();
   const local = await db.categories.toArray();
@@ -146,7 +125,6 @@ async function pullCategories(): Promise<void> {
 
   const toPut: SyncedCategory[] = [];
 
-  // Upsert / refresh from remote.
   for (const r of remote) {
     const l = localById.get(r.id);
     if (!l || r.updatedAt >= (l.updatedAt ?? 0)) {
@@ -164,8 +142,6 @@ async function pullCategories(): Promise<void> {
     }
   }
 
-  // Tombstone local rows that disappeared remotely (unless they're queued
-  // for an initial push — those haven't been seen by the desktop yet).
   const now = Date.now();
   for (const l of local) {
     if (remoteById.has(l.id)) continue;
@@ -211,7 +187,7 @@ async function pullVariants(): Promise<void> {
 }
 
 async function pullScrapes(): Promise<void> {
-  // Scrapes are produced exclusively on the desktop, so sync is one-way.
+
   const remote = await listDesktopScrapes();
   const local = await db.scrapes.toArray();
   const remoteById = new Map(remote.map((r) => [r.jobId, r]));
@@ -268,8 +244,7 @@ async function pullDmJobs(): Promise<void> {
 }
 
 async function pullActiveJobs(): Promise<void> {
-  // Active jobs change every second while running — don't bother diffing.
-  // Just replace the table with a fresh snapshot every sync.
+
   const remote = await listDesktopActiveJobs();
   const fetchedAt = Date.now();
   const rows: SyncedActiveJob[] = remote.map((j) => ({
@@ -292,8 +267,6 @@ async function pullActiveJobs(): Promise<void> {
   });
 }
 
-/** On-demand pull for the per-recipient sends of a single mass-DM job.
- *  Filled when the user opens a DM job's detail screen. */
 export async function pullDmSends(jobId: string): Promise<void> {
   if (!(await isDesktopReachable())) return;
   const remote = await listDesktopDmSends(jobId);
@@ -313,9 +286,6 @@ export async function pullDmSends(jobId: string): Promise<void> {
   });
 }
 
-/** On-demand pull for the leads inside a specific category. Called when the
- *  user opens a CategoryDetail screen — we don't keep all category leads
- *  hot-cached because they can be 5000 per category. */
 export async function pullCategoryLeads(categoryId: string): Promise<void> {
   if (!(await isDesktopReachable())) return;
   const remote = await listCategoryLeadsFull(categoryId);
@@ -357,11 +327,6 @@ export async function pullCategoryLeads(categoryId: string): Promise<void> {
   });
 }
 
-// --- pushes --------------------------------------------------------------
-
-/** Enqueue a mutation that will be flushed to the desktop on the next sync.
- *  The local DB is already updated by the caller; this just records the
- *  intent to propagate. */
 export async function enqueuePush(
   entity: PendingMutation['entity'],
   op: PendingMutation['op'],
@@ -376,8 +341,7 @@ export async function enqueuePush(
     createdAt: Date.now(),
     attempts: 0,
   });
-  // Best-effort flush. If the desktop is offline this no-ops; the row
-  // stays queued for the next periodic run.
+
   void runSync();
 }
 
@@ -389,8 +353,7 @@ async function flushPendingMutations(): Promise<void> {
       if (m.id !== undefined) await db.pendingMutations.delete(m.id);
     } catch (err) {
       const offline = err instanceof BridgeError && err.code === 'no_desktop';
-      // If the desktop went away mid-flush, stop and let the next run pick
-      // up where we left off.
+
       if (offline) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       if (m.id !== undefined) {
@@ -399,7 +362,7 @@ async function flushPendingMutations(): Promise<void> {
           lastError: msg,
         });
       }
-      // Move on so one bad row doesn't block the queue forever.
+
     }
   }
 }
@@ -411,9 +374,7 @@ async function dispatchMutation(m: PendingMutation): Promise<void> {
     if (m.op === 'create') {
       const name = String(body.name ?? '');
       const remote = await createDesktopCategory(name);
-      // Remote id may differ from local id (extension uses local UUIDs
-      // before the desktop assigns one). Migrate the local row to the
-      // remote id so subsequent updates target it.
+
       await reattachCategoryLocalId(m.refId, remote.id);
       return;
     }

@@ -37,11 +37,10 @@ export function CategoryDetail() {
     [] as SyncedCategoryLead[]
   );
 
-  // First mount: pull fresh leads for this category from the desktop.
   useEffect(() => {
     if (!id) return;
     void pullCategoryLeads(id).catch(() => {
-      // Ignored — sync engine surfaces connection state separately.
+
     });
   }, [id]);
 
@@ -226,9 +225,7 @@ function AddLeadsDialog({
     setError(null);
     try {
       const now = Date.now();
-      // Optimistic local insert — the user sees the leads instantly. The
-      // sync engine pushes them to the desktop on the next flush; if it's
-      // offline they stay in the queue and propagate when it comes back.
+
       await db.transaction('rw', db.categoryLeads, async () => {
         for (const p of fresh) {
           await db.categoryLeads.put({
@@ -243,8 +240,7 @@ function AddLeadsDialog({
           });
         }
       });
-      // Bump the local lead count so the Categories screen reflects the
-      // new total before the next pull arrives.
+
       const cat = await db.categories.get(categoryId);
       if (cat) {
         await db.categories.update(categoryId, {
@@ -326,9 +322,6 @@ function AddLeadsDialog({
   );
 }
 
-// Mirrors the desktop's source-cell rendering: parses a `source_detail`
-// string of the form "kind | ref" and renders the kind plus a clickable
-// link word for the ref (post / reel / hashtag / profile / etc).
 function LeadSourceCell({
   sourceDetail,
   sourceKind,

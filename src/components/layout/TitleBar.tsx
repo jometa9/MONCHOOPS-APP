@@ -7,9 +7,6 @@ interface TitleBarProps {
   transparent?: boolean;
 }
 
-// Draggable title-bar region for the frameless window. On macOS the traffic
-// lights are provided by Electron (hiddenInset). On Windows the overlay is
-// provided by `titleBarOverlay` in main.ts.
 export function TitleBar({ title = 'MonchoOps', transparent = false }: TitleBarProps) {
   const [platform, setPlatform] = useState<NodeJS.Platform | null>(null);
   const [fullScreen, setFullScreen] = useState(false);

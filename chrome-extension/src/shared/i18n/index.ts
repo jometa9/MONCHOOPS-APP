@@ -24,7 +24,7 @@ function resolve(pref: LocalePreference): Locale {
 }
 
 async function readStoredPreference(): Promise<LocalePreference> {
-  // chrome.storage isn't available in unit tests / non-extension contexts.
+
   if (typeof chrome === 'undefined' || !chrome.storage?.local) return 'system';
   return new Promise((resolve) => {
     chrome.storage.local.get([STORAGE_KEY], (res) => {
@@ -58,7 +58,6 @@ export async function initI18n(): Promise<void> {
     returnNull: false,
   });
 
-  // React to changes from other surfaces (popup → dashboard, etc.).
   if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local' || !changes[STORAGE_KEY]) return;
