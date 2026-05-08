@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Database, FolderTree, History, Home, Instagram, ListTodo, LogOut, MessageSquareText, Send, Settings, Users } from 'lucide-react';
+import { Chrome, Database, ExternalLink, FolderTree, History, Home, Instagram, ListTodo, LogOut, MessageSquareText, Send, Settings, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { monchoops } from '@/lib/monchoops';
 import { useSession } from '@/context/SessionContext';
 import { useJobs } from '@/context/JobsContext';
 import { Spinner } from '@/components/common/Spinner';
@@ -41,6 +42,24 @@ export function Sidebar() {
   const { running, progressByJob } = useJobs();
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [extensionUrl, setExtensionUrl] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void monchoops.updater
+      .getExtensionUrl()
+      .then((url) => {
+        if (!cancelled) setExtensionUrl(url ?? '');
+      })
+      .catch(() => {});
+    const off = monchoops.updater.onExtensionUrlChange((url) => {
+      setExtensionUrl(url ?? '');
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
 
   async function handleConfirmLogout() {
     setLoggingOut(true);
@@ -106,6 +125,17 @@ export function Sidebar() {
               )
             ) : null}
           </NavLink>
+        ) : null}
+        {extensionUrl ? (
+          <button
+            type="button"
+            onClick={() => void monchoops.openExternalLink(extensionUrl)}
+            className="flex w-full items-center gap-2.5 border-y border-transparent px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+          >
+            <Chrome className="h-4 w-4" />
+            <span>{t('components.sidebar.chromeExtension')}</span>
+            <ExternalLink className="ml-auto h-3.5 w-3.5" />
+          </button>
         ) : null}
         {bottomItems.map(({ to, labelKey, icon: Icon }) => (
           <NavLink key={to} to={to} className={navClass}>

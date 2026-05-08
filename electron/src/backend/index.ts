@@ -57,6 +57,7 @@ import { fetchUsage, flushDmBuffer, registerAccount, unregisterAccount } from '.
 import type { SessionSnapshot } from './types';
 import {
   checkForUpdatesManual,
+  getExtensionUrl,
   getUpdateStatus,
   initUpdater,
   openDownloadPage,
@@ -488,6 +489,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   ipcMain.handle('updater:openDownload', () => {
     openDownloadPage();
   });
+  ipcMain.handle('updater:getExtensionUrl', () => getExtensionUrl());
 
   ipcMain.handle('settings:getScrapeExportDir', () => metaGet('scrape_export_dir') ?? '');
   ipcMain.handle('settings:setScrapeExportDir', (_e, dir: string) => {

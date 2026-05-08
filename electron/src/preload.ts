@@ -178,6 +178,9 @@ const updaterApi = {
   openDownload: () => invoke<void>('updater:openDownload'),
   onStateChange: (cb: (state: import('./backend/updater').UpdateStatus) => void) =>
     listen<import('./backend/updater').UpdateStatus>('updater:state', cb),
+  getExtensionUrl: () => invoke<string>('updater:getExtensionUrl'),
+  onExtensionUrlChange: (cb: (url: string) => void) =>
+    listen<string>('updater:extensionUrl', cb),
 };
 
 const bridgeApi = {

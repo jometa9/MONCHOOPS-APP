@@ -152,6 +152,8 @@ export interface UpdaterApi {
   checkForUpdates(): Promise<void>;
   openDownload(): Promise<void>;
   onStateChange(cb: (state: UpdateStatus) => void): Unsubscribe;
+  getExtensionUrl(): Promise<string>;
+  onExtensionUrlChange(cb: (url: string) => void): Unsubscribe;
 }
 
 export interface BridgeStatus {

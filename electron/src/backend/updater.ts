@@ -17,12 +17,14 @@ export type UpdateStatus =
 interface AppVersionResponse {
   version: string;
   downloadUrls: { mac?: string; windows?: string };
+  extensionUrl?: string;
 }
 
 interface VersionCache {
   lastCheckedAt: number;
   version: string;
   downloadUrls: { mac?: string; windows?: string };
+  extensionUrl?: string;
 }
 
 const VERSION_CACHE_META = 'app_version_cache';
@@ -52,6 +54,19 @@ function logUpdater(message: string, err?: unknown): void {
 function setStatus(next: UpdateStatus): void {
   currentStatus = next;
   if (broadcaster) broadcaster('updater:state', currentStatus);
+}
+
+let currentExtensionUrl: string = '';
+
+function setExtensionUrl(next: string): void {
+  const value = (next ?? '').trim();
+  if (value === currentExtensionUrl) return;
+  currentExtensionUrl = value;
+  if (broadcaster) broadcaster('updater:extensionUrl', currentExtensionUrl);
+}
+
+export function getExtensionUrl(): string {
+  return currentExtensionUrl;
 }
 
 export function getUpdateStatus(): UpdateStatus {
@@ -158,15 +173,18 @@ export async function checkVersionIfStale(force = false): Promise<void> {
           mac: data.downloadUrls?.mac,
           windows: data.downloadUrls?.windows,
         },
+        extensionUrl: data.extensionUrl ?? '',
       };
       saveCache(next);
       applyCacheToStatus(next);
+      setExtensionUrl(next.extensionUrl ?? '');
     } catch (err) {
       logUpdater('check failed', err);
 
       const stale = loadCache();
       if (stale) {
         applyCacheToStatus(stale);
+        setExtensionUrl(stale.extensionUrl ?? '');
       } else {
         setStatus({
           kind: 'error',
@@ -187,7 +205,10 @@ export function initUpdater(broadcast: Broadcaster): void {
   broadcaster = broadcast;
 
   const cache = loadCache();
-  if (cache) applyCacheToStatus(cache);
+  if (cache) {
+    applyCacheToStatus(cache);
+    setExtensionUrl(cache.extensionUrl ?? '');
+  }
 
   setTimeout(() => {
     void checkVersionIfStale();
