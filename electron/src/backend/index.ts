@@ -59,7 +59,7 @@ import {
   checkForUpdatesManual,
   getUpdateStatus,
   initUpdater,
-  installUpdateAndRestart,
+  openDownloadPage,
 } from './updater';
 import {
   getStatus as getBridgeStatus,
@@ -517,13 +517,15 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
 
   ipcMain.handle('app:getVersion', () => app.getVersion());
 
-  // Auto-updater
+  // Manual-update banner: queries the landing for the latest shipping
+  // version and opens the download page in the user's browser. No
+  // auto-download or auto-install.
   ipcMain.handle('updater:getState', () => getUpdateStatus());
   ipcMain.handle('updater:check', () => {
     checkForUpdatesManual();
   });
-  ipcMain.handle('updater:install', () => {
-    installUpdateAndRestart();
+  ipcMain.handle('updater:openDownload', () => {
+    openDownloadPage();
   });
 
   ipcMain.handle('settings:getScrapeExportDir', () => metaGet('scrape_export_dir') ?? '');

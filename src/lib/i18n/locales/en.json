@@ -615,13 +615,8 @@
     },
     "updateBanner": {
       "available": "Update available — v{{version}}",
-      "downloadingV": "Downloading update v{{version}}",
-      "downloading": "Downloading update",
-      "ready": "Update ready — v{{version}}",
-      "availableHint": "Download will start automatically.",
-      "downloadingHint": "Keep the app open — this only takes a moment.",
-      "readyHint": "Restart to finish installing, or it will install next time you close B2DM.",
-      "restartInstall": "Restart & install"
+      "availableHint": "Click Download to get the latest version from b2dm.app.",
+      "download": "Download"
     },
     "datePicker": {
       "placeholder": "Pick a date",

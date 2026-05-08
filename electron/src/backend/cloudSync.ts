@@ -14,6 +14,7 @@ import { app } from 'electron';
 import { BUILD_CONFIG } from '../buildConfig';
 import { metaGet, metaSet } from './db';
 import { decryptString, encryptString } from './crypto';
+import { checkVersionIfStale } from './updater';
 
 const LICENSE_KEY_META = 'license_key_encrypted';
 const DEVICE_ID_META = 'device_id';
@@ -73,6 +74,10 @@ async function request<T>(
     try {
       data = await res.json();
     } catch {}
+    // Piggyback an app-version freshness check on every landing call. The
+    // helper is internally rate-limited to once per 24h, so calling it on
+    // hot paths is cheap.
+    void checkVersionIfStale().catch(() => {});
     if (!res.ok) {
       const error =
         (data && typeof data === 'object' && 'error' in data && typeof (data as any).error === 'string'

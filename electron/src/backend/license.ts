@@ -4,6 +4,7 @@ import { metaGet, metaSet, metaGetJson, metaSetJson } from './db';
 import type { ProfileInfo, SessionSnapshot, SubscriptionInfo } from './types';
 import { EMPTY_SESSION } from './types';
 import { wipeUserData } from './userData';
+import { checkVersionIfStale } from './updater';
 
 const LICENSE_KEY_META = 'license_key_encrypted'; // base64 of encrypted blob
 const PROFILE_META = 'profile';
@@ -115,6 +116,10 @@ export async function validateLicense(licenseKey: string): Promise<SessionSnapsh
   } catch {
     throw new Error('Could not reach the license server. Check your connection.');
   }
+
+  // Any successful round-trip to the landing is a chance to refresh the
+  // version cache. Internally rate-limited to once per 24h.
+  void checkVersionIfStale().catch(() => {});
 
   const body = await res.text();
   if (!res.ok) {

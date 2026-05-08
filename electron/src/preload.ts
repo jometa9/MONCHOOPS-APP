@@ -175,7 +175,7 @@ const messageVariantsApi = {
 const updaterApi = {
   getState: () => invoke<import('./backend/updater').UpdateStatus>('updater:getState'),
   checkForUpdates: () => invoke<void>('updater:check'),
-  installAndRestart: () => invoke<void>('updater:install'),
+  openDownload: () => invoke<void>('updater:openDownload'),
   onStateChange: (cb: (state: import('./backend/updater').UpdateStatus) => void) =>
     listen<import('./backend/updater').UpdateStatus>('updater:state', cb),
 };

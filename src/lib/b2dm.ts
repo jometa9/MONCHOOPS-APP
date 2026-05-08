@@ -138,23 +138,19 @@ export interface StatsApi {
 export type UpdateStatus =
   | { kind: 'idle' }
   | { kind: 'checking' }
-  | { kind: 'available'; version: string }
   | {
-      kind: 'downloading';
+      kind: 'available';
       version: string;
-      percent: number;
-      bytesPerSecond: number;
-      transferred: number;
-      total: number;
+      currentVersion: string;
+      downloadUrl: string;
     }
-  | { kind: 'downloaded'; version: string }
   | { kind: 'not-available' }
   | { kind: 'error'; message: string };
 
 export interface UpdaterApi {
   getState(): Promise<UpdateStatus>;
   checkForUpdates(): Promise<void>;
-  installAndRestart(): Promise<void>;
+  openDownload(): Promise<void>;
   onStateChange(cb: (state: UpdateStatus) => void): Unsubscribe;
 }
 
