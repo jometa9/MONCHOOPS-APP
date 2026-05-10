@@ -625,6 +625,7 @@ export interface StartMassDmArgs {
   interactions?: MassDmInteractionsConfig | null;
 
   excludeUsernames?: string[] | null;
+  maxSends?: number | null;
 }
 
 const MAX_DM_VARIANTS = 20;
@@ -645,25 +646,31 @@ export function startMassDm(args: StartMassDmArgs): string {
     .slice(0, MAX_DM_VARIANTS);
   if (messages.length === 0) throw new Error('At least one message variant is required');
 
-  if (typeof nextMassDmRemainingHint === 'number' && nextMassDmRemainingHint <= 0) {
-    nextMassDmRemainingHint = null;
+  const remainingHint =
+    typeof args.maxSends === 'number'
+      ? args.maxSends
+      : nextMassDmRemainingHint;
+  nextMassDmRemainingHint = null;
+
+  if (typeof remainingHint === 'number' && remainingHint <= 0) {
     throw new Error(
       'You have reached your monthly DM limit for this plan. Upgrade or wait until next month.'
     );
   }
 
-  nextMassDmRemainingHint = null;
-
   const interactions = normaliseInteractions(args.interactions);
   const excludeUsernames = Array.isArray(args.excludeUsernames)
     ? Array.from(new Set(args.excludeUsernames.map((u) => String(u).trim().replace(/^@+/, '')).filter(Boolean)))
     : [];
+  const maxSends =
+    typeof remainingHint === 'number' && remainingHint > 0 ? remainingHint : null;
   const params = {
     intervalMs: args.intervalMs,
     messages,
     usernamesCsvPath: args.usernamesCsvPath,
     interactions,
     excludeUsernames,
+    maxSends,
   };
 
   if (hasPendingJobForAccount(args.accountId)) {

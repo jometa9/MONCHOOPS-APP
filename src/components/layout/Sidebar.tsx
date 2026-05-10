@@ -134,7 +134,6 @@ export function Sidebar() {
           >
             <Chrome className="h-4 w-4" />
             <span>{t('components.sidebar.chromeExtension')}</span>
-            <ExternalLink className="ml-auto h-3.5 w-3.5" />
           </button>
         ) : null}
         {bottomItems.map(({ to, labelKey, icon: Icon }) => (

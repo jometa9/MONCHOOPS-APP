@@ -26,6 +26,17 @@ function compileElectron() {
   }
 }
 
+function writeElectronPkg() {
+  const result = spawnSync(process.execPath, [path.join(repoRoot, 'scripts', 'write-electron-pkg.mjs')], {
+    stdio: 'inherit',
+    cwd: repoRoot,
+  });
+  if (result.status !== 0) {
+    console.error('[run-electron-dev] write-electron-pkg failed');
+    process.exit(result.status ?? 1);
+  }
+}
+
 function ping(url) {
   return new Promise((resolve) => {
     const req = http.get(url, (res) => {
@@ -51,6 +62,7 @@ async function waitForVite(timeoutMs = 30_000) {
 
 (async () => {
   compileElectron();
+  writeElectronPkg();
   console.log('[run-electron-dev] waiting for Vite at', VITE_URL);
   const up = await waitForVite();
   if (!up) {

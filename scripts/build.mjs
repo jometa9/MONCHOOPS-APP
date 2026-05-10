@@ -31,11 +31,7 @@ console.log('[build] obfuscate electron/dist');
 run(process.execPath, [path.join('scripts', 'obfuscate-electron.mjs')]);
 
 console.log('[build] writing electron/dist/package.json');
-import('node:fs').then(({ writeFileSync, mkdirSync }) => {
-  const outDir = path.join(repoRoot, 'electron', 'dist');
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, 'package.json'), JSON.stringify({ type: 'commonjs' }));
-});
+run(process.execPath, [path.join('scripts', 'write-electron-pkg.mjs')]);
 
 const bundleArgs = [path.join('scripts', 'bundle-chromium.mjs')];
 if (wantMac) bundleArgs.push('--mac');

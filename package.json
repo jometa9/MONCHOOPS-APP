@@ -13,7 +13,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:electron\" --names \"vite,electron\"",
     "dev:fresh": "node scripts/kill-port.mjs 7775 && node -e \"try{require('fs').rmSync('node_modules/.vite',{recursive:true})}catch(e){}\" && cross-env NO_PROXY=localhost,127.0.0.1,::1 vite",
     "build:frontend": "vite build --mode production",
-    "build:electron": "tsc -p electron/tsconfig.json && node scripts/obfuscate-electron.mjs && node -e \"require('fs').writeFileSync('electron/dist/package.json', JSON.stringify({type:'commonjs'}))\"",
+    "build:electron": "tsc -p electron/tsconfig.json && node scripts/obfuscate-electron.mjs && node scripts/write-electron-pkg.mjs",
     "build": "node scripts/build.mjs",
     "build:mac": "npm run build",
     "build:win": "node scripts/build.mjs --win",
@@ -110,12 +110,6 @@
           "arch": [
             "arm64"
           ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64"
-          ]
         }
       ],
       "artifactName": "MonchoOps-Setup.${ext}",
@@ -153,7 +147,7 @@
           ]
         }
       ],
-      "artifactName": "MonchoOps.${ext}",
+      "artifactName": "MonchoOps-Setup.${ext}",
       "requestedExecutionLevel": "asInvoker",
       "extraResources": [
         {
