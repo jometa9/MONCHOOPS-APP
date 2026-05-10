@@ -15,6 +15,17 @@ import type {
 
 type Unsubscribe = () => void;
 
+export interface UsageSnapshot {
+  plan: string;
+  accounts: { used: number; limit: number | null; remaining: number | null };
+  dms: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    windowStart: string;
+  };
+}
+
 export interface BulkLoginRow {
   username: string;
   password: string;
@@ -200,6 +211,7 @@ export interface MonchoOpsApi {
   validateLicense(licenseKey: string): Promise<SessionSnapshot>;
   logout(): Promise<void>;
   onSessionChange(cb: (snapshot: SessionSnapshot) => void): Unsubscribe;
+  getUsage(): Promise<UsageSnapshot | null>;
 
   accounts: AccountsApi;
   jobs: JobsApi;

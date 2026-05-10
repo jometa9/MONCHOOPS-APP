@@ -13,15 +13,20 @@ export function UpdateBanner() {
     if (PREVIEW) return;
     let cancelled = false;
     void monchoops.updater.getState().then((s) => {
+      console.log('[UpdateBanner] initial getState →', s);
       if (!cancelled) setState(s);
     });
-    const off = monchoops.updater.onStateChange((s) => setState(s));
+    const off = monchoops.updater.onStateChange((s) => {
+      console.log('[UpdateBanner] onStateChange →', s);
+      setState(s);
+    });
     return () => {
       cancelled = true;
       off();
     };
   }, []);
 
+  console.log('[UpdateBanner] render with state.kind=', state.kind);
   if (state.kind !== 'available') return null;
 
   return (

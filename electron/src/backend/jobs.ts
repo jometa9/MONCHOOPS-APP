@@ -710,6 +710,7 @@ function spawnMassDmWorker(
     intervalMs: number;
     interactions?: MassDmInteractionsConfig | null;
     excludeUsernames?: string[] | null;
+    maxSends?: number | null;
   }
 ): void {
   const headless = getHeadlessPref();
@@ -726,6 +727,7 @@ function spawnMassDmWorker(
         intervalMs: params.intervalMs,
         interactions: params.interactions ?? null,
         excludeUsernames: params.excludeUsernames ?? [],
+        maxSends: params.maxSends ?? null,
         headless,
       },
     },
@@ -851,6 +853,7 @@ function dispatchNextForAccount(accountId: string): boolean {
       intervalMs: Number(params.intervalMs) || 0,
       interactions: normaliseInteractions(params.interactions ?? null),
       excludeUsernames: Array.isArray(params.excludeUsernames) ? params.excludeUsernames : [],
+      maxSends: typeof params.maxSends === 'number' ? params.maxSends : null,
     });
   } else {
     spawnScrapeWorker(

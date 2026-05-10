@@ -86,7 +86,11 @@
     "processed": "{{processed}} / {{total}} procesados",
     "failed": "{{count}} fallidos",
     "openDashboard": "Abrir dashboard",
-    "logOut": "Cerrar sesión"
+    "logOut": "Cerrar sesión",
+    "planUsage": "Uso del plan",
+    "accountsUsage": "Cuentas IG",
+    "dmsUsage": "DMs este mes",
+    "unlimited": "Ilimitado"
   },
   "settings": {
     "title": "Ajustes",
@@ -96,6 +100,10 @@
     "name": "Nombre",
     "plan": "Plan",
     "active": "Activa",
+    "planUsage": "Uso del plan",
+    "accountsUsage": "Cuentas IG",
+    "dmsUsage": "DMs este mes",
+    "unlimited": "Ilimitado",
     "instagramSession": "Sesión de Instagram",
     "instagramHint": "La extensión usa la cuenta de Instagram con la que estés logueado en tu navegador. No hay selector de cuenta — cerrá sesión en IG para cambiar.",
     "openInstagram": "Abrir Instagram",

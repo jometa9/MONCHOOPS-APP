@@ -1,12 +1,13 @@
 
 
-import type { Profile, Session, Subscription } from './types';
+import type { Profile, Session, Subscription, UsageSnapshot } from './types';
 import { EMPTY_SESSION } from './types';
 
 const LICENSE_API_BASE = 'https://monchoops.com';
 const STORAGE_KEY_LICENSE = 'monchoops_license_key';
 const STORAGE_KEY_PROFILE = 'monchoops_profile';
 const STORAGE_KEY_SUB = 'monchoops_subscription';
+const STORAGE_KEY_USAGE = 'monchoops_usage';
 
 interface ExternalLicenseResponse {
   email?: string;
@@ -98,4 +99,147 @@ export async function logout(): Promise<void> {
   await storageRemove(STORAGE_KEY_LICENSE);
   await storageRemove(STORAGE_KEY_PROFILE);
   await storageRemove(STORAGE_KEY_SUB);
+  await storageRemove(STORAGE_KEY_USAGE);
+}
+
+export async function fetchUsage(): Promise<UsageSnapshot | null> {
+  const licenseKey = await storageGet<string>(STORAGE_KEY_LICENSE);
+  if (!licenseKey) return null;
+
+  let res: Response;
+  try {
+    res = await fetch(new URL('/api/monchoops/usage', LICENSE_API_BASE).toString(), {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${licenseKey}` },
+    });
+  } catch {
+    const cached = await storageGet<UsageSnapshot>(STORAGE_KEY_USAGE);
+    return cached;
+  }
+  if (!res.ok) return null;
+
+  let data: UsageSnapshot;
+  try {
+    data = (await res.json()) as UsageSnapshot;
+  } catch {
+    return null;
+  }
+  await storageSet(STORAGE_KEY_USAGE, data);
+  return data;
+}
+
+export async function getCachedUsage(): Promise<UsageSnapshot | null> {
+  return storageGet<UsageSnapshot>(STORAGE_KEY_USAGE);
+}
+
+export interface DmReportEvent {
+  fromUsername: string;
+  targetUsername: string;
+  sentAt?: number;
+}
+
+export interface DmReportResponse {
+  ok: boolean;
+  status: number;
+  limitReached: boolean;
+  recorded?: number;
+  dropped?: number;
+  used?: number;
+  limit?: number | null;
+  remaining?: number | null;
+}
+
+export async function reportDms(events: DmReportEvent[]): Promise<DmReportResponse> {
+  if (events.length === 0) {
+    return { ok: true, status: 200, limitReached: false, recorded: 0, dropped: 0 };
+  }
+  const licenseKey = await storageGet<string>(STORAGE_KEY_LICENSE);
+  if (!licenseKey) {
+    return { ok: false, status: 401, limitReached: false };
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(
+      new URL('/api/monchoops/dms/report', LICENSE_API_BASE).toString(),
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${licenseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          events: events.map((e) => ({
+            fromUsername: e.fromUsername,
+            targetUsername: e.targetUsername,
+            sentAt: e.sentAt ? new Date(e.sentAt).toISOString() : undefined,
+          })),
+        }),
+      }
+    );
+  } catch {
+    return { ok: false, status: 0, limitReached: false };
+  }
+
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {}
+
+  if (res.status === 403) {
+    if (data) {
+      const cached = await storageGet<UsageSnapshot>(STORAGE_KEY_USAGE);
+      await storageSet(STORAGE_KEY_USAGE, {
+        plan: data.plan ?? cached?.plan ?? 'free',
+        accounts:
+          cached?.accounts ?? { used: 0, limit: null, remaining: null },
+        dms: {
+          used: data.used ?? 0,
+          limit: data.limit ?? null,
+          remaining: 0,
+          windowStart:
+            cached?.dms.windowStart ?? new Date().toISOString(),
+        },
+      });
+    }
+    return {
+      ok: false,
+      status: 403,
+      limitReached: true,
+      used: data?.used,
+      limit: data?.limit ?? null,
+      remaining: 0,
+      dropped: data?.dropped,
+      recorded: data?.recorded ?? 0,
+    };
+  }
+
+  if (!res.ok) {
+    return { ok: false, status: res.status, limitReached: false };
+  }
+
+  if (data) {
+    const cached = await storageGet<UsageSnapshot>(STORAGE_KEY_USAGE);
+    await storageSet(STORAGE_KEY_USAGE, {
+      plan: data.plan ?? cached?.plan ?? 'free',
+      accounts: cached?.accounts ?? { used: 0, limit: null, remaining: null },
+      dms: {
+        used: data.used ?? 0,
+        limit: data.limit ?? null,
+        remaining: data.remaining ?? null,
+        windowStart: cached?.dms.windowStart ?? new Date().toISOString(),
+      },
+    });
+  }
+
+  return {
+    ok: true,
+    status: res.status,
+    limitReached: (data?.dropped ?? 0) > 0 && (data?.remaining ?? null) === 0,
+    recorded: data?.recorded ?? events.length,
+    dropped: data?.dropped ?? 0,
+    used: data?.used,
+    limit: data?.limit ?? null,
+    remaining: data?.remaining ?? null,
+  };
 }

@@ -36,6 +36,8 @@ const sessionApi = {
   logout: () => invoke<void>('session:logout'),
   onSessionChange: (cb: (snapshot: import('./backend/types').SessionSnapshot) => void) =>
     listen<import('./backend/types').SessionSnapshot>('session:changed', cb),
+  getUsage: () =>
+    invoke<import('./backend/cloudSync').UsageSnapshot | null>('usage:get'),
 };
 
 const accountsApi = {

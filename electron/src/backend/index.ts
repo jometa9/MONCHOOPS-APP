@@ -128,6 +128,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   });
 
   ipcMain.handle('session:get', async () => getSession());
+  ipcMain.handle('usage:get', async () => fetchUsage());
   ipcMain.handle('license:validate', async (_e, key: string) => {
     const snapshot = await validateLicense(key);
     broadcastSessionChange(snapshot);
@@ -267,14 +268,19 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       interactions?: MassDmInteractionsConfig | null;
       excludeUsernames?: string[] | null;
     }) => {
-
       const usage = await fetchUsage();
-      if (usage && usage.dms.remaining != null) {
-        setMassDmRemainingHint(usage.dms.remaining);
-      } else {
-        setMassDmRemainingHint(null);
+      let maxSends: number | null = null;
+      if (usage && usage.dms.limit != null) {
+        const remaining = usage.dms.remaining ?? 0;
+        if (remaining <= 0) {
+          throw new Error(
+            `Your ${usage.plan} plan allows ${usage.dms.limit} DMs per month (you have used ${usage.dms.used}). Upgrade or wait until next month.`
+          );
+        }
+        maxSends = remaining;
       }
-      return startMassDm(payload);
+      setMassDmRemainingHint(null);
+      return startMassDm({ ...payload, maxSends });
     }
   );
   ipcMain.handle(

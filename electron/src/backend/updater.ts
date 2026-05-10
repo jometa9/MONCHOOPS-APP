@@ -30,6 +30,7 @@ interface VersionCache {
 const VERSION_CACHE_META = 'app_version_cache';
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 const INITIAL_CHECK_DELAY_MS = 5_000;
+const PERIODIC_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const MANUAL_CHECK_DEBOUNCE_MS = 3_000;
 const NOT_AVAILABLE_CLEAR_MS = 5_000;
 const REQUEST_TIMEOUT_MS = 8_000;
@@ -53,7 +54,12 @@ function logUpdater(message: string, err?: unknown): void {
 
 function setStatus(next: UpdateStatus): void {
   currentStatus = next;
-  if (broadcaster) broadcaster('updater:state', currentStatus);
+  console.log('[updater] setStatus →', JSON.stringify(next));
+  if (broadcaster) {
+    broadcaster('updater:state', currentStatus);
+  } else {
+    console.log('[updater] WARN: no broadcaster set');
+  }
 }
 
 let currentExtensionUrl: string = '';
@@ -110,7 +116,14 @@ function applyCacheToStatus(cache: VersionCache): void {
   const platform = getPlatformKey();
   const downloadUrl = platform ? cache.downloadUrls[platform] ?? '' : '';
   const currentVersion = app.getVersion();
-  if (compareVersions(cache.version, currentVersion) > 0 && downloadUrl) {
+  console.log('[updater] applyCacheToStatus', {
+    platform,
+    cacheVersion: cache.version,
+    currentVersion,
+    downloadUrl,
+    differs: cache.version !== currentVersion,
+  });
+  if (cache.version !== currentVersion && downloadUrl) {
     setStatus({
       kind: 'available',
       version: cache.version,
@@ -166,6 +179,7 @@ export async function checkVersionIfStale(force = false): Promise<void> {
     }
     try {
       const data = await fetchAppVersion();
+      console.log('[updater] fetchAppVersion response:', JSON.stringify(data));
       const next: VersionCache = {
         lastCheckedAt: Date.now(),
         version: data.version,
@@ -200,19 +214,32 @@ export async function checkVersionIfStale(force = false): Promise<void> {
 }
 
 export function initUpdater(broadcast: Broadcaster): void {
-  if (initialized) return;
+  if (initialized) {
+    console.log('[updater] initUpdater already initialized, skip');
+    return;
+  }
   initialized = true;
   broadcaster = broadcast;
+  console.log('[updater] initUpdater start, app.getVersion()=', app.getVersion());
 
   const cache = loadCache();
+  console.log('[updater] loadCache →', cache);
   if (cache) {
     applyCacheToStatus(cache);
     setExtensionUrl(cache.extensionUrl ?? '');
+  } else {
+    console.log('[updater] no cache, will wait for initial fetch');
   }
 
   setTimeout(() => {
-    void checkVersionIfStale();
+    console.log('[updater] initial checkVersionIfStale firing (force=true)');
+    void checkVersionIfStale(true);
   }, INITIAL_CHECK_DELAY_MS);
+
+  setInterval(() => {
+    console.log('[updater] periodic checkVersionIfStale firing (force=true)');
+    void checkVersionIfStale(true);
+  }, PERIODIC_CHECK_INTERVAL_MS);
 }
 
 export function checkForUpdatesManual(): void {

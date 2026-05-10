@@ -6,7 +6,7 @@ import { Select } from '@/components/ui/select';
 import { useSession } from '@/context/SessionContext';
 import { useTheme } from '@/context/ThemeContext';
 import { usePreferences } from '@/context/PreferencesContext';
-import { monchoops } from '@/lib/monchoops';
+import { monchoops, type UsageSnapshot } from '@/lib/monchoops';
 import {
   getLocalePreference,
   setLocalePreference,
@@ -61,11 +61,15 @@ export function Settings() {
   const [isWipingAll, setIsWipingAll] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [locale, setLocale] = useState<LocalePreference>(() => getLocalePreference());
+  const [usage, setUsage] = useState<UsageSnapshot | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void monchoops.settings.getAppVersion().then((v) => {
       if (!cancelled) setAppVersion(v);
+    });
+    void monchoops.getUsage().then((u) => {
+      if (!cancelled) setUsage(u);
     });
     return () => {
       cancelled = true;
@@ -77,6 +81,8 @@ export function Settings() {
     try {
       await monchoops.settings.refreshSession();
       await refresh();
+      const next = await monchoops.getUsage();
+      setUsage(next);
     } finally {
       setIsRefreshing(false);
     }
@@ -125,6 +131,27 @@ export function Settings() {
   }, []);
 
   const planLabel = session.subscription?.plan ?? '—';
+  const formatUsage = (used: number, limit: number | null): React.ReactNode => {
+    if (limit == null) {
+      return (
+        <span className="tabular-nums">
+          {used} <span className="text-muted-foreground">/ {t('settings.unlimited')}</span>
+        </span>
+      );
+    }
+    const ratio = limit > 0 ? used / limit : 0;
+    const colour =
+      ratio >= 1
+        ? 'text-destructive'
+        : ratio >= 0.9
+        ? 'text-amber-600'
+        : '';
+    return (
+      <span className={`tabular-nums ${colour}`}>
+        {used} <span className="text-muted-foreground">/ {limit}</span>
+      </span>
+    );
+  };
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-4 pb-30">
@@ -140,6 +167,18 @@ export function Settings() {
             <InfoRow label={t('settings.name')} value={session.profile?.name} />
             <InfoRow label={t('settings.email')} value={session.profile?.email} />
             <InfoRow label={t('settings.plan')} value={<span className="capitalize">{planLabel}</span>} />
+            {usage ? (
+              <>
+                <InfoRow
+                  label={t('settings.accountsUsage')}
+                  value={formatUsage(usage.accounts.used, usage.accounts.limit)}
+                />
+                <InfoRow
+                  label={t('settings.dmsUsage')}
+                  value={formatUsage(usage.dms.used, usage.dms.limit)}
+                />
+              </>
+            ) : null}
             <InfoRow label={t('settings.appVersion')} value={appVersion ? `V${appVersion}` : '—'} />
             <div className="flex items-stretch border-t border-border">
               <button

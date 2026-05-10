@@ -19,8 +19,8 @@ import {
   Sun,
 } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { logout } from '@/shared/license';
-import type { Session } from '@/shared/types';
+import { fetchUsage, getCachedUsage, logout } from '@/shared/license';
+import type { Session, UsageSnapshot } from '@/shared/types';
 import { cn } from '@/shared/cn';
 import { onSyncStatusChange, runSync, type SyncStatus } from '@/shared/sync';
 import { useThemeMode, type ThemeMode } from '../theme';
@@ -105,6 +105,7 @@ export function Sidebar({ session, onLogout, locked }: Props) {
       </nav>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-border p-3">
+        <UsageMini plan={session.subscription?.plan ?? 'free'} />
         <SyncIndicator />
         <ThemeToggle />
         <button
@@ -175,6 +176,116 @@ const THEME_META: Record<ThemeMode, { key: string; icon: typeof Sun }> = {
   light: { key: 'common.light', icon: Sun },
   dark: { key: 'common.dark', icon: Moon },
 };
+
+function UsageMini({ plan }: { plan: string }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [usage, setUsage] = useState<UsageSnapshot | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getCachedUsage().then((u) => {
+      if (!cancelled && u) setUsage(u);
+    });
+    void fetchUsage().then((u) => {
+      if (!cancelled && u) setUsage(u);
+    });
+    const interval = setInterval(() => {
+      void fetchUsage().then((u) => {
+        if (u) setUsage(u);
+      });
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const dms = usage?.dms;
+  const accounts = usage?.accounts;
+  const dmRatio =
+    dms && dms.limit != null && dms.limit > 0 ? Math.min(1, dms.used / dms.limit) : 0;
+
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('/settings')}
+      className="group flex w-full flex-col gap-1.5 border border-border bg-background px-2.5 py-2 text-left transition-colors hover:bg-accent"
+      title={t('settings.planUsage')}
+    >
+      <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span>{t('settings.planUsage')}</span>
+        <span className="font-semibold text-foreground">{plan}</span>
+      </div>
+      <UsageMiniRow
+        label={t('settings.dmsUsage')}
+        used={dms?.used ?? null}
+        limit={dms?.limit ?? null}
+        ratio={dmRatio}
+        unlimitedLabel={t('settings.unlimited')}
+      />
+      <UsageMiniRow
+        label={t('settings.accountsUsage')}
+        used={accounts?.used ?? null}
+        limit={accounts?.limit ?? null}
+        ratio={
+          accounts && accounts.limit != null && accounts.limit > 0
+            ? Math.min(1, accounts.used / accounts.limit)
+            : 0
+        }
+        unlimitedLabel={t('settings.unlimited')}
+      />
+    </button>
+  );
+}
+
+function UsageMiniRow({
+  label,
+  used,
+  limit,
+  ratio,
+  unlimitedLabel,
+}: {
+  label: string;
+  used: number | null;
+  limit: number | null;
+  ratio: number;
+  unlimitedLabel: string;
+}) {
+  const isUnlimited = limit == null;
+  const pct = Math.round(ratio * 100);
+  const barColour =
+    ratio >= 1
+      ? 'bg-destructive'
+      : ratio >= 0.9
+      ? 'bg-amber-500'
+      : 'bg-emerald-500';
+  const textColour =
+    ratio >= 1
+      ? 'text-destructive'
+      : ratio >= 0.9
+      ? 'text-amber-600'
+      : 'text-foreground';
+  return (
+    <div>
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-muted-foreground">{label}</span>
+        <span className={`font-medium tabular-nums ${textColour}`}>
+          {used == null
+            ? '—'
+            : isUnlimited
+            ? `${used} / ${unlimitedLabel}`
+            : `${used} / ${limit}`}
+        </span>
+      </div>
+      {!isUnlimited && used != null ? (
+        <div className="mt-1 h-0.5 w-full overflow-hidden bg-muted">
+          <div className={`h-full ${barColour}`} style={{ width: `${pct}%` }} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function ThemeToggle() {
   const { t } = useTranslation();

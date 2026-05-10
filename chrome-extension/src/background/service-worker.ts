@@ -2,6 +2,7 @@
 
 import { db, nextPendingLead, countLeads } from '@/shared/db';
 import { jitter, pickVariant, uuid } from '@/shared/format';
+import { fetchUsage, getCachedUsage, reportDms } from '@/shared/license';
 import type { Campaign, Lead, InteractionsConfig } from '@/shared/types';
 import type {
   CsBoolData,
@@ -126,6 +127,22 @@ async function tick(): Promise<void> {
       .where('status')
       .equals('running')
       .toArray();
+    if (candidates.length === 0) return;
+
+    const usage = await fetchUsage();
+    if (usage && usage.dms.limit != null && (usage.dms.remaining ?? 0) <= 0) {
+      for (const campaign of candidates) {
+        await db.campaigns.update(campaign.id, {
+          status: 'paused',
+          nextRunAt: Date.now() + 60 * 60_000,
+        });
+      }
+      notify(
+        'MonchoOps — DM limit reached',
+        `Your ${usage.plan} plan allows ${usage.dms.limit} DMs per month. Campaigns paused. Upgrade or wait until next month.`
+      );
+      return;
+    }
 
     const now = Date.now();
     for (const campaign of candidates) {
@@ -214,6 +231,7 @@ async function processOne(campaign: Campaign, lead: Lead): Promise<void> {
     await db.campaigns.update(campaign.id, {
       sentCount: (campaign.sentCount ?? 0) + 1,
     });
+    void reportSentDm(lead.username, ts).catch(() => {});
   } else {
     await db.leads.update(lead.id, {
       status: 'failed',
@@ -537,5 +555,49 @@ function notify(title: string, body: string): void {
       message: body,
     });
   } catch {}
+}
+
+let cachedIgUsername: string | null = null;
+let cachedIgUsernameAt = 0;
+
+async function getIgUsernameForReport(): Promise<string | null> {
+  const now = Date.now();
+  if (cachedIgUsername && now - cachedIgUsernameAt < 5 * 60_000) {
+    return cachedIgUsername;
+  }
+  try {
+    const { getCurrentIgUsername } = await import('@/shared/instagram');
+    const u = await getCurrentIgUsername();
+    if (u) {
+      cachedIgUsername = u;
+      cachedIgUsernameAt = now;
+    }
+    return u;
+  } catch {
+    return cachedIgUsername;
+  }
+}
+
+async function reportSentDm(targetUsername: string, sentAt: number): Promise<void> {
+  const fromUsername = await getIgUsernameForReport();
+  if (!fromUsername) return;
+  const res = await reportDms([{ fromUsername, targetUsername, sentAt }]);
+  if (res.limitReached) {
+    const cached = await getCachedUsage();
+    notify(
+      'MonchoOps — DM limit reached',
+      cached
+        ? `You used ${cached.dms.used}/${cached.dms.limit} DMs this month. Campaigns will pause until next month or upgrade.`
+        : 'You reached your monthly DM limit. Campaigns will pause until next month or upgrade.'
+    );
+
+    const running = await db.campaigns.where('status').equals('running').toArray();
+    for (const c of running) {
+      await db.campaigns.update(c.id, {
+        status: 'paused',
+        nextRunAt: Date.now() + 60 * 60_000,
+      });
+    }
+  }
 }
 

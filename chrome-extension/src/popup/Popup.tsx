@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Activity, ExternalLink, Instagram, Key, LogOut, Pause, Play } from 'lucide-react';
+import { Activity, BarChart3, ExternalLink, Instagram, Key, LogOut, Pause, Play } from 'lucide-react';
 import { db } from '@/shared/db';
-import { getSession, logout, validateLicense } from '@/shared/license';
-import type { Campaign, Session } from '@/shared/types';
+import { fetchUsage, getCachedUsage, getSession, logout, validateLicense } from '@/shared/license';
+import type { Campaign, Session, UsageSnapshot } from '@/shared/types';
 import { EMPTY_SESSION } from '@/shared/types';
 import { HomeBg } from '@/shared/HomeBg';
 
@@ -136,6 +136,20 @@ function ConnectedPanel({
     [] as Campaign[]
   );
 
+  const [usage, setUsage] = useState<UsageSnapshot | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void getCachedUsage().then((u) => {
+      if (!cancelled && u) setUsage(u);
+    });
+    void fetchUsage().then((u) => {
+      if (!cancelled && u) setUsage(u);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const openDashboard = (path?: string) => {
     chrome.runtime.sendMessage({ type: 'sw/openDashboard', path });
     window.close();
@@ -208,6 +222,8 @@ function ConnectedPanel({
           </div>
         </section>
 
+        <UsageSection usage={usage} plan={session.subscription?.plan ?? 'free'} />
+
         <ActiveProcessesSection
           campaigns={activeCampaigns ?? []}
           onOpen={(id) => openDashboard(`/campaigns/${id}`)}
@@ -224,6 +240,84 @@ function ConnectedPanel({
           {t('popup.openDashboard')}
         </button>
       </footer>
+    </div>
+  );
+}
+
+function UsageSection({
+  usage,
+  plan,
+}: {
+  usage: UsageSnapshot | null;
+  plan: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section className="border border-border bg-background">
+      <header className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
+        <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <BarChart3 className="h-3 w-3" />
+          {t('popup.planUsage')}
+        </span>
+        <span className="text-[11px] font-medium uppercase tracking-wide text-foreground">
+          {plan}
+        </span>
+      </header>
+      <div className="divide-y divide-border">
+        <UsageRow
+          label={t('popup.accountsUsage')}
+          used={usage?.accounts.used ?? null}
+          limit={usage?.accounts.limit ?? null}
+        />
+        <UsageRow
+          label={t('popup.dmsUsage')}
+          used={usage?.dms.used ?? null}
+          limit={usage?.dms.limit ?? null}
+        />
+      </div>
+    </section>
+  );
+}
+
+function UsageRow({
+  label,
+  used,
+  limit,
+}: {
+  label: string;
+  used: number | null;
+  limit: number | null;
+}) {
+  const { t } = useTranslation();
+  const ratio = used != null && limit != null && limit > 0 ? used / limit : 0;
+  const colour =
+    ratio >= 1
+      ? 'text-destructive'
+      : ratio >= 0.9
+      ? 'text-amber-600'
+      : 'text-foreground';
+
+  let value: React.ReactNode = '—';
+  if (used != null) {
+    if (limit == null) {
+      value = (
+        <span className="tabular-nums">
+          {used} <span className="text-muted-foreground">/ {t('popup.unlimited')}</span>
+        </span>
+      );
+    } else {
+      value = (
+        <span className={`tabular-nums ${colour}`}>
+          {used} <span className="text-muted-foreground">/ {limit}</span>
+        </span>
+      );
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium">{value}</span>
     </div>
   );
 }

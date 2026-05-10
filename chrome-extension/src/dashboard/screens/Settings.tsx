@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, Instagram, Languages, LogOut, MonitorSmartphone } from 'lucide-react';
+import { BarChart3, ExternalLink, Instagram, Languages, LogOut, MonitorSmartphone } from 'lucide-react';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Select } from '../components/Select';
-import { getSession, logout } from '@/shared/license';
+import { fetchUsage, getCachedUsage, getSession, logout } from '@/shared/license';
 import { db } from '@/shared/db';
 import { discoverDesktop, type DesktopPing } from '@/shared/desktop-bridge';
-import type { Session } from '@/shared/types';
+import type { Session, UsageSnapshot } from '@/shared/types';
 import {
   getLocalePreference,
   setLocalePreference,
@@ -22,6 +22,7 @@ export function Settings() {
     ping?: DesktopPing;
   }>({ state: 'unknown' });
   const [locale, setLocale] = useState<LocalePreference>('system');
+  const [usage, setUsage] = useState<UsageSnapshot | null>(null);
 
   useEffect(() => {
     void getSession().then(setSession);
@@ -30,6 +31,12 @@ export function Settings() {
     });
     void refreshDesktop();
     void getLocalePreference().then(setLocale);
+    void getCachedUsage().then((u) => {
+      if (u) setUsage(u);
+    });
+    void fetchUsage().then((u) => {
+      if (u) setUsage(u);
+    });
   }, []);
 
   async function refreshDesktop() {
@@ -84,6 +91,26 @@ export function Settings() {
                 <LogOut className="h-3.5 w-3.5" />
                 {t('common.logOut')}
               </button>
+            </div>
+          </Section>
+
+          <Section title={t('settings.planUsage')}>
+            <div className="flex items-start gap-3 text-sm">
+              <BarChart3 className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
+              <div className="flex-1 space-y-2">
+                <UsageBar
+                  label={t('settings.accountsUsage')}
+                  used={usage?.accounts.used ?? null}
+                  limit={usage?.accounts.limit ?? null}
+                  unlimitedLabel={t('settings.unlimited')}
+                />
+                <UsageBar
+                  label={t('settings.dmsUsage')}
+                  used={usage?.dms.used ?? null}
+                  limit={usage?.dms.limit ?? null}
+                  unlimitedLabel={t('settings.unlimited')}
+                />
+              </div>
             </div>
           </Section>
 
@@ -202,6 +229,57 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{value}</span>
+    </div>
+  );
+}
+
+function UsageBar({
+  label,
+  used,
+  limit,
+  unlimitedLabel,
+}: {
+  label: string;
+  used: number | null;
+  limit: number | null;
+  unlimitedLabel: string;
+}) {
+  const isUnlimited = limit == null;
+  const ratio =
+    !isUnlimited && used != null && limit != null && limit > 0
+      ? Math.min(1, used / limit)
+      : 0;
+  const pct = Math.round(ratio * 100);
+  const barColour =
+    ratio >= 1
+      ? 'bg-destructive'
+      : ratio >= 0.9
+      ? 'bg-amber-500'
+      : 'bg-emerald-500';
+  const textColour =
+    ratio >= 1
+      ? 'text-destructive'
+      : ratio >= 0.9
+      ? 'text-amber-600'
+      : 'text-foreground';
+
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className={`font-medium tabular-nums ${textColour}`}>
+          {used == null
+            ? '—'
+            : isUnlimited
+            ? `${used} / ${unlimitedLabel}`
+            : `${used} / ${limit}`}
+        </span>
+      </div>
+      {!isUnlimited && used != null ? (
+        <div className="mt-1 h-1 w-full overflow-hidden bg-muted">
+          <div className={`h-full ${barColour}`} style={{ width: `${pct}%` }} />
+        </div>
+      ) : null}
     </div>
   );
 }

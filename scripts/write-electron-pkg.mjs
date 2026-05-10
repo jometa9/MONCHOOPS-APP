@@ -12,5 +12,10 @@ const outDir = path.join(repoRoot, 'electron', 'dist');
 mkdirSync(outDir, { recursive: true });
 writeFileSync(
   path.join(outDir, 'package.json'),
-  JSON.stringify({ type: 'commonjs', version: rootPkg.version }),
+  JSON.stringify({
+    name: rootPkg.name,
+    version: rootPkg.version,
+    main: 'main.js',
+    type: 'commonjs',
+  }),
 );

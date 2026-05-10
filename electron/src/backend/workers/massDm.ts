@@ -23,6 +23,7 @@ interface MassDmInit {
   interactions?: InteractionsConfig | null;
 
   excludeUsernames?: string[];
+  maxSends?: number | null;
   headless: boolean;
   windowBounds?: WindowBounds;
   maximizeWindow?: boolean;
@@ -84,6 +85,18 @@ onInit<MassDmInit>(async (init) => {
           storyDwellSec: Math.max(1, Math.min(15, Math.floor(init.interactions.storyDwellSec ?? 3))),
         }
       : null;
+
+  const maxSends =
+    typeof init.maxSends === 'number' && init.maxSends > 0
+      ? init.maxSends
+      : null;
+  if (maxSends != null && usernames.length > maxSends) {
+    sendLog(
+      'info',
+      `Plan limit: capping this campaign to ${maxSends} sends (your remaining monthly DM quota).`
+    );
+    usernames = usernames.slice(0, maxSends);
+  }
 
   sendProgress(0, usernames.length);
   const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets, windowBounds: init.windowBounds, maximizeWindow: init.maximizeWindow });

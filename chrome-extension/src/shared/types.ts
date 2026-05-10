@@ -9,6 +9,17 @@ export interface Subscription {
   version?: string;
 }
 
+export interface UsageSnapshot {
+  plan: string;
+  accounts: { used: number; limit: number | null; remaining: number | null };
+  dms: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    windowStart: string;
+  };
+}
+
 export interface Session {
   hasLicense: boolean;
   licenseKey: string | null;

@@ -86,7 +86,11 @@
     "processed": "{{processed}} / {{total}} processed",
     "failed": "{{count}} failed",
     "openDashboard": "Open dashboard",
-    "logOut": "Log out"
+    "logOut": "Log out",
+    "planUsage": "Plan usage",
+    "accountsUsage": "IG accounts",
+    "dmsUsage": "DMs this month",
+    "unlimited": "Unlimited"
   },
   "settings": {
     "title": "Settings",
@@ -96,6 +100,10 @@
     "name": "Name",
     "plan": "Plan",
     "active": "Active",
+    "planUsage": "Plan usage",
+    "accountsUsage": "IG accounts",
+    "dmsUsage": "DMs this month",
+    "unlimited": "Unlimited",
     "instagramSession": "Instagram session",
     "instagramHint": "The extension uses whichever Instagram account is logged into your browser. No account selector — log out of IG to switch.",
     "openInstagram": "Open Instagram",

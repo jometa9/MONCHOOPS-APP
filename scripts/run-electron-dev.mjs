@@ -69,7 +69,7 @@ async function waitForVite(timeoutMs = 30_000) {
     console.error('[run-electron-dev] Vite did not come up in time. Is `npm run dev` running?');
     process.exit(1);
   }
-  const child = spawn(ELECTRON_BIN, [path.join(repoRoot, 'electron', 'dist', 'main.js')], {
+  const child = spawn(ELECTRON_BIN, [path.join(repoRoot, 'electron', 'dist')], {
     stdio: 'inherit',
     cwd: repoRoot,
     env: (({ ELECTRON_RUN_AS_NODE, ...rest }) => ({ ...rest, ELECTRON_ENABLE_LOGGING: '1' }))(process.env),
