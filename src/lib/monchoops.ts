@@ -24,6 +24,12 @@ export interface UsageSnapshot {
     remaining: number | null;
     windowStart: string;
   };
+  leads: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    windowStart: string;
+  };
 }
 
 export interface BulkLoginRow {

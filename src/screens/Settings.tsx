@@ -177,6 +177,10 @@ export function Settings() {
                   label={t('settings.dmsUsage')}
                   value={formatUsage(usage.dms.used, usage.dms.limit)}
                 />
+                <InfoRow
+                  label={t('settings.leadsUsage')}
+                  value={formatUsage(usage.leads.used, usage.leads.limit)}
+                />
               </>
             ) : null}
             <InfoRow label={t('settings.appVersion')} value={appVersion ? `V${appVersion}` : '—'} />

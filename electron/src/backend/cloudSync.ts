@@ -93,6 +93,12 @@ export interface UsageSnapshot {
     remaining: number | null;
     windowStart: string;
   };
+  leads: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    windowStart: string;
+  };
 }
 
 export async function fetchUsage(): Promise<UsageSnapshot | null> {
@@ -204,6 +210,74 @@ export async function reportDms(
         deviceId,
         sentAt: e.sentAt ? new Date(e.sentAt).toISOString() : undefined,
       })),
+    },
+  });
+  if (res.ok) {
+    return {
+      ok: true,
+      used: res.data.used,
+      limit: res.data.limit,
+      remaining: res.data.remaining,
+      recorded: res.data.recorded,
+      dropped: res.data.dropped,
+    };
+  }
+  if (res.status === 401) {
+    return { ok: false, status: 401, code: 'unauthorized', message: res.error };
+  }
+  if (res.status === 403) {
+    const data = (res.data ?? {}) as { used?: number; limit?: number | null };
+    return {
+      ok: false,
+      status: 403,
+      code: 'limit_reached',
+      message: res.error,
+      used: data.used,
+      limit: data.limit ?? null,
+    };
+  }
+  if (res.status === 0) {
+    return { ok: false, status: 0, code: 'network', message: res.error };
+  }
+  return { ok: false, status: res.status, code: 'unknown', message: res.error };
+}
+
+export interface ScrapeReportResult {
+  ok: true;
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  recorded: number;
+  dropped: number;
+}
+
+export interface ScrapeReportError {
+  ok: false;
+  status: number;
+  code: 'unauthorized' | 'limit_reached' | 'network' | 'unknown';
+  message: string;
+  used?: number;
+  limit?: number | null;
+}
+
+export async function reportScrape(input: {
+  jobId: string;
+  kind: string;
+  leadCount: number;
+  scrapedAt?: number;
+}): Promise<ScrapeReportResult | ScrapeReportError> {
+  if (input.leadCount <= 0) {
+    return { ok: true, used: 0, limit: null, remaining: null, recorded: 0, dropped: 0 };
+  }
+  const deviceId = getDeviceId();
+  const res = await request<ScrapeReportResult>('/api/monchoops/scrapes/report', {
+    method: 'POST',
+    body: {
+      jobId: input.jobId,
+      kind: input.kind,
+      leadCount: input.leadCount,
+      deviceId,
+      scrapedAt: input.scrapedAt ? new Date(input.scrapedAt).toISOString() : undefined,
     },
   });
   if (res.ok) {

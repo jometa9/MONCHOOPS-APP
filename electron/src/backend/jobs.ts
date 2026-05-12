@@ -15,7 +15,7 @@ import {
 } from './accounts';
 import { ingestLeadsFromCsv, resolveCategoryRef } from './leads';
 import { acquireSlot, releaseSlot, type WindowBounds } from './windowSlots';
-import { fetchUsage, queueDmReport } from './cloudSync';
+import { fetchUsage, queueDmReport, reportScrape } from './cloudSync';
 
 export type JobKind =
   | 'login'
@@ -228,6 +228,32 @@ export function listActiveJobs(): JobPublic[] {
     )
     .all();
   return rows.map(rowToPublic);
+}
+
+const DEFAULT_SCRAPE_TARGET_LEADS = 10_000;
+
+export function sumScrapeTargetsInFlight(): number {
+  const rows = getDb()
+    .prepare<[], { params_json: string }>(
+      `SELECT params_json FROM jobs
+       WHERE status IN ('running','queued')
+         AND kind IN ('scrape_by_username','scrape_by_post','scrape_by_hashtag','scrape_by_location')`
+    )
+    .all();
+  let sum = 0;
+  for (const row of rows) {
+    try {
+      const params = JSON.parse(row.params_json);
+      const t =
+        typeof params.target === 'number' && params.target > 0
+          ? params.target
+          : DEFAULT_SCRAPE_TARGET_LEADS;
+      sum += t;
+    } catch {
+      sum += DEFAULT_SCRAPE_TARGET_LEADS;
+    }
+  }
+  return sum;
 }
 
 export interface StatsPublic {
@@ -1126,6 +1152,10 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
           jobRow?.error ?? 'Scrape failed',
           targetName
         );
+      if (count > 0) {
+        void reportScrape({ jobId, kind: meta.kind, leadCount: count, scrapedAt: Date.now() })
+          .catch((err) => console.error('[jobs] reportScrape (failed) error:', err));
+      }
     } catch (err) {
       console.error('[jobs] failed to persist failed-scrape result:', err);
     }
@@ -1188,7 +1218,8 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
         const params = (() => {
           try { return JSON.parse(jobRow?.params_json ?? '{}'); } catch { return {}; }
         })();
-        const summary = buildScrapeSummary(meta.kind, params, r.count);
+        const count = Number(r.count) || 0;
+        const summary = buildScrapeSummary(meta.kind, params, count);
         const targetName = typeof r.targetName === 'string' && r.targetName ? r.targetName : null;
         getDb()
           .prepare(
@@ -1200,7 +1231,7 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
             jobId,
             meta.kind,
             summary,
-            Number(r.count) || 0,
+            count,
             r.csvPath,
             Date.now() - meta.startedAt,
             Date.now(),
@@ -1215,6 +1246,11 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
           } catch (err) {
             console.error('[jobs] failed to ingest leads into category:', err);
           }
+        }
+
+        if (count > 0) {
+          void reportScrape({ jobId, kind: meta.kind, leadCount: count, scrapedAt: Date.now() })
+            .catch((err) => console.error('[jobs] reportScrape error:', err));
         }
       } catch (err) {
         console.error('[jobs] failed to persist scrape result:', err);

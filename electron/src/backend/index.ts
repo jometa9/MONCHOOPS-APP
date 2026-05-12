@@ -32,6 +32,7 @@ import {
   startBulkAutoLogin,
   startMassDm,
   startScrape,
+  sumScrapeTargetsInFlight,
   type BulkLoginRow,
   type MassDmInteractionsConfig,
   subscribe as subscribeToJobs,
@@ -290,7 +291,28 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       kind: Exclude<JobKind, 'login' | 'mass_dm'>;
       params: Record<string, unknown>;
     }) => {
-      return startScrape(payload);
+      const usage = await fetchUsage();
+      let params = payload.params;
+      if (usage && usage.leads.limit != null) {
+        const reportedRemaining = usage.leads.remaining ?? 0;
+        const reserved = sumScrapeTargetsInFlight();
+        const effectiveRemaining = Math.max(0, reportedRemaining - reserved);
+        if (effectiveRemaining <= 0) {
+          const reservedSuffix =
+            reserved > 0 ? `, with ${reserved} more reserved by jobs in progress` : '';
+          throw new Error(
+            `Your ${usage.plan} plan allows ${usage.leads.limit} scraped leads per month (you have used ${usage.leads.used}${reservedSuffix}). Upgrade or wait until next month.`
+          );
+        }
+        const requestedTarget =
+          typeof params.target === 'number' && params.target > 0 ? params.target : null;
+        const clampedTarget =
+          requestedTarget == null
+            ? effectiveRemaining
+            : Math.min(requestedTarget, effectiveRemaining);
+        params = { ...params, target: clampedTarget };
+      }
+      return startScrape({ ...payload, params });
     }
   );
 

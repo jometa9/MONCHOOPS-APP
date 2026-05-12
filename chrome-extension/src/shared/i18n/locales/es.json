@@ -90,6 +90,7 @@
     "planUsage": "Uso del plan",
     "accountsUsage": "Cuentas IG",
     "dmsUsage": "DMs este mes",
+    "leadsUsage": "Leads scrapeados este mes",
     "unlimited": "Ilimitado"
   },
   "settings": {
@@ -103,6 +104,7 @@
     "planUsage": "Uso del plan",
     "accountsUsage": "Cuentas IG",
     "dmsUsage": "DMs este mes",
+    "leadsUsage": "Leads scrapeados este mes",
     "unlimited": "Ilimitado",
     "instagramSession": "Sesión de Instagram",
     "instagramHint": "La extensión usa la cuenta de Instagram con la que estés logueado en tu navegador. No hay selector de cuenta — cerrá sesión en IG para cambiar.",

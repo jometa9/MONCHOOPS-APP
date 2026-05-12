@@ -73,6 +73,7 @@
   "build": {
     "appId": "com.monchoops.app",
     "productName": "MonchoOps",
+    "copyright": "Copyright © 2026 Joaquin Metayer",
     "protocols": {
       "name": "MonchoOps URL",
       "schemes": [
@@ -115,6 +116,10 @@
       "artifactName": "MonchoOps-Setup.${ext}",
       "icon": "public/icon.png",
       "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "notarize": {
+        "teamId": "QWBL6F4NT7"
+      },
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.plist",
       "extraResources": [
