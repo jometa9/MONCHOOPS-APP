@@ -2,7 +2,13 @@
 
 import { db, nextPendingLead, countLeads } from '@/shared/db';
 import { jitter, pickVariant, uuid } from '@/shared/format';
-import { fetchUsage, getCachedUsage, reportDms } from '@/shared/license';
+import {
+  fetchUsage,
+  flushDmBuffer,
+  getCachedUsage,
+  onDmLimitReached,
+  queueDmReport,
+} from '@/shared/license';
 import type { Campaign, Lead, InteractionsConfig } from '@/shared/types';
 import type {
   CsBoolData,
@@ -18,12 +24,18 @@ import type {
 const TICK_ALARM = 'monchoops-tick';
 const TICK_PERIOD_MIN = 1;
 
+onDmLimitReached(({ limit, used }) => {
+  void handleDmLimitReached(limit, used);
+});
+
 chrome.runtime.onInstalled.addListener(() => {
   void ensureTick();
+  void flushDmBuffer().catch(() => {});
 });
 
 chrome.runtime.onStartup.addListener(() => {
   void ensureTick();
+  void flushDmBuffer().catch(() => {});
 });
 
 async function ensureTick(): Promise<void> {
@@ -123,6 +135,8 @@ async function tick(): Promise<void> {
   if (ticking) return;
   ticking = true;
   try {
+    void flushDmBuffer().catch(() => {});
+
     const candidates = await db.campaigns
       .where('status')
       .equals('running')
@@ -581,23 +595,26 @@ async function getIgUsernameForReport(): Promise<string | null> {
 async function reportSentDm(targetUsername: string, sentAt: number): Promise<void> {
   const fromUsername = await getIgUsernameForReport();
   if (!fromUsername) return;
-  const res = await reportDms([{ fromUsername, targetUsername, sentAt }]);
-  if (res.limitReached) {
-    const cached = await getCachedUsage();
-    notify(
-      'MonchoOps — DM limit reached',
-      cached
-        ? `You used ${cached.dms.used}/${cached.dms.limit} DMs this month. Campaigns will pause until next month or upgrade.`
-        : 'You reached your monthly DM limit. Campaigns will pause until next month or upgrade.'
-    );
+  await queueDmReport({ fromUsername, targetUsername, sentAt });
+}
 
-    const running = await db.campaigns.where('status').equals('running').toArray();
-    for (const c of running) {
-      await db.campaigns.update(c.id, {
-        status: 'paused',
-        nextRunAt: Date.now() + 60 * 60_000,
-      });
-    }
+async function handleDmLimitReached(limit: number | null, used?: number): Promise<void> {
+  const cached = await getCachedUsage();
+  const usedNum = used ?? cached?.dms.used;
+  const limitNum = limit ?? cached?.dms.limit ?? null;
+  notify(
+    'MonchoOps — DM limit reached',
+    usedNum != null && limitNum != null
+      ? `You used ${usedNum}/${limitNum} DMs this month. Campaigns paused until next month or upgrade.`
+      : 'You reached your monthly DM limit. Campaigns paused until next month or upgrade.'
+  );
+  const running = await db.campaigns.where('status').equals('running').toArray();
+  for (const c of running) {
+    await db.campaigns.update(c.id, {
+      status: 'paused',
+      nextRunAt: Date.now() + 60 * 60_000,
+    });
   }
 }
+
 

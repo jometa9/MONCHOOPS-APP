@@ -17,6 +17,7 @@
     "build": "node scripts/build.mjs",
     "build:mac": "npm run build",
     "build:win": "node scripts/build.mjs --win",
+    "build:extension": "node scripts/build-extension.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p electron/tsconfig.json",
     "clean:electron": "rm -rf electron/dist",
     "clean:release": "rm -rf release",
@@ -117,9 +118,7 @@
       "icon": "public/icon.png",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "notarize": {
-        "teamId": "QWBL6F4NT7"
-      },
+      "notarize": true,
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.plist",
       "extraResources": [
