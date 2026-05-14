@@ -8,7 +8,10 @@ import { collectByScrolling, iterateByScrolling, scrollDialog, scrollWindow } fr
 type Page = any;
 
 function sanitizeUsername(raw: string): string {
-  return raw.replace(/^@+/, '').trim();
+  let s = raw.trim();
+  const urlMatch = s.match(/(?:instagram\.com|ig\.me)\/([A-Za-z0-9._]+)/i);
+  if (urlMatch && urlMatch[1]) s = urlMatch[1];
+  return s.replace(/^@+/, '').replace(/[/?#].*$/, '').trim();
 }
 
 export async function* iterUserPosts(

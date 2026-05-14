@@ -770,6 +770,20 @@ export interface StartScrapeArgs {
   params: Record<string, unknown>;
 }
 
+function normaliseUsernameInput(raw: string): string {
+  let s = raw.trim();
+  const urlMatch = s.match(/(?:instagram\.com|ig\.me)\/([A-Za-z0-9._]+)/i);
+  if (urlMatch && urlMatch[1]) s = urlMatch[1];
+  return s.replace(/^@+/, '').replace(/[/?#].*$/, '').trim();
+}
+
+function normaliseHashtagInput(raw: string): string {
+  let s = raw.trim();
+  const urlMatch = s.match(/(?:instagram\.com|ig\.me)\/explore\/tags\/([A-Za-z0-9._]+)/i);
+  if (urlMatch && urlMatch[1]) s = urlMatch[1];
+  return s.replace(/^#+/, '').replace(/[/?#].*$/, '').trim();
+}
+
 export function startScrape(args: StartScrapeArgs): string {
   const acc = getAccount(args.accountId);
   if (!acc) throw new Error('Account not found');
@@ -784,10 +798,10 @@ export function startScrape(args: StartScrapeArgs): string {
     categoryId: category?.id ?? null,
     newCategoryName: undefined,
     ...(typeof args.params.username === 'string'
-      ? { username: args.params.username.trim().replace(/^@+/, '') }
+      ? { username: normaliseUsernameInput(args.params.username) }
       : {}),
     ...(typeof args.params.hashtag === 'string'
-      ? { hashtag: args.params.hashtag.trim().replace(/^#+/, '') }
+      ? { hashtag: normaliseHashtagInput(args.params.hashtag) }
       : {}),
   };
 
