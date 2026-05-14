@@ -435,11 +435,12 @@ ipcMain.handle('clear-pending-deep-link', (_event, urlToClear: string) => {
 ipcMain.handle('get-platform', () => process.platform);
 ipcMain.handle('get-is-full-screen', () => (mainWindow ? mainWindow.isFullScreen() : false));
 ipcMain.handle('open-external-link', async (_event, url: string) => {
-  const u = typeof url === 'string' ? url.trim() : '';
-  if (!u || (!u.startsWith('http://') && !u.startsWith('https://'))) {
-    console.warn('[main] open-external-link: invalid URL or not http(s)');
+  const raw = typeof url === 'string' ? url.trim() : '';
+  if (!raw) {
+    console.warn('[main] open-external-link: empty URL');
     return;
   }
+  const u = raw.startsWith('http://') || raw.startsWith('https://') ? raw : `https://${raw}`;
   try {
     await shell.openExternal(u);
   } catch (e) {
