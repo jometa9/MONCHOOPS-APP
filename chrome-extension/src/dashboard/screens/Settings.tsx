@@ -110,6 +110,12 @@ export function Settings() {
                   limit={usage?.dms.limit ?? null}
                   unlimitedLabel={t('settings.unlimited')}
                 />
+                <UsageBar
+                  label={t('settings.leadsUsage')}
+                  used={usage?.leads.used ?? null}
+                  limit={usage?.leads.limit ?? null}
+                  unlimitedLabel={t('settings.unlimited')}
+                />
               </div>
             </div>
           </Section>

@@ -251,7 +251,7 @@ export interface ScrapeReportInput {
 
 export interface ScrapeReportResult {
   ok: true;
-  plan: string;
+  plan?: string;
   used: number;
   limit: number | null;
   remaining: number | null;
@@ -280,6 +280,9 @@ export function onScrapeLimitReached(cb: ScrapeLimitListener): () => void {
 export async function reportScrape(
   input: ScrapeReportInput
 ): Promise<ScrapeReportResult | ScrapeReportError> {
+  if (input.leadCount <= 0) {
+    return { ok: true, used: 0, limit: null, remaining: null, recorded: 0, dropped: 0 };
+  }
   const deviceId = getDeviceId();
   const res = await request<{
     plan: string;
@@ -295,9 +298,7 @@ export async function reportScrape(
       kind: input.kind,
       leadCount: input.leadCount,
       deviceId,
-      scrapedAt: input.scrapedAt
-        ? new Date(input.scrapedAt).toISOString()
-        : undefined,
+      scrapedAt: input.scrapedAt ? new Date(input.scrapedAt).toISOString() : undefined,
     },
   });
   if (res.ok) {

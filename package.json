@@ -17,6 +17,7 @@
     "build": "node scripts/build.mjs",
     "build:mac": "npm run build",
     "build:win": "node scripts/build.mjs --win",
+    "build:extension": "node scripts/build-extension.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p electron/tsconfig.json",
     "clean:electron": "rm -rf electron/dist",
     "clean:release": "rm -rf release",
@@ -73,6 +74,7 @@
   "build": {
     "appId": "com.monchoops.app",
     "productName": "MonchoOps",
+    "copyright": "Copyright © 2026 Joaquin Metayer",
     "protocols": {
       "name": "MonchoOps URL",
       "schemes": [
@@ -115,6 +117,8 @@
       "artifactName": "MonchoOps-Setup.${ext}",
       "icon": "public/icon.png",
       "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "notarize": true,
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.plist",
       "extraResources": [

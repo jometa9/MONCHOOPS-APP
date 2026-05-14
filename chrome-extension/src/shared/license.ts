@@ -8,6 +8,12 @@ const STORAGE_KEY_LICENSE = 'monchoops_license_key';
 const STORAGE_KEY_PROFILE = 'monchoops_profile';
 const STORAGE_KEY_SUB = 'monchoops_subscription';
 const STORAGE_KEY_USAGE = 'monchoops_usage';
+const STORAGE_KEY_DM_QUEUE = 'monchoops_dm_queue';
+
+const REQUEST_TIMEOUT_MS = 8_000;
+const BATCH_MAX_EVENTS = 100;
+const BATCH_FLUSH_MS = 5_000;
+const QUEUE_MAX = BATCH_MAX_EVENTS * 5;
 
 interface ExternalLicenseResponse {
   email?: string;
@@ -35,6 +41,47 @@ async function storageSet(key: string, value: unknown): Promise<void> {
 
 async function storageRemove(key: string): Promise<void> {
   await chrome.storage.local.remove(key);
+}
+
+interface RequestResult<T> {
+  ok: boolean;
+  status: number;
+  data: T | null;
+  error?: string;
+}
+
+async function authedRequest<T>(
+  path: string,
+  opts: { method?: 'GET' | 'POST'; body?: unknown } = {}
+): Promise<RequestResult<T>> {
+  const licenseKey = await storageGet<string>(STORAGE_KEY_LICENSE);
+  if (!licenseKey) return { ok: false, status: 401, data: null, error: 'not_signed_in' };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(new URL(path, LICENSE_API_BASE).toString(), {
+      method: opts.method ?? 'GET',
+      headers: {
+        Authorization: `Bearer ${licenseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: opts.body == null ? undefined : JSON.stringify(opts.body),
+      signal: controller.signal,
+    });
+    let data: any = null;
+    try { data = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, data: data as T };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err instanceof Error ? err.message : 'network_error',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function getSession(): Promise<Session> {
@@ -100,36 +147,78 @@ export async function logout(): Promise<void> {
   await storageRemove(STORAGE_KEY_PROFILE);
   await storageRemove(STORAGE_KEY_SUB);
   await storageRemove(STORAGE_KEY_USAGE);
+  await storageRemove(STORAGE_KEY_DM_QUEUE);
 }
 
 export async function fetchUsage(): Promise<UsageSnapshot | null> {
-  const licenseKey = await storageGet<string>(STORAGE_KEY_LICENSE);
-  if (!licenseKey) return null;
-
-  let res: Response;
-  try {
-    res = await fetch(new URL('/api/monchoops/usage', LICENSE_API_BASE).toString(), {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${licenseKey}` },
-    });
-  } catch {
-    const cached = await storageGet<UsageSnapshot>(STORAGE_KEY_USAGE);
-    return cached;
-  }
-  if (!res.ok) return null;
-
-  let data: UsageSnapshot;
-  try {
-    data = (await res.json()) as UsageSnapshot;
-  } catch {
+  const res = await authedRequest<UsageSnapshot>('/api/monchoops/usage');
+  if (!res.ok) {
+    if (res.status === 0) {
+      return storageGet<UsageSnapshot>(STORAGE_KEY_USAGE);
+    }
     return null;
   }
-  await storageSet(STORAGE_KEY_USAGE, data);
-  return data;
+  if (!res.data) return null;
+  await storageSet(STORAGE_KEY_USAGE, res.data);
+  return res.data;
 }
 
 export async function getCachedUsage(): Promise<UsageSnapshot | null> {
   return storageGet<UsageSnapshot>(STORAGE_KEY_USAGE);
+}
+
+export interface RegisterAccountResult {
+  ok: true;
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+}
+
+export interface RegisterAccountError {
+  ok: false;
+  status: number;
+  code: 'unauthorized' | 'limit_reached' | 'network' | 'unknown';
+  message: string;
+  used?: number;
+  limit?: number | null;
+}
+
+export async function registerAccount(
+  username: string
+): Promise<RegisterAccountResult | RegisterAccountError> {
+  const res = await authedRequest<{
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+  }>('/api/monchoops/accounts/register', {
+    method: 'POST',
+    body: { username },
+  });
+  if (res.ok && res.data) {
+    return { ok: true, used: res.data.used, limit: res.data.limit, remaining: res.data.remaining };
+  }
+  if (res.status === 401) return { ok: false, status: 401, code: 'unauthorized', message: res.error ?? 'unauthorized' };
+  if (res.status === 403) {
+    const d = (res.data ?? {}) as { used?: number; limit?: number | null; error?: string };
+    return {
+      ok: false,
+      status: 403,
+      code: 'limit_reached',
+      message: d.error ?? 'limit_reached',
+      used: d.used,
+      limit: d.limit ?? null,
+    };
+  }
+  if (res.status === 0) return { ok: false, status: 0, code: 'network', message: res.error ?? 'network' };
+  return { ok: false, status: res.status, code: 'unknown', message: res.error ?? 'unknown' };
+}
+
+export async function unregisterAccount(username: string): Promise<boolean> {
+  const res = await authedRequest<{ removed: boolean }>('/api/monchoops/accounts/unregister', {
+    method: 'POST',
+    body: { username },
+  });
+  return res.ok;
 }
 
 export interface DmReportEvent {
@@ -149,57 +238,36 @@ export interface DmReportResponse {
   remaining?: number | null;
 }
 
-export async function reportDms(events: DmReportEvent[]): Promise<DmReportResponse> {
+async function reportDmsInternal(events: DmReportEvent[]): Promise<DmReportResponse> {
   if (events.length === 0) {
     return { ok: true, status: 200, limitReached: false, recorded: 0, dropped: 0 };
   }
-  const licenseKey = await storageGet<string>(STORAGE_KEY_LICENSE);
-  if (!licenseKey) {
-    return { ok: false, status: 401, limitReached: false };
-  }
+  const res = await authedRequest<any>('/api/monchoops/dms/report', {
+    method: 'POST',
+    body: {
+      events: events.map((e) => ({
+        fromUsername: e.fromUsername,
+        targetUsername: e.targetUsername,
+        sentAt: e.sentAt ? new Date(e.sentAt).toISOString() : undefined,
+      })),
+    },
+  });
 
-  let res: Response;
-  try {
-    res = await fetch(
-      new URL('/api/monchoops/dms/report', LICENSE_API_BASE).toString(),
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${licenseKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          events: events.map((e) => ({
-            fromUsername: e.fromUsername,
-            targetUsername: e.targetUsername,
-            sentAt: e.sentAt ? new Date(e.sentAt).toISOString() : undefined,
-          })),
-        }),
-      }
-    );
-  } catch {
-    return { ok: false, status: 0, limitReached: false };
-  }
-
-  let data: any = null;
-  try {
-    data = await res.json();
-  } catch {}
+  const data = res.data;
 
   if (res.status === 403) {
     if (data) {
       const cached = await storageGet<UsageSnapshot>(STORAGE_KEY_USAGE);
       await storageSet(STORAGE_KEY_USAGE, {
         plan: data.plan ?? cached?.plan ?? 'free',
-        accounts:
-          cached?.accounts ?? { used: 0, limit: null, remaining: null },
+        accounts: cached?.accounts ?? { used: 0, limit: null, remaining: null },
         dms: {
           used: data.used ?? 0,
           limit: data.limit ?? null,
           remaining: 0,
-          windowStart:
-            cached?.dms.windowStart ?? new Date().toISOString(),
+          windowStart: cached?.dms?.windowStart ?? new Date().toISOString(),
         },
+        leads: cached?.leads ?? { used: 0, limit: null, remaining: null, windowStart: new Date().toISOString() },
       });
     }
     return {
@@ -227,14 +295,9 @@ export async function reportDms(events: DmReportEvent[]): Promise<DmReportRespon
         used: data.used ?? 0,
         limit: data.limit ?? null,
         remaining: data.remaining ?? null,
-        windowStart: cached?.dms.windowStart ?? new Date().toISOString(),
+        windowStart: cached?.dms?.windowStart ?? new Date().toISOString(),
       },
-      leads: cached?.leads ?? {
-        used: 0,
-        limit: null,
-        remaining: null,
-        windowStart: new Date().toISOString(),
-      },
+      leads: cached?.leads ?? { used: 0, limit: null, remaining: null, windowStart: new Date().toISOString() },
     });
   }
 
@@ -248,4 +311,80 @@ export async function reportDms(events: DmReportEvent[]): Promise<DmReportRespon
     limit: data?.limit ?? null,
     remaining: data?.remaining ?? null,
   };
+}
+
+type DmLimitListener = (info: { limit: number | null; used?: number }) => void;
+const dmLimitListeners = new Set<DmLimitListener>();
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let flushInFlight = false;
+
+export function onDmLimitReached(cb: DmLimitListener): () => void {
+  dmLimitListeners.add(cb);
+  return () => dmLimitListeners.delete(cb);
+}
+
+async function readQueue(): Promise<DmReportEvent[]> {
+  return (await storageGet<DmReportEvent[]>(STORAGE_KEY_DM_QUEUE)) ?? [];
+}
+
+async function writeQueue(events: DmReportEvent[]): Promise<void> {
+  if (events.length === 0) {
+    await storageRemove(STORAGE_KEY_DM_QUEUE);
+  } else {
+    await storageSet(STORAGE_KEY_DM_QUEUE, events.slice(-QUEUE_MAX));
+  }
+}
+
+function scheduleFlush(): void {
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    void flushDmBuffer();
+  }, BATCH_FLUSH_MS);
+}
+
+export async function queueDmReport(event: DmReportEvent): Promise<void> {
+  const queue = await readQueue();
+  queue.push(event);
+  await writeQueue(queue);
+  if (queue.length >= BATCH_MAX_EVENTS) {
+    void flushDmBuffer();
+    return;
+  }
+  scheduleFlush();
+}
+
+export async function flushDmBuffer(): Promise<DmReportResponse | null> {
+  if (flushInFlight) return null;
+  const queue = await readQueue();
+  if (queue.length === 0) return null;
+
+  flushInFlight = true;
+  try {
+    await writeQueue([]);
+    const res = await reportDmsInternal(queue);
+
+    if (!res.ok && res.status === 0) {
+
+      const current = await readQueue();
+      await writeQueue([...queue, ...current]);
+      scheduleFlush();
+      return res;
+    }
+
+    if (res.limitReached) {
+      for (const cb of dmLimitListeners) {
+        try { cb({ limit: res.limit ?? null, used: res.used }); } catch {}
+      }
+    }
+    return res;
+  } finally {
+    flushInFlight = false;
+    const remaining = await readQueue();
+    if (remaining.length > 0) scheduleFlush();
+  }
+}
+
+export async function reportDms(events: DmReportEvent[]): Promise<DmReportResponse> {
+  return reportDmsInternal(events);
 }
