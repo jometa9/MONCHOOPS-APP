@@ -93,6 +93,12 @@ export interface UsageSnapshot {
     remaining: number | null;
     windowStart: string;
   };
+  leads: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    windowStart: string;
+  };
 }
 
 export async function fetchUsage(): Promise<UsageSnapshot | null> {
@@ -228,6 +234,104 @@ export async function reportDms(
       message: res.error,
       used: data.used,
       limit: data.limit ?? null,
+    };
+  }
+  if (res.status === 0) {
+    return { ok: false, status: 0, code: 'network', message: res.error };
+  }
+  return { ok: false, status: res.status, code: 'unknown', message: res.error };
+}
+
+export interface ScrapeReportInput {
+  jobId: string;
+  kind: string;
+  leadCount: number;
+  scrapedAt?: number;
+}
+
+export interface ScrapeReportResult {
+  ok: true;
+  plan: string;
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  recorded: number;
+  dropped: number;
+}
+
+export interface ScrapeReportError {
+  ok: false;
+  status: number;
+  code: 'unauthorized' | 'limit_reached' | 'network' | 'unknown';
+  message: string;
+  used?: number;
+  limit?: number | null;
+  dropped?: number;
+}
+
+type ScrapeLimitListener = (info: { limit: number | null; used?: number }) => void;
+const scrapeLimitListeners = new Set<ScrapeLimitListener>();
+
+export function onScrapeLimitReached(cb: ScrapeLimitListener): () => void {
+  scrapeLimitListeners.add(cb);
+  return () => scrapeLimitListeners.delete(cb);
+}
+
+export async function reportScrape(
+  input: ScrapeReportInput
+): Promise<ScrapeReportResult | ScrapeReportError> {
+  const deviceId = getDeviceId();
+  const res = await request<{
+    plan: string;
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    recorded: number;
+    dropped: number;
+  }>('/api/monchoops/scrapes/report', {
+    method: 'POST',
+    body: {
+      jobId: input.jobId,
+      kind: input.kind,
+      leadCount: input.leadCount,
+      deviceId,
+      scrapedAt: input.scrapedAt
+        ? new Date(input.scrapedAt).toISOString()
+        : undefined,
+    },
+  });
+  if (res.ok) {
+    if (res.data.dropped > 0) {
+      for (const cb of scrapeLimitListeners) {
+        try {
+          cb({ limit: res.data.limit, used: res.data.used });
+        } catch {}
+      }
+    }
+    return { ok: true, ...res.data };
+  }
+  if (res.status === 401) {
+    return { ok: false, status: 401, code: 'unauthorized', message: res.error };
+  }
+  if (res.status === 403) {
+    const data = (res.data ?? {}) as {
+      used?: number;
+      limit?: number | null;
+      dropped?: number;
+    };
+    for (const cb of scrapeLimitListeners) {
+      try {
+        cb({ limit: data.limit ?? null, used: data.used });
+      } catch {}
+    }
+    return {
+      ok: false,
+      status: 403,
+      code: 'limit_reached',
+      message: res.error,
+      used: data.used,
+      limit: data.limit ?? null,
+      dropped: data.dropped,
     };
   }
   if (res.status === 0) {

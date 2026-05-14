@@ -12,8 +12,10 @@ export interface SubscriptionInfo {
 
   accountLimit?: number | null;
   dmMonthlyLimit?: number | null;
+  leadsMonthlyLimit?: number | null;
   accountUsage?: number;
   dmUsage?: number;
+  leadUsage?: number;
 }
 
 export interface SessionSnapshot {

@@ -19,8 +19,10 @@ interface ExternalLicenseResponse {
   version?: string;
   accountLimit?: number | null;
   dmMonthlyLimit?: number | null;
+  leadsMonthlyLimit?: number | null;
   accountUsage?: number;
   dmUsage?: number;
+  leadUsage?: number;
 }
 
 function normalisePlan(plan?: string): { plan: string; active: boolean } {

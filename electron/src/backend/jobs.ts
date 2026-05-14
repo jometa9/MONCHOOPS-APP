@@ -15,7 +15,7 @@ import {
 } from './accounts';
 import { ingestLeadsFromCsv, resolveCategoryRef } from './leads';
 import { acquireSlot, releaseSlot, type WindowBounds } from './windowSlots';
-import { fetchUsage, queueDmReport } from './cloudSync';
+import { fetchUsage, queueDmReport, reportScrape } from './cloudSync';
 
 export type JobKind =
   | 'login'
@@ -1215,6 +1215,18 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
           } catch (err) {
             console.error('[jobs] failed to ingest leads into category:', err);
           }
+        }
+
+        const leadCount = Number(r.count) || 0;
+        if (leadCount > 0) {
+          void reportScrape({
+            jobId,
+            kind: meta.kind,
+            leadCount,
+            scrapedAt: Date.now(),
+          }).catch((err) => {
+            console.error('[jobs] failed to report scrape to cloud:', err);
+          });
         }
       } catch (err) {
         console.error('[jobs] failed to persist scrape result:', err);

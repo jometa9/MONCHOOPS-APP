@@ -229,6 +229,12 @@ export async function reportDms(events: DmReportEvent[]): Promise<DmReportRespon
         remaining: data.remaining ?? null,
         windowStart: cached?.dms.windowStart ?? new Date().toISOString(),
       },
+      leads: cached?.leads ?? {
+        used: 0,
+        limit: null,
+        remaining: null,
+        windowStart: new Date().toISOString(),
+      },
     });
   }
 
