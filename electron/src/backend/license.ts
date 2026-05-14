@@ -128,9 +128,14 @@ export async function validateLicense(licenseKey: string): Promise<SessionSnapsh
       data.dmMonthlyLimit === null || typeof data.dmMonthlyLimit === 'number'
         ? data.dmMonthlyLimit
         : undefined,
+    leadsMonthlyLimit:
+      data.leadsMonthlyLimit === null || typeof data.leadsMonthlyLimit === 'number'
+        ? data.leadsMonthlyLimit
+        : undefined,
     accountUsage:
       typeof data.accountUsage === 'number' ? data.accountUsage : undefined,
     dmUsage: typeof data.dmUsage === 'number' ? data.dmUsage : undefined,
+    leadUsage: typeof data.leadUsage === 'number' ? data.leadUsage : undefined,
   };
 
   ensureOwnerMatches(email);

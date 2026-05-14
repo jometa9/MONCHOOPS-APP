@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -86,6 +87,9 @@ const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 console.log('[build] vite build');
 run(npxBin, ['vite', 'build', '--mode', 'production']);
+
+console.log('[build] clean electron/dist');
+rmSync(path.join(repoRoot, 'electron', 'dist'), { recursive: true, force: true });
 
 console.log('[build] tsc -p electron/tsconfig.json');
 run(npxBin, ['tsc', '-p', path.join('electron', 'tsconfig.json')]);
