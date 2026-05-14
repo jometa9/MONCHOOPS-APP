@@ -98,7 +98,7 @@ function getFrontendServerUrl(): string | undefined {
   return `http://localhost:${getFrontendPort()}`;
 }
 
-const showDevTools = true;
+const showDevTools = false;
 
 let mainWindow: BrowserWindow | null = null;
 let deeplinkingUrl: string | undefined;
