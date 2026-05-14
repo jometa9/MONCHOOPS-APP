@@ -116,8 +116,13 @@ export async function scrollWindow(page: Page): Promise<void> {
 
 export async function scrollCommentList(page: Page): Promise<string> {
   return (await page.evaluate(() => {
+    const isReelViewer = /\/reels?\//.test(location.pathname);
+
     function pickTallestScrollable(root: Element | Document): HTMLElement | null {
-      const candidates = Array.from(root.querySelectorAll<HTMLElement>('*')).filter((el) => {
+      const all: HTMLElement[] = [];
+      if (root instanceof HTMLElement) all.push(root);
+      all.push(...Array.from(root.querySelectorAll<HTMLElement>('*')));
+      const candidates = all.filter((el) => {
         const overflow = el.scrollHeight - el.clientHeight;
         if (overflow < 40) return false;
         const style = getComputedStyle(el);
@@ -136,6 +141,16 @@ export async function scrollCommentList(page: Page): Promise<string> {
     if (dialogTarget) {
       dialogTarget.scrollTop = dialogTarget.scrollHeight;
       return 'dialog';
+    }
+
+    const dialogList = dialog?.querySelector<HTMLElement>('ul[role="list"]');
+    if (dialogList && dialogList.scrollHeight > dialogList.clientHeight + 10) {
+      dialogList.scrollTop = dialogList.scrollHeight;
+      return 'dialog>ul';
+    }
+
+    if (isReelViewer) {
+      return 'reel-noop';
     }
 
     const list =

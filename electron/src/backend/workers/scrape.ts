@@ -215,6 +215,10 @@ async function runByPost(page: Page, params: any, sink: CsvSink): Promise<string
   });
 
   const author = await readPostAuthor(page);
+  if (author && sink.write(author, `${kindPrefix}_author | ${postUrl}`)) {
+    sendLog('info', `+author @${author}`);
+    sendProgress(sink.count(), target, author);
+  }
   if (shouldStop()) return author ? `@${author}` : null;
 
   sendLog('info', `Collecting likers of ${postUrl}`);
@@ -309,6 +313,11 @@ async function walkGrid(
           }
         },
       });
+      const author = await readPostAuthor(postPage);
+      if (author && sink.write(author, `${prefix}_author | ${refTag} | ${url}`)) {
+        sendLog('info', `      +author @${author}`);
+        sendProgress(sink.count(), target, author);
+      }
       if (shouldStop()) break;
       await getLikers(postPage, url, {
         shouldStop,

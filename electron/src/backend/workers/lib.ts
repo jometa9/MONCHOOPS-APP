@@ -168,8 +168,21 @@ export async function launchBrowser(opts: LaunchOpts): Promise<{ browser: Browse
   }
 
   registerBrowserForCleanup(browser);
+  registerBrowserForCancel(browser);
 
   return { browser, context };
+}
+
+function registerBrowserForCancel(browser: Browser): void {
+  onCancel(async () => {
+    try {
+      const child = typeof browser.process === 'function' ? browser.process() : null;
+      if (child && child.pid && !child.killed) {
+        try { child.kill('SIGKILL'); } catch {}
+      }
+    } catch {}
+    try { await browser.close(); } catch {}
+  });
 }
 
 const activeBrowsers = new Set<Browser>();

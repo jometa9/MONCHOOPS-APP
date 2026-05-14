@@ -158,6 +158,9 @@ export async function getLikers(page: Page, postUrl: string, opts: ExtractOpts =
   }
 
   const fallback = await page.evaluate((reserved: string[]) => {
+    if (/\/reels?\//.test(location.pathname)) {
+      return [] as string[];
+    }
     const set = new Set<string>();
     const root = document.querySelector('main') ?? document.querySelector('article') ?? document.body;
     root.querySelectorAll<HTMLAnchorElement>('a').forEach((a) => {
@@ -167,6 +170,9 @@ export async function getLikers(page: Page, postUrl: string, opts: ExtractOpts =
     return Array.from(set);
   }, Array.from(RESERVED_PATHS));
 
+  if (fallback.length === 0) {
+    sendLog('warn', '      no likers modal and no safe fallback (likely reel viewer) — skipping likers for this URL');
+  }
   const capped = opts.target ? fallback.slice(0, opts.target) : fallback;
   if (capped.length > 0) opts.onBatch?.(capped);
   return { users: capped, partial: true };
