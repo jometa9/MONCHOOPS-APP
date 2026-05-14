@@ -22,7 +22,7 @@ function copyThemeIcons(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
@@ -36,6 +36,7 @@ export default defineConfig({
       port: 5174,
     },
   },
+  esbuild: mode === 'production' ? { drop: ['console', 'debugger'] } : {},
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -45,4 +46,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

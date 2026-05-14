@@ -40,7 +40,7 @@ export default defineConfig(({ mode }) => ({
               deadCodeInjection: false,
               selfDefending: false,
               debugProtection: false,
-              disableConsoleOutput: false,
+              disableConsoleOutput: true,
               sourceMap: false,
             },
           }),
