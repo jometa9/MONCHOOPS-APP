@@ -1364,17 +1364,54 @@ export async function shutdownAllJobs(timeoutMs = 15_000): Promise<void> {
 export function reconcileOnStartup(): void {
   try {
     const now = Date.now();
-    getDb()
-      .prepare(
-        `UPDATE jobs SET status = 'failed', ended_at = ?, error = 'App restarted before job finished' WHERE status = 'running'`
+    const db = getDb();
+
+    const orphaned = db
+      .prepare<[], { id: string; kind: JobKind; account_id: string | null; params_json: string }>(
+        `SELECT id, kind, account_id, params_json FROM jobs WHERE status = 'running'`
       )
-      .run(now);
-    getDb()
-      .prepare(
-        `UPDATE jobs SET status = 'cancelled', ended_at = ? WHERE status = 'queued'`
+      .all();
+
+    for (const job of orphaned) {
+      db.prepare(
+        `UPDATE jobs SET status = 'failed', ended_at = ?, error = 'App restarted before job finished' WHERE id = ?`
+      ).run(now, job.id);
+
+      if (job.kind === 'mass_dm' && job.account_id) {
+        try {
+          const params = JSON.parse(job.params_json) as Record<string, unknown>;
+          if (typeof params.usernamesCsvPath !== 'string' || !fs.existsSync(params.usernamesCsvPath)) {
+            continue;
+          }
+          const previouslySent = listDmedUsernamesForAccount(job.account_id);
+          const existingExclude = Array.isArray(params.excludeUsernames)
+            ? (params.excludeUsernames as unknown[]).map((u) => String(u))
+            : [];
+          const mergedExclude = Array.from(new Set([...existingExclude, ...previouslySent]));
+          insertQueuedJob('mass_dm', job.account_id, {
+            ...params,
+            excludeUsernames: mergedExclude,
+          });
+        } catch (err) {
+          console.error('[jobs] failed to enqueue continuation for', job.id, err);
+        }
+      }
+    }
+
+    db.prepare(`UPDATE accounts SET status = 'idle' WHERE status = 'busy'`).run();
+
+    const accountsWithQueue = db
+      .prepare<[], { account_id: string }>(
+        `SELECT DISTINCT account_id FROM jobs WHERE status = 'queued' AND account_id IS NOT NULL`
       )
-      .run(now);
-    getDb().prepare(`UPDATE accounts SET status = 'idle' WHERE status = 'busy'`).run();
+      .all();
+    for (const { account_id } of accountsWithQueue) {
+      try {
+        dispatchNextForAccount(account_id);
+      } catch (err) {
+        console.error('[jobs] failed to dispatch queued job for account', account_id, err);
+      }
+    }
   } catch (err) {
     console.error('[jobs] reconcileOnStartup failed:', err);
   }

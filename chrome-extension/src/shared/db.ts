@@ -124,6 +124,18 @@ export async function nextPendingLead(campaignId: string): Promise<Lead | undefi
   return db.leads.where('[campaignId+status]').equals([campaignId, 'pending']).first();
 }
 
+export async function reconcileSendingLeads(): Promise<number> {
+  const stuck = await db.leads.where('status').equals('sending').toArray();
+  if (stuck.length === 0) return 0;
+  await db.transaction('rw', db.leads, async () => {
+    for (const lead of stuck) {
+      if (lead.id === undefined) continue;
+      await db.leads.update(lead.id, { status: 'pending' });
+    }
+  });
+  return stuck.length;
+}
+
 export async function countLeads(
   campaignId: string,
   status?: Lead['status']

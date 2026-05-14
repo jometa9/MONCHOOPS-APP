@@ -1,6 +1,6 @@
 
 
-import { db, nextPendingLead, countLeads } from '@/shared/db';
+import { db, nextPendingLead, countLeads, reconcileSendingLeads } from '@/shared/db';
 import { jitter, pickVariant, uuid } from '@/shared/format';
 import {
   fetchUsage,
@@ -28,12 +28,25 @@ onDmLimitReached(({ limit, used }) => {
   void handleDmLimitReached(limit, used);
 });
 
+async function reconcileOnBoot(): Promise<void> {
+  try {
+    const recovered = await reconcileSendingLeads();
+    if (recovered > 0) {
+      console.log(`[monchoops sw] reconciled ${recovered} stuck 'sending' lead(s) back to 'pending'`);
+    }
+  } catch (err) {
+    console.error('[monchoops sw] reconcileSendingLeads failed', err);
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
+  void reconcileOnBoot();
   void ensureTick();
   void flushDmBuffer().catch(() => {});
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  void reconcileOnBoot();
   void ensureTick();
   void flushDmBuffer().catch(() => {});
 });
