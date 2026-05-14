@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Spinner } from '@/components/common/Spinner';
 import { useJobs } from '@/context/JobsContext';
@@ -119,6 +120,13 @@ export function JobStartedPanel({ jobId, kind, wasEnqueued, onReset }: JobStarte
           )}
         </div>
         <div className="flex items-stretch border-t border-border">
+          <Link
+            to="/queue"
+            className="inline-flex h-9 items-center gap-1.5 border-r border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {t('common.back')}
+          </Link>
           {showDataButton ? (
             dataEnabled ? (
               <Link

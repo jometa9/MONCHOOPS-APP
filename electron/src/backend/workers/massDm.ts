@@ -33,6 +33,13 @@ function pickVariant(messages: string[]): string {
   return messages[Math.floor(Math.random() * messages.length)]!;
 }
 
+function normaliseUsernameInput(raw: string): string {
+  let s = raw.trim();
+  const urlMatch = s.match(/(?:instagram\.com|ig\.me)\/([A-Za-z0-9._]+)/i);
+  if (urlMatch && urlMatch[1]) s = urlMatch[1];
+  return s.replace(/^@+/, '').replace(/[/?#].*$/, '').trim();
+}
+
 function parseUsernamesCsv(csvPath: string): string[] {
   const raw = fs.readFileSync(csvPath, 'utf8');
   const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -40,7 +47,7 @@ function parseUsernamesCsv(csvPath: string): string[] {
   const withoutHeader =
     first && (first === 'username' || first.startsWith('username,')) ? lines.slice(1) : lines;
   const usernames = withoutHeader
-    .map((line) => line.split(',')[0]!.trim().replace(/^@+/, ''))
+    .map((line) => normaliseUsernameInput(line.split(',')[0] ?? ''))
     .filter((u) => u.length > 0);
   return Array.from(new Set(usernames));
 }

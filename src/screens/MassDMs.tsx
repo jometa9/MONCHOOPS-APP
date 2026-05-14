@@ -418,6 +418,13 @@ function LeadsStep({
   );
 }
 
+function normaliseUsernameInput(raw: string): string {
+  let s = raw.trim();
+  const urlMatch = s.match(/(?:instagram\.com|ig\.me)\/([A-Za-z0-9._]+)/i);
+  if (urlMatch && urlMatch[1]) s = urlMatch[1];
+  return s.replace(/^[@#]+/, '').replace(/[/?#].*$/, '').trim();
+}
+
 function ManualPanel({
   value,
   onChange,
@@ -446,7 +453,7 @@ function ManualPanel({
 
   useEffect(() => {
     const cleaned = rows
-      .map((r) => r.trim().replace(/^[@#]+/, '').trim())
+      .map((r) => normaliseUsernameInput(r))
       .filter((r) => r.length > 0);
     const dedup = Array.from(new Set(cleaned));
     if (dedup.length === 0) {

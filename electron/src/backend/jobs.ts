@@ -770,7 +770,7 @@ export interface StartScrapeArgs {
   params: Record<string, unknown>;
 }
 
-function normaliseUsernameInput(raw: string): string {
+export function normaliseUsernameInput(raw: string): string {
   let s = raw.trim();
   const urlMatch = s.match(/(?:instagram\.com|ig\.me)\/([A-Za-z0-9._]+)/i);
   if (urlMatch && urlMatch[1]) s = urlMatch[1];

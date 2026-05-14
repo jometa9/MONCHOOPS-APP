@@ -32,6 +32,7 @@ import {
   startBulkAutoLogin,
   startMassDm,
   startScrape,
+  normaliseUsernameInput,
   sumScrapeTargetsInFlight,
   type BulkLoginRow,
   type MassDmInteractionsConfig,
@@ -387,7 +388,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     const seen = new Set<string>();
     for (const raw of usernames) {
       if (typeof raw !== 'string') continue;
-      const cleaned = raw.trim().replace(/^[@#]+/, '').trim();
+      const cleaned = normaliseUsernameInput(raw);
       if (!cleaned) continue;
       seen.add(cleaned);
     }
@@ -627,8 +628,8 @@ function persistUsernameFile(src: string): { path: string; count: number } {
       const usernames = rows
         .map((r) => {
           const first = Object.values(r)[0];
-          const raw = typeof first === 'string' ? first.trim() : String(first ?? '').trim();
-          return raw.replace(/^[@#]+/, '').trim();
+          const raw = typeof first === 'string' ? first : String(first ?? '');
+          return normaliseUsernameInput(raw);
         })
         .filter(Boolean);
       const csvDest = dest.replace(/\.(xlsx?|xls)$/i, '.csv');
