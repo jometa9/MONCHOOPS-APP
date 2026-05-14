@@ -620,12 +620,16 @@ export function startBulkAutoLogin(rows: BulkLoginRow[]): string {
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error('Bulk login requires at least one row');
   }
+  const normalisedRows = rows.map((r) => ({
+    ...r,
+    username: normaliseUsernameInput(r.username ?? ''),
+  }));
   for (const [, meta] of runningMeta) {
     if (meta.kind === 'login') {
       throw new Error('A login is already running. Wait for it to finish first.');
     }
   }
-  const jobId = insertJob('login', null, { type: 'bulk', count: rows.length });
+  const jobId = insertJob('login', null, { type: 'bulk', count: normalisedRows.length });
   const scriptPath = workerScriptPath('bulkAutoLogin');
   const headless = getHeadlessPref();
   const child = spawnWorker(
@@ -633,7 +637,7 @@ export function startBulkAutoLogin(rows: BulkLoginRow[]): string {
     jobId,
     {
       type: 'init',
-      payload: { jobId, rows, headless },
+      payload: { jobId, rows: normalisedRows, headless },
     },
     { headed: !headless }
   );

@@ -40,6 +40,7 @@ import { useAccounts } from '@/context/AccountsContext';
 import { monchoops } from '@/lib/monchoops';
 import { cn } from '@/lib/cn';
 import { formatDateTime } from '@/lib/format';
+import { normaliseUsernameInput } from '@/lib/instagram';
 import type {
   AccountPublic,
   LeadCategoryPublic,
@@ -416,13 +417,6 @@ function LeadsStep({
       </div>
     </div>
   );
-}
-
-function normaliseUsernameInput(raw: string): string {
-  let s = raw.trim();
-  const urlMatch = s.match(/(?:instagram\.com|ig\.me)\/([A-Za-z0-9._]+)/i);
-  if (urlMatch && urlMatch[1]) s = urlMatch[1];
-  return s.replace(/^[@#]+/, '').replace(/[/?#].*$/, '').trim();
 }
 
 function ManualPanel({

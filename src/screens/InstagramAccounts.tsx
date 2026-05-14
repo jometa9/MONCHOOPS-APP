@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
 import { useAccounts } from '@/context/AccountsContext';
 import { monchoops } from '@/lib/monchoops';
+import { normaliseUsernameInput } from '@/lib/instagram';
 import type { AccountPublic } from '@/types/domain';
 
 type StatusFilter = 'all' | AccountPublic['status'];
@@ -655,7 +656,8 @@ function AddAccountDialog({
       return;
     }
     if (mode === 'credentials') {
-      if (!username.trim() || !password.trim()) {
+      const cleanUsername = normaliseUsernameInput(username);
+      if (!cleanUsername || !password.trim()) {
         setError(t('screens.instagramAccounts.enterUserAndPass'));
         return;
       }
@@ -666,7 +668,7 @@ function AddAccountDialog({
       }
       setBusy(true);
       try {
-        await onChooseAuto(username, password, buildProxy());
+        await onChooseAuto(cleanUsername, password, buildProxy());
       } catch (err) {
         setError(err instanceof Error ? err.message : t('screens.instagramAccounts.couldNotStartLogin'));
       } finally {
@@ -1042,10 +1044,11 @@ function splitCsvLine(line: string, rowNumber: number, t: TFn): ParsedRow {
 
   const [username, password, proxyUrl, proxyUsername, proxyPassword] = fields.map((f) => f.trim());
   const normalizedProxyUrl = proxyUrl ? normalizeProxyUrl(proxyUrl) : '';
+  const cleanUsername = username ? normaliseUsernameInput(username) : '';
 
   const row: ParsedRow = {
     rowNumber,
-    username: username ?? '',
+    username: cleanUsername,
     password: password ?? '',
     proxyUrl: normalizedProxyUrl || undefined,
     proxyUsername: proxyUsername || undefined,
