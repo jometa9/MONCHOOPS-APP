@@ -258,6 +258,15 @@ export interface ListLeadsOpts {
   offset?: number;
 }
 
+export function listUsernamesInCategory(categoryId: string): string[] {
+  const rows = getDb()
+    .prepare<[string], { username: string }>(
+      'SELECT username FROM leads WHERE category_id = ?'
+    )
+    .all(categoryId);
+  return rows.map((r) => r.username);
+}
+
 export function listLeads(opts: ListLeadsOpts): LeadPublic[] {
   const limit = Math.min(Math.max(opts.limit ?? 500, 1), 5000);
   const offset = Math.max(opts.offset ?? 0, 0);

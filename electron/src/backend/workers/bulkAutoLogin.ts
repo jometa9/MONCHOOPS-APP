@@ -1,6 +1,6 @@
 
 
-import { isCancelled, launchBrowser, onInit, sendError, sendLog, sendLoginFailed, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
+import { isCancelled, launchBrowser, onInit, sendErrorAndWait, sendLog, sendLoginFailed, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
 import { attachDialogDismisser } from './ig';
 import type { InstagramCookie } from '../accounts';
 
@@ -32,7 +32,7 @@ interface RowResult {
 onInit<BulkInit>(async (init) => {
   const total = init.rows.length;
   if (total === 0) {
-    sendError('No rows to import');
+    await sendErrorAndWait('No rows to import');
     process.exit(1);
     return;
   }

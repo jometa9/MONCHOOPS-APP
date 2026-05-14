@@ -2,7 +2,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { isCancelled, launchBrowser, jitter, onInit, sendError, sendLog, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
+import { isCancelled, launchBrowser, jitter, onInit, sendErrorAndWait, sendLog, sendProgress, sendResult, waitFor, type WindowBounds } from './lib';
 import {
   attachDialogDismisser,
   ensureLoggedIn,
@@ -36,6 +36,7 @@ interface ScrapeInit {
   headless: boolean;
   windowBounds?: WindowBounds;
   maximizeWindow?: boolean;
+  excludeUsernames?: string[];
 }
 
 interface CsvSink {
@@ -47,18 +48,30 @@ interface CsvSink {
   close(): void;
 }
 
-function openCsv(csvPath: string, target: number): CsvSink {
+function normaliseUsernameKey(raw: string): string {
+  return raw.trim().replace(/^@+/, '').toLowerCase();
+}
+
+function openCsv(csvPath: string, target: number, excludeUsernames: string[] = []): CsvSink {
   fs.mkdirSync(path.dirname(csvPath), { recursive: true });
   const fd = fs.openSync(csvPath, 'w');
   fs.writeSync(fd, 'username,source,source_ref\n');
   const seen = new Set<string>();
+  for (const u of excludeUsernames) {
+    const key = normaliseUsernameKey(u);
+    if (key) seen.add(key);
+  }
+  const written = new Set<string>();
   const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
-  const atCap = () => seen.size >= target;
+  const atCap = () => written.size >= target;
   return {
     write(username, sourceDetail) {
       if (atCap()) return false;
-      if (seen.has(username)) return false;
-      seen.add(username);
+      const key = normaliseUsernameKey(username);
+      if (!key) return false;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      written.add(key);
       const sep = sourceDetail.indexOf(' | ');
       const source = sep >= 0 ? sourceDetail.slice(0, sep) : sourceDetail;
       const ref = sep >= 0 ? sourceDetail.slice(sep + 3) : '';
@@ -66,7 +79,7 @@ function openCsv(csvPath: string, target: number): CsvSink {
       return true;
     },
     count() {
-      return seen.size;
+      return written.size;
     },
     atCap,
     close() {
@@ -317,7 +330,11 @@ async function walkGrid(
 }
 
 onInit<ScrapeInit>(async (init) => {
-  const sink = openCsv(init.csvPath, readTarget(init.params));
+  const exclude = Array.isArray(init.excludeUsernames) ? init.excludeUsernames : [];
+  if (exclude.length > 0) {
+    sendLog('info', `Excluding ${exclude.length} usernames already in this category from the target count`);
+  }
+  const sink = openCsv(init.csvPath, readTarget(init.params), exclude);
   const { browser, context } = await launchBrowser({ headless: init.headless, secrets: init.secrets, windowBounds: init.windowBounds, maximizeWindow: init.maximizeWindow });
   const gridPage = await context.newPage();
   const postPage = await context.newPage();
@@ -354,7 +371,10 @@ onInit<ScrapeInit>(async (init) => {
     process.exit(0);
   } catch (err) {
     sink.close();
-    sendError(err instanceof Error ? err.message : String(err));
+    const errMsg = err instanceof Error
+      ? `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+      : String(err);
+    await sendErrorAndWait(errMsg);
     detachGrid();
     detachPost();
     try { await browser.close(); } catch {}

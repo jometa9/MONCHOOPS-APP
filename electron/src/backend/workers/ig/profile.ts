@@ -155,10 +155,13 @@ export async function getFollowers(
   if (!clean) throw new Error('username is required');
 
   await safeGoto(page, `https://www.instagram.com/${encodeURIComponent(clean)}/`);
+  await waitForPageReady(page);
 
-  const link = page.locator(SELECTORS.followersLinkAnchor(clean)).first();
-  await waitForLocatorReady(page, link, { state: 'visible', timeout: 15_000 });
+  const link = await findFollowersLink(page, clean);
   await link.click();
+
+  const dialog = page.locator('div[role="dialog"]').last();
+  await dialog.waitFor({ state: 'visible', timeout: 15_000 });
   await waitForPageReady(page);
 
   return collectByScrolling<string>({
@@ -168,6 +171,31 @@ export async function getFollowers(
     scroll: () => scrollDialog(page),
     extract: () => extractUsernamesFromDialog(page),
   });
+}
+
+async function findFollowersLink(page: Page, clean: string): Promise<any> {
+  const byText = page
+    .locator('a[role="link"], button[role="link"], a, button')
+    .filter({ hasText: /\bfollowers\b/i })
+    .first();
+  try {
+    await byText.waitFor({ state: 'visible', timeout: 10_000 });
+    sendLog('info', '  [followers] using text-based selector (new IG UI)');
+    return byText;
+  } catch {}
+
+  const byHref = page.locator(SELECTORS.followersLinkAnchor(clean)).first();
+  try {
+    await byHref.waitFor({ state: 'visible', timeout: 4000 });
+    sendLog('info', '  [followers] using href-based selector (legacy IG UI)');
+    return byHref;
+  } catch (err) {
+    throw new Error(
+      `Could not find the "followers" link on @${clean}. ` +
+        `Either the session is not logged in, the profile is private, or Instagram changed the UI again. ` +
+        `Underlying: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
 }
 
 async function extractUsernamesFromDialog(page: Page): Promise<string[]> {

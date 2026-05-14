@@ -13,7 +13,7 @@ import {
   upsertFailedAccount,
   type InstagramCookie,
 } from './accounts';
-import { ingestLeadsFromCsv, resolveCategoryRef } from './leads';
+import { ingestLeadsFromCsv, listUsernamesInCategory, resolveCategoryRef } from './leads';
 import { acquireSlot, releaseSlot, type WindowBounds } from './windowSlots';
 import { fetchUsage, queueDmReport, reportScrape } from './cloudSync';
 
@@ -815,6 +815,15 @@ function spawnScrapeWorker(
 ): void {
   const csvPath = path.join(scrapesDir(), `${jobId}.csv`);
   const headless = getHeadlessPref();
+  const categoryId = typeof params.categoryId === 'string' ? params.categoryId : null;
+  let excludeUsernames: string[] = [];
+  if (categoryId) {
+    try {
+      excludeUsernames = listUsernamesInCategory(categoryId);
+    } catch (err) {
+      console.error('[jobs] failed to load existing leads for exclusion:', err);
+    }
+  }
   const child = spawnWorker(
     workerForKind(kind),
     jobId,
@@ -827,6 +836,7 @@ function spawnScrapeWorker(
         csvPath,
         params,
         headless,
+        excludeUsernames,
       },
     },
     { headed: !headless }
@@ -995,7 +1005,9 @@ function handleWorkerMessage(jobId: string, msg: any): void {
   } else if (msg.type === 'result') {
     stashResult(jobId, msg.payload);
   } else if (msg.type === 'error') {
-    finaliseJob(jobId, 'failed', typeof msg.msg === 'string' ? msg.msg : 'Unknown worker error');
+    const errMsg = typeof msg.msg === 'string' ? msg.msg : 'Unknown worker error';
+    console.error(`[worker ${jobId}] error: ${errMsg}`);
+    finaliseJob(jobId, 'failed', errMsg);
   } else if (msg.type === 'bulk-account') {
     persistBulkAccount(jobId, msg.payload);
   } else if (msg.type === 'login-failed') {

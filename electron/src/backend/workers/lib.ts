@@ -363,6 +363,17 @@ export function sendError(msg: string): void {
   }
 }
 
+export function sendErrorAndWait(msg: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (!process.send) { resolve(); return; }
+    try {
+      process.send({ type: 'error', msg }, undefined, undefined, () => resolve());
+    } catch {
+      resolve();
+    }
+  });
+}
+
 export function sendLoginFailed(payload: {
   username: string;
   password: string;
@@ -401,7 +412,10 @@ export function onInit<T>(cb: (init: T) => Promise<void> | void): void {
       try {
         await cb(msg.payload as T);
       } catch (err) {
-        sendError(err instanceof Error ? err.message : String(err));
+        const errMsg = err instanceof Error
+          ? `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+          : String(err);
+        await sendErrorAndWait(errMsg);
         process.exit(1);
       }
     } else if (msg && msg.type === 'cancel') {
