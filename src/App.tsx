@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { SessionProvider, useSession } from '@/context/SessionContext';
 import { AccountsProvider } from '@/context/AccountsContext';
 import { JobsProvider } from '@/context/JobsContext';
@@ -82,9 +82,9 @@ export default function App() {
     <ThemeProvider>
       <PreferencesProvider>
         <SessionProvider>
-          <BrowserRouter>
+          <HashRouter>
             <Gate />
-          </BrowserRouter>
+          </HashRouter>
         </SessionProvider>
       </PreferencesProvider>
     </ThemeProvider>

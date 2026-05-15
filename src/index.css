@@ -67,6 +67,9 @@
     -webkit-app-region: drag;
     height: 28px;
   }
+  .titlebar.is-win {
+    height: 36px;
+  }
   .titlebar button,
   .titlebar a,
   .titlebar input {

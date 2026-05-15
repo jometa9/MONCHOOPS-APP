@@ -19,6 +19,7 @@ export function TitleBar({ title = 'MonchoOps', transparent = false }: TitleBarP
   }, []);
 
   const isMac = platform === 'darwin';
+  const isWin = platform === 'win32';
 
   if (fullScreen) return null;
 
@@ -27,7 +28,8 @@ export function TitleBar({ title = 'MonchoOps', transparent = false }: TitleBarP
       className={cn(
         'titlebar flex items-center justify-center',
         transparent ? 'bg-transparent' : 'border-b border-border bg-background/90 backdrop-blur',
-        isMac ? 'pl-20' : ''
+        isMac ? 'pl-20' : '',
+        isWin ? 'is-win' : ''
       )}
     >
       {transparent ? null : (

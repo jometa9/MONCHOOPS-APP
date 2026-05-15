@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { TitleBar } from './TitleBar';
+import homeBg from '/home-bg.svg?url';
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -10,8 +11,8 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         className="pointer-events-none fixed bottom-0 left-0 -z-10 h-[50vh] bg-foreground/[0.03]"
         style={{
           aspectRatio: '1280 / 1116',
-          WebkitMaskImage: 'url(/home-bg.svg)',
-          maskImage: 'url(/home-bg.svg)',
+          WebkitMaskImage: `url(${homeBg})`,
+          maskImage: `url(${homeBg})`,
           WebkitMaskRepeat: 'no-repeat',
           maskRepeat: 'no-repeat',
           WebkitMaskPosition: 'bottom left',

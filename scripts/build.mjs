@@ -76,7 +76,13 @@ function assertMacSigningReady() {
 }
 
 function run(bin, argv, opts = {}) {
-  const result = spawnSync(bin, argv, { stdio: 'inherit', cwd: repoRoot, ...opts });
+  const isWinCmd = process.platform === 'win32' && /\.(cmd|bat)$/i.test(bin);
+  const result = spawnSync(bin, argv, {
+    stdio: 'inherit',
+    cwd: repoRoot,
+    shell: isWinCmd,
+    ...opts,
+  });
   if (result.status !== 0) {
     console.error('[build] step failed:', bin, argv.join(' '));
     process.exit(result.status ?? 1);

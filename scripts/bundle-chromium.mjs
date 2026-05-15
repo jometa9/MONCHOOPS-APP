@@ -95,7 +95,7 @@ function unzip(zipPath, destDir) {
   };
   const useUnzip = process.platform !== 'win32';
   if (useUnzip && tryRun('unzip', ['-q', '-o', zipPath, '-d', destDir])) return;
-  if (!tryRun('tar', ['-xf', zipPath, '-C', destDir])) {
+  if (!tryRun('tar', ['-xmf', zipPath, '-C', destDir])) {
     throw new Error(`failed to extract ${zipPath} into ${destDir}`);
   }
 }
