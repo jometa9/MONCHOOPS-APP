@@ -64,6 +64,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install chrome-extension dependencies
+        run: npm ci
+        working-directory: chrome-extension
+
       - name: Build Mac (unsigned)
         env:
           SKIP_MAC_SIGNING: 'true'
