@@ -1,7 +1,7 @@
 {
   "name": "monchoops-app",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "MonchoOps — Instagram DM automation",
   "author": "MonchoOps",
   "type": "module",
