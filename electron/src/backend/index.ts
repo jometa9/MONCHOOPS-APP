@@ -2,8 +2,6 @@ import { BrowserWindow, ipcMain, dialog, shell, app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { getDb, metaGet, metaSet } from './db';
-import { getSession, logout, validateLicense, refreshSession } from './license';
-import { handleAuthDeepLink } from './oauth';
 import {
   listAccounts,
   getAccount,
@@ -25,7 +23,6 @@ import {
   getScrapeResult,
   readScrapeUsernames,
   reconcileOnStartup,
-  setMassDmRemainingHint,
   shutdownAllJobs,
   startLogin,
   startAutoLogin,
@@ -33,7 +30,6 @@ import {
   startMassDm,
   startScrape,
   normaliseUsernameInput,
-  sumScrapeTargetsInFlight,
   type BulkLoginRow,
   type MassDmInteractionsConfig,
   subscribe as subscribeToJobs,
@@ -55,8 +51,6 @@ import {
   updateMessageVariantGroup,
 } from './messageVariants';
 import { wipeUserData } from './userData';
-import { fetchUsage, flushDmBuffer, registerAccount, unregisterAccount } from './cloudSync';
-import type { SessionSnapshot } from './types';
 import {
   checkForUpdatesManual,
   getExtensionUrl,
@@ -84,10 +78,6 @@ function broadcast(channel: string, payload?: unknown): void {
       win.webContents.send(channel, payload);
     }
   }
-}
-
-function broadcastSessionChange(snapshot: SessionSnapshot): void {
-  broadcast('session:changed', snapshot);
 }
 
 function broadcastJobEvent(event: JobEvent): void {
@@ -129,48 +119,8 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     console.warn('[backend] bridge server failed to start', err);
   });
 
-  ipcMain.handle('session:get', async () => getSession());
-  ipcMain.handle('usage:get', async () => fetchUsage());
-  ipcMain.handle('license:validate', async (_e, key: string) => {
-    const snapshot = await validateLicense(key);
-    broadcastSessionChange(snapshot);
-    return snapshot;
-  });
-  ipcMain.handle('session:logout', async () => {
-    logout();
-    broadcastSessionChange(getSession());
-  });
-
   ipcMain.handle('accounts:list', async () => listAccounts());
   ipcMain.handle('accounts:get', async (_e, id: string) => getAccount(id));
-
-  async function ensureAccountSlotAvailable(
-    requestedUsernames: string[]
-  ): Promise<void> {
-    const usage = await fetchUsage();
-    if (!usage) return;
-    if (usage.accounts.limit == null) return;
-    const localUsernames = new Set(
-      listAccounts().map((a) => a.username.toLowerCase())
-    );
-
-    const newSlotsNeeded =
-      requestedUsernames.length === 0
-        ? 1
-        : requestedUsernames.filter(
-            (u) => !localUsernames.has(u.trim().replace(/^@+/, '').toLowerCase())
-          ).length;
-    if (newSlotsNeeded === 0) return;
-    const remaining = usage.accounts.remaining ?? 0;
-    if (remaining < newSlotsNeeded) {
-      const plan = usage.plan;
-      throw new Error(
-        `Your ${plan} plan allows ${usage.accounts.limit} Instagram account${
-          usage.accounts.limit === 1 ? '' : 's'
-        } (you have ${usage.accounts.used}). Upgrade to add more.`
-      );
-    }
-  }
 
   ipcMain.handle(
     'accounts:startLogin',
@@ -178,7 +128,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       _e,
       proxy: { url: string; username?: string | null; password?: string | null } | null
     ) => {
-      await ensureAccountSlotAvailable([]);
       const jobId = startLogin({ proxy: proxy ?? null });
       return { jobId };
     }
@@ -193,7 +142,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
         proxy: { url: string; username?: string | null; password?: string | null } | null;
       }
     ) => {
-      await ensureAccountSlotAvailable([payload.username]);
       const jobId = startAutoLogin({
         username: payload.username,
         password: payload.password,
@@ -221,7 +169,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     }
   );
   ipcMain.handle('accounts:startBulkAutoLogin', async (_e, rows: BulkLoginRow[]) => {
-    await ensureAccountSlotAvailable(rows.map((r) => r.username));
     const jobId = startBulkAutoLogin(rows);
     return { jobId };
   });
@@ -270,19 +217,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       interactions?: MassDmInteractionsConfig | null;
       excludeUsernames?: string[] | null;
     }) => {
-      const usage = await fetchUsage();
-      let maxSends: number | null = null;
-      if (usage && usage.dms.limit != null) {
-        const remaining = usage.dms.remaining ?? 0;
-        if (remaining <= 0) {
-          throw new Error(
-            `Your ${usage.plan} plan allows ${usage.dms.limit} DMs per month (you have used ${usage.dms.used}). Upgrade or wait until next month.`
-          );
-        }
-        maxSends = remaining;
-      }
-      setMassDmRemainingHint(null);
-      return startMassDm({ ...payload, maxSends });
+      return startMassDm({ ...payload, maxSends: null });
     }
   );
   ipcMain.handle(
@@ -292,28 +227,7 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
       kind: Exclude<JobKind, 'login' | 'mass_dm'>;
       params: Record<string, unknown>;
     }) => {
-      const usage = await fetchUsage();
-      let params = payload.params;
-      if (usage && usage.leads.limit != null) {
-        const reportedRemaining = usage.leads.remaining ?? 0;
-        const reserved = sumScrapeTargetsInFlight();
-        const effectiveRemaining = Math.max(0, reportedRemaining - reserved);
-        if (effectiveRemaining <= 0) {
-          const reservedSuffix =
-            reserved > 0 ? `, with ${reserved} more reserved by jobs in progress` : '';
-          throw new Error(
-            `Your ${usage.plan} plan allows ${usage.leads.limit} scraped leads per month (you have used ${usage.leads.used}${reservedSuffix}). Upgrade or wait until next month.`
-          );
-        }
-        const requestedTarget =
-          typeof params.target === 'number' && params.target > 0 ? params.target : null;
-        const clampedTarget =
-          requestedTarget == null
-            ? effectiveRemaining
-            : Math.min(requestedTarget, effectiveRemaining);
-        params = { ...params, target: clampedTarget };
-      }
-      return startScrape({ ...payload, params });
+      return startScrape(payload);
     }
   );
 
@@ -470,20 +384,10 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     return { path: dest, count: usernames.length };
   });
 
-  ipcMain.handle('session:refresh', async () => {
-    const snapshot = await refreshSession();
-    broadcastSessionChange(snapshot);
-    return snapshot;
-  });
-
   ipcMain.handle('accounts:deleteAll', async () => {
-
     const running = listRunningJobs();
     for (const job of running) cancelJob(job.id);
-    const all = listAccounts();
     getDb().prepare('DELETE FROM accounts').run();
-
-    await Promise.allSettled(all.map((a) => unregisterAccount(a.username)));
     broadcast('accounts:changed');
   });
 
@@ -593,7 +497,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
   let shutdownStarted = false;
   app.on('before-quit', (event) => {
     void stopBridgeServer().catch(() => {});
-    void flushDmBuffer().catch(() => {});
     if (listRunningJobs().length === 0) return;
 
     event.preventDefault();
@@ -602,7 +505,6 @@ export async function registerBackend(opts: BackendOptions = {}): Promise<void> 
     void (async () => {
       try {
         await shutdownAllJobs(15_000);
-        await flushDmBuffer();
       } catch (err) {
         console.error('[backend] shutdown failed:', err);
       } finally {
@@ -650,14 +552,5 @@ function persistUsernameFile(src: string): { path: string; count: number } {
 }
 
 export async function dispatchDeepLink(url: string): Promise<void> {
-  try {
-    const snapshot = await handleAuthDeepLink(url);
-    if (snapshot) {
-      broadcastSessionChange(snapshot);
-      return;
-    }
-  } catch (err) {
-    console.error('[backend] auth deep link handling failed:', err);
-  }
   if (onDeepLinkCallback) onDeepLinkCallback(url);
 }

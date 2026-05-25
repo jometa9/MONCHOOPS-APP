@@ -9,7 +9,6 @@ import {
   Inbox,
   ListTodo,
   Loader2,
-  LogOut,
   MessageSquare,
   MessageSquareText,
   Monitor,
@@ -19,16 +18,11 @@ import {
   Sun,
 } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { fetchUsage, getCachedUsage, logout } from '@/shared/license';
-import type { Session, UsageSnapshot } from '@/shared/types';
 import { cn } from '@/shared/cn';
 import { onSyncStatusChange, runSync, type SyncStatus } from '@/shared/sync';
 import { useThemeMode, type ThemeMode } from '../theme';
 
 interface Props {
-  session: Session;
-  onLogout: () => void;
-
   locked?: boolean;
 }
 
@@ -43,22 +37,14 @@ const NAV: { to: string; key: string; icon: typeof HomeIcon }[] = [
   { to: '/settings', key: 'nav.settings', icon: SettingsIcon },
 ];
 
-export function Sidebar({ session, onLogout, locked }: Props) {
+export function Sidebar({ locked }: Props) {
   const navigate = useNavigate();
   const { t } = useTranslation();
-
-  async function handleLogout() {
-    await logout();
-    onLogout();
-  }
 
   return (
     <aside className="flex w-56 flex-none flex-col border-r border-border bg-muted/30">
       <div className="border-b border-border bg-background px-4 py-4">
         <div className="text-base font-semibold tracking-tight">MonchoOps</div>
-        <div className="mt-0.5 truncate text-xs text-muted-foreground">
-          {session.profile?.email ?? '—'}
-        </div>
       </div>
 
       <button
@@ -105,18 +91,8 @@ export function Sidebar({ session, onLogout, locked }: Props) {
       </nav>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-border p-3">
-        <UsageMini plan={session.subscription?.plan ?? 'free'} />
         <SyncIndicator />
         <ThemeToggle />
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={locked}
-          className="inline-flex h-8 w-full items-center justify-center gap-1.5 border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-        >
-          <LogOut className="h-3 w-3" />
-          {t('common.logOut')}
-        </button>
       </div>
     </aside>
   );
@@ -176,116 +152,6 @@ const THEME_META: Record<ThemeMode, { key: string; icon: typeof Sun }> = {
   light: { key: 'common.light', icon: Sun },
   dark: { key: 'common.dark', icon: Moon },
 };
-
-function UsageMini({ plan }: { plan: string }) {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const [usage, setUsage] = useState<UsageSnapshot | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getCachedUsage().then((u) => {
-      if (!cancelled && u) setUsage(u);
-    });
-    void fetchUsage().then((u) => {
-      if (!cancelled && u) setUsage(u);
-    });
-    const interval = setInterval(() => {
-      void fetchUsage().then((u) => {
-        if (u) setUsage(u);
-      });
-    }, 60_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
-
-  const dms = usage?.dms;
-  const accounts = usage?.accounts;
-  const dmRatio =
-    dms && dms.limit != null && dms.limit > 0 ? Math.min(1, dms.used / dms.limit) : 0;
-
-  return (
-    <button
-      type="button"
-      onClick={() => navigate('/settings')}
-      className="group flex w-full flex-col gap-1.5 border border-border bg-background px-2.5 py-2 text-left transition-colors hover:bg-accent"
-      title={t('settings.planUsage')}
-    >
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
-        <span>{t('settings.planUsage')}</span>
-        <span className="font-semibold text-foreground">{plan}</span>
-      </div>
-      <UsageMiniRow
-        label={t('settings.dmsUsage')}
-        used={dms?.used ?? null}
-        limit={dms?.limit ?? null}
-        ratio={dmRatio}
-        unlimitedLabel={t('settings.unlimited')}
-      />
-      <UsageMiniRow
-        label={t('settings.accountsUsage')}
-        used={accounts?.used ?? null}
-        limit={accounts?.limit ?? null}
-        ratio={
-          accounts && accounts.limit != null && accounts.limit > 0
-            ? Math.min(1, accounts.used / accounts.limit)
-            : 0
-        }
-        unlimitedLabel={t('settings.unlimited')}
-      />
-    </button>
-  );
-}
-
-function UsageMiniRow({
-  label,
-  used,
-  limit,
-  ratio,
-  unlimitedLabel,
-}: {
-  label: string;
-  used: number | null;
-  limit: number | null;
-  ratio: number;
-  unlimitedLabel: string;
-}) {
-  const isUnlimited = limit == null;
-  const pct = Math.round(ratio * 100);
-  const barColour =
-    ratio >= 1
-      ? 'bg-destructive'
-      : ratio >= 0.9
-      ? 'bg-amber-500'
-      : 'bg-emerald-500';
-  const textColour =
-    ratio >= 1
-      ? 'text-destructive'
-      : ratio >= 0.9
-      ? 'text-amber-600'
-      : 'text-foreground';
-  return (
-    <div>
-      <div className="flex items-center justify-between text-[10px]">
-        <span className="text-muted-foreground">{label}</span>
-        <span className={`font-medium tabular-nums ${textColour}`}>
-          {used == null
-            ? '—'
-            : isUnlimited
-            ? `${used} / ${unlimitedLabel}`
-            : `${used} / ${limit}`}
-        </span>
-      </div>
-      {!isUnlimited && used != null ? (
-        <div className="mt-1 h-0.5 w-full overflow-hidden bg-muted">
-          <div className={`h-full ${barColour}`} style={{ width: `${pct}%` }} />
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function ThemeToggle() {
   const { t } = useTranslation();

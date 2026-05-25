@@ -12,12 +12,14 @@ const args = process.argv.slice(2);
 const wantWin = args.includes('--win');
 const wantMac = args.includes('--mac') || (!wantWin && process.platform === 'darwin');
 
+const skipMacSigning = process.env.SKIP_MAC_SIGNING === 'true' || process.env.SKIP_MAC_SIGNING === '1';
+
 if (wantMac) {
   if (process.platform !== 'darwin') {
     console.error('[build] macOS builds must run on a Mac (keychain-based signing).');
     process.exit(1);
   }
-  assertMacSigningReady();
+  if (!skipMacSigning) assertMacSigningReady();
 }
 
 function assertMacSigningReady() {
@@ -115,6 +117,13 @@ run(process.execPath, bundleArgs);
 const builderArgs = ['electron-builder'];
 if (wantMac) builderArgs.push('--mac');
 if (wantWin) builderArgs.push('--win');
+if (wantMac && skipMacSigning) {
+  builderArgs.push(
+    '-c.mac.notarize=false',
+    '-c.mac.identity=null',
+    '-c.mac.target=dmg'
+  );
+}
 builderArgs.push('--publish', 'never');
 
 console.log('[build]', builderArgs.join(' '));

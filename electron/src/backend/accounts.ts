@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import { getDb } from './db';
 import { encryptString, decryptString, encryptJson, decryptJson } from './crypto';
-import { registerAccount, unregisterAccount } from './cloudSync';
 
 export type AccountStatus = 'idle' | 'busy' | 'error';
 
@@ -183,9 +182,6 @@ export function createAccount(input: CreateAccountInput): AccountPublic {
       now
     );
 
-  void registerAccount(input.username).catch((err) => {
-    console.warn(`[accounts] cloud register failed for @${input.username}:`, err);
-  });
   return getAccount(id)!;
 }
 
@@ -252,11 +248,6 @@ export async function deleteAccount(id: string): Promise<void> {
   if (!row) return;
   if (row.status === 'busy') throw new Error('Cannot delete an account while a job is running');
   getDb().prepare('DELETE FROM accounts WHERE id = ?').run(id);
-  try {
-    await unregisterAccount(row.username);
-  } catch (err) {
-    console.warn(`[accounts] cloud unregister failed for @${row.username}:`, err);
-  }
 }
 
 export interface ProxyConfig {

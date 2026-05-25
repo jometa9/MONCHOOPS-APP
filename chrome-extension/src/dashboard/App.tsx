@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
-import { LicenseGate } from './components/LicenseGate';
 import { HomeBg } from '@/shared/HomeBg';
 import { Home } from './screens/Home';
 import { NewCampaign } from './screens/NewCampaign';
@@ -17,64 +15,25 @@ import { Scrapes } from './screens/Scrapes';
 import { ScrapeDetail } from './screens/ScrapeDetail';
 import { Variants } from './screens/Variants';
 import { Settings } from './screens/Settings';
-import { getSession } from '@/shared/license';
-import type { Session } from '@/shared/types';
-import { EMPTY_SESSION } from '@/shared/types';
 import { useRunningCampaign } from './useRunningCampaign';
 import { startSyncPolling, stopSyncPolling } from '@/shared/sync';
 
 export function App() {
-  const { t } = useTranslation();
-  const [session, setSession] = useState<Session>(EMPTY_SESSION);
-  const [loaded, setLoaded] = useState(false);
-
   useEffect(() => {
-    void (async () => {
-      const s = await getSession();
-      setSession(s);
-      setLoaded(true);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!session.hasLicense) return;
     startSyncPolling();
     return () => stopSyncPolling();
-  }, [session.hasLicense]);
-
-  if (!loaded) {
-    return (
-      <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">
-        {t('common.loading')}
-      </div>
-    );
-  }
-
-  if (!session.hasLicense) {
-    return <LicenseGate onLogin={(s) => setSession(s)} />;
-  }
+  }, []);
 
   return (
     <div className="flex h-screen text-foreground">
       <Routes>
-        <Route
-          path="*"
-          element={
-            <Shell session={session} onLogout={() => setSession(EMPTY_SESSION)} />
-          }
-        />
+        <Route path="*" element={<Shell />} />
       </Routes>
     </div>
   );
 }
 
-function Shell({
-  session,
-  onLogout,
-}: {
-  session: Session;
-  onLogout: () => void;
-}) {
+function Shell() {
   const running = useRunningCampaign();
   const location = useLocation();
 
@@ -87,7 +46,7 @@ function Shell({
 
   return (
     <>
-      <Sidebar session={session} onLogout={onLogout} locked={!!running} />
+      <Sidebar locked={!!running} />
       <main className="relative isolate flex min-w-0 flex-1 flex-col overflow-hidden">
         <HomeBg offset="sidebar" />
         <Routes>

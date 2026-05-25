@@ -32,7 +32,6 @@ import { cn } from '@/shared/cn';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { enqueuePush, runSync } from '@/shared/sync';
 import { isDesktopReachable } from '@/shared/desktop-bridge';
-import { fetchUsage } from '@/shared/license';
 import type {
   Campaign,
   CampaignSource,
@@ -196,23 +195,7 @@ export function NewCampaign() {
     setSubmitting(true);
     setError(null);
     try {
-      const usage = await fetchUsage();
-      let trimmedLeads = leads;
-      if (usage && usage.dms.limit != null) {
-        const remaining = usage.dms.remaining ?? 0;
-        if (remaining <= 0) {
-          throw new Error(
-            t('screens.newCampaign.dmLimitReached', {
-              plan: usage.plan,
-              limit: usage.dms.limit,
-              defaultValue: `Your ${usage.plan} plan allows ${usage.dms.limit} DMs per month and you have used them all. Upgrade or wait until next month.`,
-            })
-          );
-        }
-        if (trimmedLeads.length > remaining) {
-          trimmedLeads = trimmedLeads.slice(0, remaining);
-        }
-      }
+      const trimmedLeads = leads;
 
       if (saveAsGroup && groupName.trim().length > 0 && cleanedVariants.length > 0) {
         const id = uuid();

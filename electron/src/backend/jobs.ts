@@ -15,7 +15,6 @@ import {
 } from './accounts';
 import { ingestLeadsFromCsv, listUsernamesInCategory, resolveCategoryRef } from './leads';
 import { acquireSlot, releaseSlot, type WindowBounds } from './windowSlots';
-import { fetchUsage, queueDmReport, reportScrape } from './cloudSync';
 
 export type JobKind =
   | 'login'
@@ -1062,16 +1061,6 @@ function persistDmSend(jobId: string, payload: any): void {
     console.error(`[jobs ${jobId}] failed to persist dm-send:`, err);
   }
 
-  if (status === 'sent' && meta?.accountId) {
-    const fromAccount = getAccount(meta.accountId);
-    if (fromAccount?.username) {
-      queueDmReport({
-        fromUsername: fromAccount.username,
-        targetUsername: username,
-        sentAt,
-      });
-    }
-  }
 }
 
 function persistFailedLogin(jobId: string, payload: any): void {
@@ -1182,10 +1171,6 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
           jobRow?.error ?? 'Scrape failed',
           targetName
         );
-      if (count > 0) {
-        void reportScrape({ jobId, kind: meta.kind, leadCount: count, scrapedAt: Date.now() })
-          .catch((err) => console.error('[jobs] reportScrape (failed) error:', err));
-      }
     } catch (err) {
       console.error('[jobs] failed to persist failed-scrape result:', err);
     }
@@ -1276,11 +1261,6 @@ function handleWorkerExit(jobId: string, code: number | null, signal: NodeJS.Sig
           } catch (err) {
             console.error('[jobs] failed to ingest leads into category:', err);
           }
-        }
-
-        if (count > 0) {
-          void reportScrape({ jobId, kind: meta.kind, leadCount: count, scrapedAt: Date.now() })
-            .catch((err) => console.error('[jobs] reportScrape error:', err));
         }
       } catch (err) {
         console.error('[jobs] failed to persist scrape result:', err);

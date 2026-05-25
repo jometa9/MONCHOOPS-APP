@@ -1,5 +1,4 @@
 import { app, shell } from 'electron';
-import { BUILD_CONFIG } from '../buildConfig';
 import { metaGetJson, metaSetJson } from './db';
 
 export type UpdateStatus =
@@ -14,17 +13,10 @@ export type UpdateStatus =
   | { kind: 'not-available' }
   | { kind: 'error'; message: string };
 
-interface AppVersionResponse {
-  version: string;
-  downloadUrls: { mac?: string; windows?: string };
-  extensionUrl?: string;
-}
-
 interface VersionCache {
   lastCheckedAt: number;
   version: string;
   downloadUrls: { mac?: string; windows?: string };
-  extensionUrl?: string;
 }
 
 const VERSION_CACHE_META = 'app_version_cache';
@@ -34,6 +26,9 @@ const PERIODIC_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const MANUAL_CHECK_DEBOUNCE_MS = 3_000;
 const NOT_AVAILABLE_CLEAR_MS = 5_000;
 const REQUEST_TIMEOUT_MS = 8_000;
+
+const GITHUB_RELEASES_LATEST =
+  'https://api.github.com/repos/jometa9/B2DM/releases/latest';
 
 type Broadcaster = (channel: string, payload?: unknown) => void;
 
@@ -54,12 +49,7 @@ function logUpdater(message: string, err?: unknown): void {
 
 function setStatus(next: UpdateStatus): void {
   currentStatus = next;
-  console.log('[updater] setStatus →', JSON.stringify(next));
-  if (broadcaster) {
-    broadcaster('updater:state', currentStatus);
-  } else {
-    console.log('[updater] WARN: no broadcaster set');
-  }
+  if (broadcaster) broadcaster('updater:state', currentStatus);
 }
 
 let currentExtensionUrl: string = '';
@@ -116,14 +106,7 @@ function applyCacheToStatus(cache: VersionCache): void {
   const platform = getPlatformKey();
   const downloadUrl = platform ? cache.downloadUrls[platform] ?? '' : '';
   const currentVersion = app.getVersion();
-  console.log('[updater] applyCacheToStatus', {
-    platform,
-    cacheVersion: cache.version,
-    currentVersion,
-    downloadUrl,
-    differs: cache.version !== currentVersion,
-  });
-  if (cache.version !== currentVersion && downloadUrl) {
+  if (compareVersions(cache.version, currentVersion) > 0 && downloadUrl) {
     setStatus({
       kind: 'available',
       version: cache.version,
@@ -138,26 +121,49 @@ function applyCacheToStatus(cache: VersionCache): void {
   }
 }
 
-async function fetchAppVersion(): Promise<AppVersionResponse> {
-  const url = new URL('/api/app-version', BUILD_CONFIG.LICENSE_API_BASE).toString();
+interface GithubAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+interface GithubReleaseResponse {
+  tag_name: string;
+  name?: string;
+  assets?: GithubAsset[];
+}
+
+function pickAssetUrl(assets: GithubAsset[], match: (name: string) => boolean): string | undefined {
+  const found = assets.find((a) => match(a.name.toLowerCase()));
+  return found?.browser_download_url;
+}
+
+async function fetchLatestRelease(): Promise<VersionCache> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    const res = await fetch(GITHUB_RELEASES_LATEST, {
       method: 'GET',
       headers: {
+        Accept: 'application/vnd.github+json',
         'User-Agent': `MonchoOps/${app.getVersion?.() ?? 'dev'}`,
       },
       signal: controller.signal,
     });
-    if (!res.ok) {
-      throw new Error(`Version endpoint returned ${res.status}`);
-    }
-    const data = (await res.json()) as AppVersionResponse;
-    if (!data || typeof data.version !== 'string') {
-      throw new Error('Malformed version response');
-    }
-    return data;
+    if (!res.ok) throw new Error(`GitHub releases returned ${res.status}`);
+    const data = (await res.json()) as GithubReleaseResponse;
+    const tag = (data.tag_name ?? '').replace(/^v/, '');
+    if (!tag) throw new Error('Malformed release response');
+    const assets = data.assets ?? [];
+    const macUrl = pickAssetUrl(
+      assets,
+      (n) => n.endsWith('.dmg') || n.endsWith('-mac.zip')
+    );
+    const winUrl = pickAssetUrl(assets, (n) => n.endsWith('.exe'));
+    return {
+      lastCheckedAt: Date.now(),
+      version: tag,
+      downloadUrls: { mac: macUrl, windows: winUrl },
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -168,7 +174,6 @@ export async function checkVersionIfStale(force = false): Promise<void> {
   const cache = loadCache();
   const now = Date.now();
   if (!force && cache && now - cache.lastCheckedAt < STALE_THRESHOLD_MS) {
-
     if (currentStatus.kind === 'idle') applyCacheToStatus(cache);
     return;
   }
@@ -178,27 +183,14 @@ export async function checkVersionIfStale(force = false): Promise<void> {
       setStatus({ kind: 'checking' });
     }
     try {
-      const data = await fetchAppVersion();
-      console.log('[updater] fetchAppVersion response:', JSON.stringify(data));
-      const next: VersionCache = {
-        lastCheckedAt: Date.now(),
-        version: data.version,
-        downloadUrls: {
-          mac: data.downloadUrls?.mac,
-          windows: data.downloadUrls?.windows,
-        },
-        extensionUrl: data.extensionUrl ?? '',
-      };
+      const next = await fetchLatestRelease();
       saveCache(next);
       applyCacheToStatus(next);
-      setExtensionUrl(next.extensionUrl ?? '');
     } catch (err) {
       logUpdater('check failed', err);
-
       const stale = loadCache();
       if (stale) {
         applyCacheToStatus(stale);
-        setExtensionUrl(stale.extensionUrl ?? '');
       } else {
         setStatus({
           kind: 'error',
@@ -214,30 +206,18 @@ export async function checkVersionIfStale(force = false): Promise<void> {
 }
 
 export function initUpdater(broadcast: Broadcaster): void {
-  if (initialized) {
-    console.log('[updater] initUpdater already initialized, skip');
-    return;
-  }
+  if (initialized) return;
   initialized = true;
   broadcaster = broadcast;
-  console.log('[updater] initUpdater start, app.getVersion()=', app.getVersion());
 
   const cache = loadCache();
-  console.log('[updater] loadCache →', cache);
-  if (cache) {
-    applyCacheToStatus(cache);
-    setExtensionUrl(cache.extensionUrl ?? '');
-  } else {
-    console.log('[updater] no cache, will wait for initial fetch');
-  }
+  if (cache) applyCacheToStatus(cache);
 
   setTimeout(() => {
-    console.log('[updater] initial checkVersionIfStale firing (force=true)');
     void checkVersionIfStale(true);
   }, INITIAL_CHECK_DELAY_MS);
 
   setInterval(() => {
-    console.log('[updater] periodic checkVersionIfStale firing (force=true)');
     void checkVersionIfStale(true);
   }, PERIODIC_CHECK_INTERVAL_MS);
 }

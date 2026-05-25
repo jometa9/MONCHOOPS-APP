@@ -50,22 +50,10 @@
     "messageVariants": "Message variants",
     "settings": "Settings"
   },
-  "login": {
-    "welcome": "Welcome to MonchoOps",
-    "subtitle": "Sign in with your license key or your Google account.",
-    "checkingLicense": "Checking your license.",
-    "loggingIn": "Logging in",
-    "licenseKey": "License key",
-    "pasteLicense": "Paste your license key",
-    "continue": "Continue",
-    "couldNotValidate": "Could not validate license",
-    "googleSignIn": "Sign in with Google",
-    "noAccount": "No account? Visit monchoops.com"
-  },
   "settings": {
     "title": "Settings",
-    "description": "Manage your account, preferences, and stored data.",
-    "account": "Account",
+    "description": "Manage your preferences and stored data.",
+    "account": "App",
     "preferences": "Preferences",
     "language": "Language",
     "languageSection": "Language",
@@ -73,15 +61,7 @@
     "languageSystem": "System default",
     "languageEnglish": "English",
     "languageSpanish": "Español",
-    "name": "Name",
-    "email": "Email",
-    "plan": "Plan",
-    "accountsUsage": "Instagram accounts",
-    "dmsUsage": "DMs this month",
-    "leadsUsage": "Leads scraped this month",
-    "unlimited": "Unlimited",
     "appVersion": "App version",
-    "refreshSubscription": "Refresh subscription",
     "headless": "Headless mode",
     "fullWindow": "Full window",
     "darkTheme": "Dark theme",
@@ -109,13 +89,6 @@
       "statLeads": "Leads",
       "statMessages": "Messages",
       "statTimeSaved": "Time saved"
-    },
-    "noSubscription": {
-      "title": "No active subscription",
-      "descriptionWithEmail": "We couldn't find an active MonchoOps subscription on {{email}}. Visit the website to activate a plan.",
-      "descriptionNoEmail": "Visit the website to activate a MonchoOps plan and start using the app.",
-      "goToBilling": "Go to billing",
-      "justPaid": "I just paid — refresh"
     },
     "instagramAccounts": {
       "statusRunning": "Running",
@@ -620,7 +593,7 @@
     },
     "updateBanner": {
       "available": "Update available — v{{version}}",
-      "availableHint": "Click Download to get the latest version from monchoops.com.",
+      "availableHint": "Click Download to get the latest version.",
       "download": "Download"
     },
     "datePicker": {

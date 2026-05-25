@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Send, Users } from 'lucide-react';
-import { useSession } from '@/context/SessionContext';
 import { useAccounts } from '@/context/AccountsContext';
 import { monchoops } from '@/lib/monchoops';
 import { UpdateBanner } from '@/components/common/UpdateBanner';
@@ -48,7 +47,6 @@ function formatTimeSaved(ms: number): string {
 
 export function Home() {
   const { t } = useTranslation();
-  const { session } = useSession();
   const { usableAccounts } = useAccounts();
   const [stats, setStats] = useState<Stats>({
     totalJobs: 0,
@@ -57,10 +55,7 @@ export function Home() {
     timeSavedMs: 0,
   });
 
-  const name =
-    session.profile?.name?.trim() ||
-    session.profile?.email?.split('@')[0] ||
-    t('screens.home.fallbackName');
+  const name = t('screens.home.fallbackName');
 
   useEffect(() => {
     let cancelled = false;
