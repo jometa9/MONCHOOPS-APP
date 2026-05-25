@@ -3,7 +3,7 @@ name: Build MonchoOps (Mac + Windows)
 on:
   push:
     branches:
-      - free-version
+      - main
   workflow_dispatch:
 
 permissions:
@@ -39,7 +39,7 @@ jobs:
           git add package.json package-lock.json 2>/dev/null || git add package.json
           git commit -m "chore: release $TAG [skip ci]"
           git tag "$TAG"
-          git push origin HEAD:free-version
+          git push origin HEAD:main
           git push origin "$TAG"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
