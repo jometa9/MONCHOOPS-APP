@@ -1,13 +1,14 @@
 {
   "name": "monchoops-extension",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MonchoOps Chrome extension — Cold DM scheduling for the user's logged-in Instagram account",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "zip": "npm run build && rm -f monchoops-extension-v*.zip && cd dist && zip -r \"../monchoops-extension-v$npm_package_version.zip\" . -x \"*.DS_Store\" && cd .. && echo \"\\n✅ Created monchoops-extension-v$npm_package_version.zip\""
   },
   "dependencies": {
     "clsx": "^2.1.1",
