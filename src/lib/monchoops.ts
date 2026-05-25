@@ -1,4 +1,3 @@
-import type { SessionSnapshot } from '@/types/session';
 import type {
   AccountPublic,
   JobPublic,
@@ -14,23 +13,6 @@ import type {
 } from '@/types/domain';
 
 type Unsubscribe = () => void;
-
-export interface UsageSnapshot {
-  plan: string;
-  accounts: { used: number; limit: number | null; remaining: number | null };
-  dms: {
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-    windowStart: string;
-  };
-  leads: {
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-    windowStart: string;
-  };
-}
 
 export interface BulkLoginRow {
   username: string;
@@ -183,7 +165,6 @@ export interface BridgeApi {
 }
 
 export interface SettingsApi {
-  refreshSession(): Promise<import('@/types/session').SessionSnapshot>;
   deleteAllAccounts(): Promise<void>;
   deleteAllScrapes(): Promise<void>;
   selectDirectory(): Promise<string | null>;
@@ -212,12 +193,6 @@ export interface MonchoOpsApi {
   onDeepLink(cb: (data: { url: string }) => void): Unsubscribe;
   getPendingDeepLink(): Promise<string | null>;
   clearPendingDeepLink(url: string): Promise<void>;
-
-  getSession(): Promise<SessionSnapshot>;
-  validateLicense(licenseKey: string): Promise<SessionSnapshot>;
-  logout(): Promise<void>;
-  onSessionChange(cb: (snapshot: SessionSnapshot) => void): Unsubscribe;
-  getUsage(): Promise<UsageSnapshot | null>;
 
   accounts: AccountsApi;
   jobs: JobsApi;

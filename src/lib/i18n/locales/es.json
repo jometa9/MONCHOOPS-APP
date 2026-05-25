@@ -50,22 +50,10 @@
     "messageVariants": "Variantes de mensaje",
     "settings": "Ajustes"
   },
-  "login": {
-    "welcome": "Bienvenido a MonchoOps",
-    "subtitle": "Iniciá sesión con tu clave de licencia o tu cuenta de Google.",
-    "checkingLicense": "Verificando tu licencia.",
-    "loggingIn": "Iniciando sesión",
-    "licenseKey": "Clave de licencia",
-    "pasteLicense": "Pegá tu clave de licencia",
-    "continue": "Continuar",
-    "couldNotValidate": "No se pudo validar la licencia",
-    "googleSignIn": "Iniciar sesión con Google",
-    "noAccount": "¿No tenés cuenta? Visitá monchoops.com"
-  },
   "settings": {
     "title": "Ajustes",
-    "description": "Administrá tu cuenta, preferencias y datos guardados.",
-    "account": "Cuenta",
+    "description": "Administrá tus preferencias y datos guardados.",
+    "account": "App",
     "preferences": "Preferencias",
     "language": "Idioma",
     "languageSection": "Idioma",
@@ -73,15 +61,7 @@
     "languageSystem": "Predeterminado del sistema",
     "languageEnglish": "English",
     "languageSpanish": "Español",
-    "name": "Nombre",
-    "email": "Email",
-    "plan": "Plan",
-    "accountsUsage": "Cuentas de Instagram",
-    "dmsUsage": "DMs este mes",
-    "leadsUsage": "Leads scrapeados este mes",
-    "unlimited": "Ilimitado",
     "appVersion": "Versión",
-    "refreshSubscription": "Refrescar suscripción",
     "headless": "Modo headless",
     "fullWindow": "Ventana completa",
     "darkTheme": "Tema oscuro",
@@ -109,13 +89,6 @@
       "statLeads": "Leads",
       "statMessages": "Mensajes",
       "statTimeSaved": "Tiempo ahorrado"
-    },
-    "noSubscription": {
-      "title": "Sin suscripción activa",
-      "descriptionWithEmail": "No encontramos una suscripción activa de MonchoOps en {{email}}. Visitá la web para activar un plan.",
-      "descriptionNoEmail": "Visitá la web para activar un plan de MonchoOps y empezar a usar la app.",
-      "goToBilling": "Ir a facturación",
-      "justPaid": "Recién pagué — refrescar"
     },
     "instagramAccounts": {
       "statusRunning": "Activa",
@@ -620,7 +593,7 @@
     },
     "updateBanner": {
       "available": "Actualización disponible — v{{version}}",
-      "availableHint": "Hacé clic en Descargar para bajar la última versión desde monchoops.com.",
+      "availableHint": "Hacé clic en Descargar para bajar la última versión.",
       "download": "Descargar"
     },
     "datePicker": {

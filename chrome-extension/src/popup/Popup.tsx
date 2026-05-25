@@ -1,129 +1,25 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Activity, BarChart3, ExternalLink, Instagram, Key, LogOut, Pause, Play } from 'lucide-react';
+import { Activity, Instagram, Pause, Play } from 'lucide-react';
 import { db } from '@/shared/db';
-import { fetchUsage, getCachedUsage, getSession, logout, validateLicense } from '@/shared/license';
-import type { Campaign, Session, UsageSnapshot } from '@/shared/types';
-import { EMPTY_SESSION } from '@/shared/types';
+import type { Campaign } from '@/shared/types';
 import { HomeBg } from '@/shared/HomeBg';
 
 export function Popup() {
   const { t } = useTranslation();
-  const [session, setSession] = useState<Session>(EMPTY_SESSION);
-  const [loading, setLoading] = useState(true);
   const [igLoggedIn, setIgLoggedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const s = await getSession();
-      setSession(s);
-      setLoading(false);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!session.hasLicense) return;
     chrome.runtime.sendMessage({ type: 'sw/igSessionCheck' }, (resp) => {
       if (resp?.ok) setIgLoggedIn(!!resp.data?.loggedIn);
     });
-  }, [session.hasLicense]);
+  }, []);
 
-  if (loading) {
-    return (
-      <div className="flex h-[360px] items-center justify-center text-xs text-muted-foreground">
-        {t('common.loading')}
-      </div>
-    );
-  }
-
-  if (!session.hasLicense) {
-    return <LicenseGate onLogin={(s) => setSession(s)} />;
-  }
-
-  return <ConnectedPanel session={session} igLoggedIn={igLoggedIn} onLogout={async () => { await logout(); setSession(EMPTY_SESSION); }} />;
+  return <ConnectedPanel igLoggedIn={igLoggedIn} />;
 }
 
-function LicenseGate({ onLogin }: { onLogin: (s: Session) => void }) {
-  const { t } = useTranslation();
-  const [key, setKey] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!key.trim() || submitting) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const s = await validateLicense(key);
-      onLogin(s);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('popup.couldNotValidate'));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="relative isolate flex h-[440px] flex-col">
-      <HomeBg />
-      <header className="border-b border-border bg-muted/30 px-4 py-3">
-        <h1 className="text-sm font-semibold tracking-tight">{t('popup.welcome')}</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {t('popup.signInHint')}
-        </p>
-      </header>
-
-      <form onSubmit={submit} className="flex-1 space-y-3 p-4">
-        <label className="text-[10px] uppercase tracking-wide text-muted-foreground" htmlFor="lk">
-          {t('popup.licenseKey')}
-        </label>
-        <div className="relative">
-          <Key className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            id="lk"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder={t('popup.pasteLicense')}
-            autoFocus
-            disabled={submitting}
-            className="h-9 w-full border border-border bg-background pl-9 pr-3 text-xs outline-none focus:border-foreground disabled:opacity-50"
-          />
-        </div>
-        {error ? <p className="text-xs text-destructive">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={submitting || !key.trim()}
-          className="inline-flex h-9 w-full items-center justify-center bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-        >
-          {submitting ? t('popup.loggingIn') : t('popup.continue')}
-        </button>
-      </form>
-
-      <footer className="border-t border-border p-3 text-center">
-        <a
-          href="https://monchoops.com"
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:underline"
-        >
-          {t('popup.noAccount')} <ExternalLink className="h-3 w-3" />
-        </a>
-      </footer>
-    </div>
-  );
-}
-
-function ConnectedPanel({
-  session,
-  igLoggedIn,
-  onLogout,
-}: {
-  session: Session;
-  igLoggedIn: boolean | null;
-  onLogout: () => void;
-}) {
+function ConnectedPanel({ igLoggedIn }: { igLoggedIn: boolean | null }) {
   const { t } = useTranslation();
   const activeCampaigns = useLiveQuery(
     () =>
@@ -135,20 +31,6 @@ function ConnectedPanel({
     [],
     [] as Campaign[]
   );
-
-  const [usage, setUsage] = useState<UsageSnapshot | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void getCachedUsage().then((u) => {
-      if (!cancelled && u) setUsage(u);
-    });
-    void fetchUsage().then((u) => {
-      if (!cancelled && u) setUsage(u);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const openDashboard = (path?: string) => {
     chrome.runtime.sendMessage({ type: 'sw/openDashboard', path });
@@ -165,19 +47,8 @@ function ConnectedPanel({
       <HomeBg />
       <header className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
         <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold">{session.profile?.name || 'MonchoOps'}</h1>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {session.profile?.email ?? ''} - {session.subscription?.plan ?? 'free'}
-          </p>
+          <h1 className="truncate text-sm font-semibold">MonchoOps</h1>
         </div>
-        <button
-          type="button"
-          onClick={onLogout}
-          aria-label={t('popup.logOut')}
-          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-        </button>
       </header>
 
       <div className="flex-1 space-y-4 p-4">
@@ -222,8 +93,6 @@ function ConnectedPanel({
           </div>
         </section>
 
-        <UsageSection usage={usage} plan={session.subscription?.plan ?? 'free'} />
-
         <ActiveProcessesSection
           campaigns={activeCampaigns ?? []}
           onOpen={(id) => openDashboard(`/campaigns/${id}`)}
@@ -240,84 +109,6 @@ function ConnectedPanel({
           {t('popup.openDashboard')}
         </button>
       </footer>
-    </div>
-  );
-}
-
-function UsageSection({
-  usage,
-  plan,
-}: {
-  usage: UsageSnapshot | null;
-  plan: string;
-}) {
-  const { t } = useTranslation();
-  return (
-    <section className="border border-border bg-background">
-      <header className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
-        <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          <BarChart3 className="h-3 w-3" />
-          {t('popup.planUsage')}
-        </span>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-foreground">
-          {plan}
-        </span>
-      </header>
-      <div className="divide-y divide-border">
-        <UsageRow
-          label={t('popup.accountsUsage')}
-          used={usage?.accounts.used ?? null}
-          limit={usage?.accounts.limit ?? null}
-        />
-        <UsageRow
-          label={t('popup.dmsUsage')}
-          used={usage?.dms.used ?? null}
-          limit={usage?.dms.limit ?? null}
-        />
-      </div>
-    </section>
-  );
-}
-
-function UsageRow({
-  label,
-  used,
-  limit,
-}: {
-  label: string;
-  used: number | null;
-  limit: number | null;
-}) {
-  const { t } = useTranslation();
-  const ratio = used != null && limit != null && limit > 0 ? used / limit : 0;
-  const colour =
-    ratio >= 1
-      ? 'text-destructive'
-      : ratio >= 0.9
-      ? 'text-amber-600'
-      : 'text-foreground';
-
-  let value: React.ReactNode = '—';
-  if (used != null) {
-    if (limit == null) {
-      value = (
-        <span className="tabular-nums">
-          {used} <span className="text-muted-foreground">/ {t('popup.unlimited')}</span>
-        </span>
-      );
-    } else {
-      value = (
-        <span className={`tabular-nums ${colour}`}>
-          {used} <span className="text-muted-foreground">/ {limit}</span>
-        </span>
-      );
-    }
-  }
-
-  return (
-    <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
     </div>
   );
 }

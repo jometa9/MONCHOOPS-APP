@@ -23,10 +23,7 @@ export function wipeUserData(): void {
     db.prepare('DELETE FROM scrape_results').run();
     db.prepare('DELETE FROM jobs').run();
     db.prepare('DELETE FROM accounts').run();
-    db.prepare(
-      `DELETE FROM meta
-       WHERE key NOT IN ('license_key_encrypted', 'profile', 'subscription', 'last_owner_email')`
-    ).run();
+    db.prepare('DELETE FROM meta').run();
   });
   wipe();
 }

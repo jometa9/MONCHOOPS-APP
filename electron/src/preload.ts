@@ -29,17 +29,6 @@ const platformApi = {
   clearPendingDeepLink: (url: string) => invoke<void>('clear-pending-deep-link', url),
 };
 
-const sessionApi = {
-  getSession: () => invoke<import('./backend/types').SessionSnapshot>('session:get'),
-  validateLicense: (licenseKey: string) =>
-    invoke<import('./backend/types').SessionSnapshot>('license:validate', licenseKey),
-  logout: () => invoke<void>('session:logout'),
-  onSessionChange: (cb: (snapshot: import('./backend/types').SessionSnapshot) => void) =>
-    listen<import('./backend/types').SessionSnapshot>('session:changed', cb),
-  getUsage: () =>
-    invoke<import('./backend/cloudSync').UsageSnapshot | null>('usage:get'),
-};
-
 const accountsApi = {
   list: () => invoke<import('./backend/accounts').AccountPublic[]>('accounts:list'),
   get: (id: string) => invoke<import('./backend/accounts').AccountPublic | null>('accounts:get', id),
@@ -191,7 +180,6 @@ const bridgeApi = {
 };
 
 const settingsApi = {
-  refreshSession: () => invoke<import('./backend/types').SessionSnapshot>('session:refresh'),
   deleteAllAccounts: () => invoke<void>('accounts:deleteAll'),
   deleteAllScrapes: () => invoke<void>('scrapes:deleteAll'),
   selectDirectory: () => invoke<string | null>('app:selectDirectory'),
@@ -207,7 +195,6 @@ const settingsApi = {
 
 contextBridge.exposeInMainWorld('monchoops', {
   ...platformApi,
-  ...sessionApi,
   accounts: accountsApi,
   jobs: jobsApi,
   scrapes: scrapesApi,

@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Chrome, Database, ExternalLink, FolderTree, History, Home, Instagram, ListTodo, LogOut, MessageSquareText, Send, Settings, Users } from 'lucide-react';
+import { Chrome, Database, FolderTree, History, Home, Instagram, ListTodo, MessageSquareText, Send, Settings, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { monchoops } from '@/lib/monchoops';
-import { useSession } from '@/context/SessionContext';
 import { useJobs } from '@/context/JobsContext';
 import { Spinner } from '@/components/common/Spinner';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
 import type { JobKind } from '@/types/domain';
 
 const SCRAPE_KINDS: JobKind[] = ['scrape_by_username', 'scrape_by_post', 'scrape_by_hashtag', 'scrape_by_location'];
@@ -38,10 +35,7 @@ const bottomItems: Item[] = [
 
 export function Sidebar() {
   const { t } = useTranslation();
-  const { session, logout } = useSession();
   const { running, progressByJob } = useJobs();
-  const [confirmLogout, setConfirmLogout] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
   const [extensionUrl, setExtensionUrl] = useState('');
 
   useEffect(() => {
@@ -60,16 +54,6 @@ export function Sidebar() {
       off();
     };
   }, []);
-
-  async function handleConfirmLogout() {
-    setLoggingOut(true);
-    try {
-      await logout();
-      setConfirmLogout(false);
-    } finally {
-      setLoggingOut(false);
-    }
-  }
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     cn(
@@ -94,9 +78,6 @@ export function Sidebar() {
     <aside className="flex h-full w-56 flex-col border-r border-border bg-muted/30">
       <div className="px-4 pb-2 pt-2">
         <div className="text-sm font-semibold">{t('components.sidebar.brand')}</div>
-        {session.profile ? (
-          <div className="mt-0.5 truncate text-xs text-muted-foreground">{session.profile.email}</div>
-        ) : null}
       </div>
 
       <nav className="flex-1 py-1">
@@ -142,42 +123,7 @@ export function Sidebar() {
             <span>{t(labelKey)}</span>
           </NavLink>
         ))}
-        <button
-          onClick={() => setConfirmLogout(true)}
-          className="flex w-full items-center gap-2.5 border-y border-transparent px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-        >
-          <LogOut className="h-4 w-4" />
-          <span>{t('components.sidebar.logOut')}</span>
-        </button>
       </div>
-
-      {confirmLogout ? (
-        <Dialog
-          open
-          onClose={() => {
-            if (!loggingOut) setConfirmLogout(false);
-          }}
-          title={t('components.sidebar.logoutDialogTitle')}
-          description={t('components.sidebar.logoutDialogDescription')}
-          footer={
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => setConfirmLogout(false)}
-                disabled={loggingOut}
-              >
-                {t('common.cancel')}
-              </Button>
-              <Button onClick={() => void handleConfirmLogout()} disabled={loggingOut}>
-                {loggingOut ? <Spinner /> : <LogOut className="h-3.5 w-3.5" />}
-                {loggingOut ? t('components.sidebar.loggingOut') : t('components.sidebar.logOut')}
-              </Button>
-            </>
-          }
-        >
-          {null}
-        </Dialog>
-      ) : null}
     </aside>
   );
 }
